@@ -15,9 +15,8 @@ if [[ "${SDR_DEPLOY_LOCK_HELD:-}" != 1 ]]; then
     exec /usr/bin/python3 "$(dirname -- "$0")/run-worker.py" --root "$ci_root"
 fi
 caddy_source_path="ops/nfo/solomon-dark-revived.caddy"
-game_unit_source_path="ops/nfo/solomon-dark-game.service"
+game_unit_names=(solomon-dark-game.service solomon-dark-rust-game.service solomon-dark-rust-api.service)
 remote_caddy_site="/etc/caddy/sites/solomon-dark-revived.caddy"
-remote_game_unit="/etc/systemd/system/solomon-dark-game.service"
 ssh_options=(
     -o BatchMode=yes
     -o ConnectTimeout=15
@@ -118,18 +117,18 @@ remote_caddy_checksum() {
 
 remote_publication_ready() {
     "$ssh_command" "${ssh_options[@]}" "$remote_host" \
-        "python3 - ready /opt/solomon-dark-revived/wwwroot/deployment.json '$target_sha' '$target_game_revision'" \
+        "python3 - parallel-ready /opt/solomon-dark-revived '$target_sha' '$target_game_revision'" \
         <"$source_checkout/ops/local-ci/deployment-publication.py"
 }
 
 remote_game_artifact_checksum() {
     "$ssh_command" "${ssh_options[@]}" "$remote_host" \
-        "if test -r /opt/solomon-dark-revived/game-artifact.json; then sha256sum /opt/solomon-dark-revived/game-artifact.json | awk '{print \$1}'; else printf 'missing\n'; fi"
+        "if test -r /opt/solomon-dark-revived/game-source-artifact.json; then sha256sum /opt/solomon-dark-revived/game-source-artifact.json | awk '{print \$1}'; else printf 'missing\n'; fi"
 }
 
 remote_game_unit_checksum() {
     "$ssh_command" "${ssh_options[@]}" "$remote_host" \
-        "if test -r '$remote_game_unit'; then sha256sum '$remote_game_unit' | awk '{print \$1}'; else printf 'missing\n'; fi"
+        "cat /etc/systemd/system/solomon-dark-game.service /etc/systemd/system/solomon-dark-rust-game.service /etc/systemd/system/solomon-dark-rust-api.service 2>/dev/null | sha256sum | awk '{print \$1}'"
 }
 
 discard_artifact() {
@@ -165,7 +164,7 @@ install_file() {
 install_validated_worker() {
     worker_temp="$(mktemp -d "$state_root/worker.XXXXXXXX")"
     tar -xzf "$artifact" -C "$worker_temp" ./Deploy/M5Worker || fail "validated worker extraction failed"
-    for name in deploy-main.sh run-worker.py install.py deployment-publication.py; do
+    for name in deploy-main.sh run-worker.py install.py deployment-publication.py deploy-runtime.sh parallel-game-saves.py check-linux-artifact.py; do
         [[ -f "$worker_temp/Deploy/M5Worker/$name" ]] || fail "validated worker lacks $name"
     done
     # The admitted installer owns its new version's definition, not the older running code.
@@ -209,8 +208,9 @@ target_caddy_checksum="$(
 [[ "$target_caddy_checksum" =~ ^[0-9a-f]{64}$ ]] ||
     fail "origin/main did not contain a valid Caddy site configuration"
 target_game_unit_checksum="$(
-    git --git-dir="$mirror" show "$target_sha:$game_unit_source_path" |
-        sha_stream
+    for name in "${game_unit_names[@]}"; do
+        git --git-dir="$mirror" show "$target_sha:ops/nfo/$name"
+    done | sha_stream
 )"
 [[ "$target_game_unit_checksum" =~ ^[0-9a-f]{64}$ ]] ||
     fail "origin/main did not contain a valid game systemd unit"
@@ -313,18 +313,21 @@ if [[ -z "$artifact_checksum" ]]; then
         --verbosity minimal
     printf '%s\n' "$target_sha" >"$publish_dir/DEPLOYED_GIT_SHA"
     install_file 0755 "$SDR_GAME_NATIVE_HOST" "$publish_dir/GameHost/solomon-darker"
-    install_file 0644 "$(dirname -- "$SDR_GAME_DIST")/game-artifact.json" "$publish_dir/game-artifact.json"
-    [[ "$(sha_file "$publish_dir/game-artifact.json")" == "$target_game_checksum" ]] ||
+    install_file 0644 "$source_checkout/frontend/reports/game-artifact.json" "$publish_dir/game-artifact.json"
+    install_file 0644 "$source_checkout/frontend/reports/game-source-artifact.json" "$publish_dir/game-source-artifact.json"
+    [[ "$(sha_file "$publish_dir/game-source-artifact.json")" == "$target_game_checksum" ]] ||
         fail "Rust artifact changed during Website validation"
-    printf 'SDR_GAME_REVISION=%s\nSDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game\n' \
+    printf 'SDR_GAME_REVISION=%s\nSDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game-rust\nSDR_GAME_SUPERVISOR_PORT=5232\nSDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/wwwroot/game-rust/assets/native/ml-bot-policy-v7-selected.sdml\n' \
         "$target_game_revision" >"$publish_dir/GameHost/release.env"
+    printf 'SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/GameHost/Pixi/ml-bot-policy-v7-selected.sdml\n' >"$publish_dir/GameHost/Pixi/release.env"
+    printf 'GameSaves__Namespace=rust\nGameSessions__SupervisorUrl=http://127.0.0.1:5232\n' >"$publish_dir/GameHost/rust-api.env"
     install_file 0644 \
         "$source_checkout/$caddy_source_path" \
         "$publish_dir/Deploy/solomon-dark-revived.caddy"
-    install_file 0644 \
-        "$source_checkout/$game_unit_source_path" \
-        "$publish_dir/Deploy/solomon-dark-game.service"
-    for name in deploy-main.sh run-worker.py install.py deployment-publication.py; do
+    for name in "${game_unit_names[@]}"; do
+        install_file 0644 "$source_checkout/ops/nfo/$name" "$publish_dir/Deploy/$name"
+    done
+    for name in deploy-main.sh run-worker.py install.py deployment-publication.py deploy-runtime.sh parallel-game-saves.py check-linux-artifact.py; do
         install_file 0700 "$source_checkout/ops/local-ci/$name" "$publish_dir/Deploy/M5Worker/$name"
     done
     python3 "$source_checkout/ops/local-ci/check-linux-artifact.py" "$publish_dir"
@@ -339,8 +342,16 @@ if [[ -z "$artifact_checksum" ]]; then
         Server.dll \
         GameHost/solomon-darker \
         GameHost/release.env \
+        GameHost/Pixi/game-session-supervisor.mjs \
+        GameHost/Pixi/release.env \
+        GameHost/Pixi/lua54.wasm \
+        GameHost/Pixi/ml-bot-policy-v7-selected.sdml \
+        GameHost/rust-api.env \
+        RustSite/index.html \
+        RustSite/deployment.json \
+        game-source-artifact.json \
         game-artifact.json \
-        wwwroot/game/assets/native/ml-bot-policy-v7-selected.sdml \
+        wwwroot/game-rust/assets/native/ml-bot-policy-v7-selected.sdml \
         wwwroot/deployment.json \
         wwwroot/index.html \
         DEPLOYED_GIT_SHA; do
@@ -397,410 +408,7 @@ log "Uploading validated release $target_sha"
 "$scp_command" "${ssh_options[@]}" -q "$artifact" "$remote_host:$remote_upload"
 
 if "$ssh_command" "${ssh_options[@]}" "$remote_host" \
-    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload' '$target_game_unit_checksum' '$target_game_revision' '$target_game_checksum' '$deployment_id'" <<'REMOTE_DEPLOY'
-set -Eeuo pipefail
-
-target_sha="$1"
-expected_checksum="$2"
-artifact="$3"
-expected_game_unit_checksum="$4"
-target_game_revision="$5"
-expected_game_checksum="$6"
-deployment_id="$7"
-game_supervisor_url=http://127.0.0.1:5222
-short_sha="${target_sha:0:12}"
-timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-live=/opt/solomon-dark-revived
-stage="$live.stage-$short_sha-$timestamp"
-rollback="$live.rollback-pre-$short_sha-$timestamp"
-failed_release="$live.failed-$short_sha-$timestamp"
-database=/var/lib/solomon-dark-revived/sdr.db
-backup_dir="/var/backups/solomon-dark-revived/pre-$short_sha-$timestamp"
-caddy_site=/etc/caddy/sites/solomon-dark-revived.caddy
-caddy_candidate="/etc/caddy/sites/.solomon-dark-revived.$short_sha-$timestamp.candidate"
-caddy_next="${caddy_site}.next"
-caddy_backup=""
-caddy_changed=0
-game_unit=/etc/systemd/system/solomon-dark-game.service
-game_unit_next="${game_unit}.next"
-game_unit_backup=""
-game_unit_changed=0
-game_env=/etc/solomon-dark-game.env
-game_env_next="${game_env}.next"
-game_env_backup=""
-game_env_changed=0
-game_checkpoint=/opt/solomon-dark-revived/wwwroot/game/assets/native/ml-bot-policy-v7-selected.sdml
-rollback_needed=0
-website_stopped=0
-game_drained=0
-
-validate_caddy() {
-    local service_pid binary
-    # PATH can retain an older packaged Caddy than the active systemd service.
-    service_pid="$(systemctl show --property MainPID --value caddy.service)" || return
-    binary="$(readlink -e "/proc/$service_pid/exe")" || return
-    "$binary" validate "$@"
-}
-
-request_game_restart() {
-    local result
-    local health
-    local SDR_GAME_SUPERVISOR_SECRET
-    # shellcheck disable=SC1091
-    source "$game_env"
-    [[ -n "${SDR_GAME_SUPERVISOR_SECRET:-}" ]]
-    health="$(curl --fail --silent --show-error --max-time 10 "$game_supervisor_url/health")"
-    python3 - "$health" "$current_game_revision" "$target_game_revision" <<'PY_DEPLOYMENT_PROTOCOL'
-import json
-import sys
-
-health = json.loads(sys.argv[1])
-if health.get("status") != "ok" or health.get("draining") is not False:
-    raise SystemExit("game supervisor is not available for a deployment")
-if sys.argv[2] == sys.argv[3] and health.get("deploymentProtocol") != 2:
-    raise SystemExit("unchanged-game deployment requires publication-aware game clients")
-PY_DEPLOYMENT_PROTOCOL
-    game_drained=1
-    result="$(curl --fail --silent --show-error --max-time 40 \
-        -H "Authorization: Bearer $SDR_GAME_SUPERVISOR_SECRET" \
-        -H 'Content-Type: application/json' \
-        -H "X-Solomon-Deployment-Id: $deployment_id" \
-        -H "X-Solomon-Deployment-Sequence: $deployment_sequence" \
-        --data "{\"targetRevision\":\"$target_game_revision\"}" \
-        "$game_supervisor_url/admin/deployments/restart")"
-    python3 - "$result" "$target_game_revision" "$deployment_id" "$health" "$deployment_sequence" <<'PY'
-import json
-import sys
-
-payload = json.loads(sys.argv[1])
-target = sys.argv[2]
-if payload.get("status") != "ready" or payload.get("targetRevision") != target:
-    raise SystemExit("game supervisor did not confirm the deployment target")
-if json.loads(sys.argv[4]).get("deploymentProtocol") == 2 and (
-        payload.get("deploymentId") != sys.argv[3]
-        or payload.get("deploymentSequence") != int(sys.argv[5])):
-    raise SystemExit("game supervisor did not confirm the deployment publication")
-players = payload.get("players")
-saved = payload.get("savedPlayers")
-unacknowledged = payload.get("unacknowledgedPlayers")
-if not all(isinstance(value, int) and value >= 0 for value in (players, saved, unacknowledged)):
-    raise SystemExit("game supervisor returned invalid deployment counts")
-if saved + unacknowledged != players:
-    raise SystemExit("game supervisor deployment counts do not balance")
-print(f"Game updating drain: players={players} saved={saved} unacknowledged={unacknowledged}")
-PY
-}
-
-write_deployment_publication() {
-    python3 "$publication_tool" write "$1" "$2" "$target_sha" "$target_game_revision" \
-        "$deployment_id" "$deployment_sequence"
-}
-
-install_game_checkpoint_path() {
-    local checkpoint_lines=()
-    mapfile -t checkpoint_lines < <(grep '^SDR_GAME_ML_BOT_CHECKPOINT=' "$game_env")
-    [[ "${#checkpoint_lines[@]}" == 1 ]]
-    if [[ "${checkpoint_lines[0]}" == "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" ]]; then
-        return
-    fi
-
-    install -d -m 0700 "$backup_dir"
-    game_env_backup="$backup_dir/solomon-dark-game.env"
-    install -o root -g root -m 0600 -- "$game_env" "$game_env_backup"
-    python3 - "$game_env" "$game_env_next" "$game_checkpoint" <<'PY'
-from pathlib import Path
-import sys
-
-source, destination, checkpoint = map(Path, sys.argv[1:])
-lines = source.read_text().splitlines(keepends=True)
-checkpoint_matches = [
-    index
-    for index, line in enumerate(lines)
-    if line.rstrip("\r\n").startswith("SDR_GAME_ML_BOT_CHECKPOINT=")
-]
-if len(checkpoint_matches) != 1:
-    raise SystemExit("game environment must contain one ML bot checkpoint path")
-line = lines[checkpoint_matches[0]]
-newline = "\r\n" if line.endswith("\r\n") else "\n" if line.endswith("\n") else ""
-lines[checkpoint_matches[0]] = f"SDR_GAME_ML_BOT_CHECKPOINT={checkpoint}{newline}"
-destination.write_text("".join(lines))
-PY
-    chown root:root "$game_env_next"
-    chmod 0600 "$game_env_next"
-    game_env_changed=1
-    mv -- "$game_env_next" "$game_env"
-}
-
-restore_game_checkpoint_path() {
-    if (( game_env_changed == 0 )); then
-        return
-    fi
-    [[ -n "$game_env_backup" && -f "$game_env_backup" ]]
-    install -o root -g root -m 0600 -- "$game_env_backup" "$game_env_next"
-    mv -- "$game_env_next" "$game_env"
-    game_env_changed=0
-}
-
-restore_game_unit() {
-    if (( game_unit_changed == 0 )); then
-        return
-    fi
-    [[ -n "$game_unit_backup" && -f "$game_unit_backup" ]]
-    install -o root -g root -m 0644 -- "$game_unit_backup" "$game_unit_next"
-    mv -- "$game_unit_next" "$game_unit"
-    systemctl daemon-reload
-    game_unit_changed=0
-}
-
-install_game_unit() {
-    local candidate="$live/Deploy/solomon-dark-game.service"
-    if cmp --silent "$candidate" "$game_unit"; then
-        return
-    fi
-
-    install -d -m 0700 "$backup_dir"
-    game_unit_backup="$backup_dir/solomon-dark-game.service"
-    install -o root -g root -m 0644 -- "$game_unit" "$game_unit_backup"
-    install -o root -g root -m 0644 -- "$candidate" "$game_unit_next"
-    game_unit_changed=1
-    mv -- "$game_unit_next" "$game_unit"
-    systemctl daemon-reload
-}
-
-restore_caddy_config() {
-    if (( caddy_changed == 0 )); then
-        return
-    fi
-    [[ -n "$caddy_backup" && -f "$caddy_backup" ]]
-    install -o root -g root -m 0644 -- "$caddy_backup" "$caddy_next"
-    mv -- "$caddy_next" "$caddy_site"
-    validate_caddy --config /etc/caddy/Caddyfile >/dev/null
-    systemctl reload caddy.service
-    caddy_changed=0
-}
-
-install_caddy_config() {
-    if cmp --silent "$caddy_candidate" "$caddy_site"; then
-        return
-    fi
-    install -d -m 0700 "$backup_dir"
-    caddy_backup="$backup_dir/solomon-dark-revived.caddy"
-    install -o root -g root -m 0644 -- "$caddy_site" "$caddy_backup"
-    install -o root -g root -m 0644 -- "$caddy_candidate" "$caddy_next"
-    mv -- "$caddy_next" "$caddy_site"
-    caddy_changed=1
-    validate_caddy --config /etc/caddy/Caddyfile >/dev/null
-    systemctl reload caddy.service
-    systemctl is-active --quiet caddy.service
-}
-
-report_candidate_failure() {
-    printf 'Candidate %s failed; service state before rollback:\n' "$target_sha" >&2
-    systemctl status solomon-dark-game.service solomon-dark-revived.service \
-        --no-pager --full >&2 || true
-    printf 'Candidate game journal before rollback:\n' >&2
-    journalctl -u solomon-dark-game.service -n 80 --no-pager -o short-iso >&2 || true
-    printf 'Candidate Website journal before rollback:\n' >&2
-    journalctl -u solomon-dark-revived.service -n 80 --no-pager -o short-iso >&2 || true
-}
-
-cleanup_upload() {
-    [[ ! -f "$artifact" ]] || unlink -- "$artifact"
-    [[ ! -f "$caddy_candidate" ]] || unlink -- "$caddy_candidate"
-    [[ ! -f "$caddy_next" ]] || unlink -- "$caddy_next"
-    [[ ! -f "$game_unit_next" ]] || unlink -- "$game_unit_next"
-    [[ ! -f "$game_env_next" ]] || unlink -- "$game_env_next"
-    if (( website_stopped == 1 && rollback_needed == 0 )); then
-        systemctl start solomon-dark-revived.service || true
-        website_stopped=0
-    fi
-    if (( game_drained == 1 && rollback_needed == 0 )); then
-        systemctl restart solomon-dark-game.service || true
-        game_drained=0
-    fi
-    if [[ -n "$stage" && -d "$stage" ]]; then
-        mv -- "$stage" "$stage.failed" || true
-    fi
-}
-
-rollback_release() {
-    local exit_code=$?
-    trap - ERR EXIT
-    if (( rollback_needed == 1 )); then
-        report_candidate_failure
-        systemctl stop solomon-dark-revived.service solomon-dark-game.service || true
-        if [[ -d "$live" ]]; then
-            mv -- "$live" "$failed_release" || true
-        fi
-        if [[ -d "$rollback" ]]; then
-            mv -- "$rollback" "$live"
-        fi
-    fi
-    restore_game_checkpoint_path || true
-    restore_game_unit || true
-    restore_caddy_config || true
-    if (( rollback_needed == 1 )); then
-        systemctl start solomon-dark-game.service solomon-dark-revived.service || true
-        website_stopped=0
-        game_drained=0
-    fi
-    cleanup_upload
-    exit "$exit_code"
-}
-trap cleanup_upload EXIT
-trap rollback_release ERR
-
-checksum_output="$(sha256sum "$artifact")"
-actual_checksum="${checksum_output%% *}"
-[[ "$actual_checksum" == "$expected_checksum" ]]
-
-tar --extract --gzip --file "$artifact" --to-stdout \
-    ./Deploy/solomon-dark-revived.caddy >"$caddy_candidate"
-chown root:root "$caddy_candidate"
-chmod 0644 "$caddy_candidate"
-validate_caddy --config "$caddy_candidate" --adapter caddyfile >/dev/null
-
-current_sha="$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")"
-current_game_unit_checksum="missing"
-if [[ -r "$game_unit" ]]; then
-    current_game_unit_checksum="$(sha256sum "$game_unit" | awk '{print $1}')"
-fi
-current_game_checksum=missing
-current_game_revision=""
-if [[ -r "$live/game-artifact.json" ]]; then
-    current_game_checksum="$(sha256sum "$live/game-artifact.json" | awk '{print $1}')"
-    current_game_revision="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["revision"])' "$live/game-artifact.json")"
-fi
-if [[ "$current_sha" == "$target_sha" &&
-    "$current_game_unit_checksum" == "$expected_game_unit_checksum" &&
-    "$current_game_checksum" == "$expected_game_checksum" ]] &&
-    tar --extract --gzip --file "$artifact" --to-stdout ./Deploy/M5Worker/deployment-publication.py |
-        python3 - ready "$live/wwwroot/deployment.json" "$target_sha" "$target_game_revision"; then
-    install_caddy_config
-    [[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
-        "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
-    caddy_changed=0
-    printf 'Reconciled Caddy for %s\nCaddy backup: %s\n' \
-        "$target_sha" "${caddy_backup:-unchanged}"
-    exit 0
-fi
-
-mkdir -- "$stage"
-tar --extract --gzip --file "$artifact" --directory "$stage"
-for required_file in \
-    Deploy/solomon-dark-game.service \
-    Deploy/solomon-dark-revived.caddy \
-    Server.dll \
-    GameHost/solomon-darker \
-    GameHost/release.env \
-    game-artifact.json \
-    wwwroot/game/assets/native/ml-bot-policy-v7-selected.sdml \
-    wwwroot/deployment.json \
-    wwwroot/index.html \
-    DEPLOYED_GIT_SHA; do
-    [[ -f "$stage/$required_file" ]]
-done
-[[ "$(tr -d '\r\n' <"$stage/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
-[[ "$(sha256sum "$stage/game-artifact.json" | awk '{print $1}')" == "$expected_game_checksum" ]]
-grep --fixed-strings --line-regexp --quiet "SDR_GAME_REVISION=$target_game_revision" "$stage/GameHost/release.env"
-[[ "$(sha256sum "$stage/Deploy/solomon-dark-game.service" | awk '{print $1}')" == \
-    "$expected_game_unit_checksum" ]]
-# Validate release paths before the candidate replaces the legacy live tree.
-python3 - "$stage" "$live" <<'PY_VERIFY_GAME_UNIT'
-from pathlib import Path
-import subprocess
-import sys
-import tempfile
-
-stage, live = map(Path, sys.argv[1:])
-with tempfile.TemporaryDirectory(prefix="solomon-dark-unit-") as directory:
-    candidate = Path(directory) / "solomon-dark-game.service"
-    candidate.write_text((stage / "Deploy" / candidate.name).read_text().replace(str(live), str(stage)))
-    subprocess.run(["systemd-analyze", "verify", str(candidate)], check=True)
-PY_VERIFY_GAME_UNIT
-publication_tool="$stage/Deploy/M5Worker/deployment-publication.py"
-deployment_sequence="$(python3 "$publication_tool" next "$live/wwwroot/deployment.json")"
-write_deployment_publication "$stage/wwwroot/deployment.json" pending
-chown -R root:root "$stage"
-chmod -R u=rwX,go=rX "$stage"
-
-install -d -m 0700 "$backup_dir"
-sqlite3 "$database" ".backup '$backup_dir/sdr.db'"
-[[ "$(sqlite3 "$backup_dir/sdr.db" 'PRAGMA integrity_check;')" == "ok" ]]
-
-request_game_restart
-
-systemctl stop solomon-dark-revived.service
-website_stopped=1
-systemctl stop solomon-dark-game.service
-mv -- "$live" "$rollback"
-rollback_needed=1
-mv -- "$stage" "$live"
-stage=""
-publication_tool="$live/Deploy/M5Worker/deployment-publication.py"
-install_game_checkpoint_path
-install_game_unit
-install_caddy_config
-# The legacy first-cutover client still polls the immutable game manifest. Keep
-# Website unavailable until its replacement game authority is actually healthy.
-systemctl start solomon-dark-game.service
-game_healthy=0
-for _attempt in {1..30}; do
-    if systemctl is-active --quiet solomon-dark-game.service &&
-        curl -fsS "$game_supervisor_url/health" >/dev/null 2>&1; then
-        game_healthy=1
-        break
-    fi
-    if [[ "$(systemctl show -p Result --value solomon-dark-game.service)" != success ]]; then
-        break
-    fi
-    sleep 1
-done
-[[ "$game_healthy" == 1 ]]
-systemctl start solomon-dark-revived.service
-website_stopped=0
-game_drained=0
-
-healthy=0
-for _attempt in {1..30}; do
-    if systemctl is-active --quiet solomon-dark-revived.service &&
-        systemctl is-active --quiet solomon-dark-game.service &&
-        curl -fsS http://127.0.0.1:5220/ >/dev/null 2>&1 &&
-        curl -fsS http://127.0.0.1:5222/health >/dev/null 2>&1; then
-        healthy=1
-        break
-    fi
-    if [[ "$(systemctl show -p Result --value solomon-dark-revived.service)" != success ||
-        "$(systemctl show -p Result --value solomon-dark-game.service)" != success ]]; then
-        break
-    fi
-    sleep 1
-done
-if [[ "$healthy" != 1 ]]; then
-    printf 'Candidate %s did not become healthy.\n' "$target_sha" >&2
-    false
-fi
-[[ "$(systemctl show -p NRestarts --value solomon-dark-revived.service)" == 0 ]]
-[[ "$(systemctl show -p NRestarts --value solomon-dark-game.service)" == 0 ]]
-[[ "$(sqlite3 "$database" 'PRAGMA integrity_check;')" == "ok" ]]
-[[ "$(tr -d '\r\n' <"$live/DEPLOYED_GIT_SHA")" == "$target_sha" ]]
-[[ "$(sha256sum "$live/game-artifact.json" | awk '{print $1}')" == "$expected_game_checksum" ]]
-grep --fixed-strings --line-regexp --quiet \
-    "SDR_GAME_ML_BOT_CHECKPOINT=$game_checkpoint" "$game_env"
-[[ "$(sha256sum "$game_unit" | awk '{print $1}')" == \
-    "$expected_game_unit_checksum" ]]
-[[ "$(sha256sum "$caddy_site" | awk '{print $1}')" == \
-    "$(sha256sum "$caddy_candidate" | awk '{print $1}')" ]]
-
-write_deployment_publication "$live/wwwroot/deployment.json" ready
-rollback_needed=0
-caddy_changed=0
-game_env_changed=0
-game_unit_changed=0
-printf 'Deployed %s\nRollback: %s\nDatabase backup: %s/sdr.db\nCaddy backup: %s\nGame unit backup: %s\nGame env backup: %s\n' \
-    "$target_sha" "$rollback" "$backup_dir" "${caddy_backup:-unchanged}" \
-    "${game_unit_backup:-unchanged}" "${game_env_backup:-unchanged}"
-REMOTE_DEPLOY
+    "bash -s -- '$target_sha' '$artifact_checksum' '$remote_upload' '$target_game_unit_checksum' '$target_game_revision' '$target_game_checksum' '$deployment_id'" <"$source_checkout/ops/local-ci/deploy-runtime.sh"
 then
     deploy_exit=0
 else
@@ -828,7 +436,7 @@ live_game_checksum="$(remote_game_artifact_checksum)"
 curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/game" >/dev/null
 public_deployment="$(curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
-    --retry-delay 1 "$public_url/api/game/deployment")"
+    --retry-delay 1 "$public_url/game-rust/api/game/deployment")"
 python3 - "$public_deployment" "$target_sha" "$target_game_revision" <<'PY'
 import json
 import sys
@@ -846,7 +454,8 @@ if (payload.get("revision") != sys.argv[2] or payload.get("gameRevision") != sys
     raise SystemExit("public deployment publication does not match the healthy replacement")
 PY
 
+remote_publication_ready || fail "both runtime publications must be ready"
 printf '%s %s\n' "$target_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$state_root/last-success"
 [[ ! -f "$failed_target_file" ]] || unlink -- "$failed_target_file"
 discard_artifact
-log "Production Website $target_sha with Rust game $target_game_revision passed live health checks"
+log "Production PixiJS $target_sha and Rust $target_game_revision passed live health checks"

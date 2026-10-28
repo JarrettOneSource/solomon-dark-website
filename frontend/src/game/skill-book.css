@@ -1,0 +1,114 @@
+.skill-book-overlay {
+  position: absolute;
+  z-index: 75;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.skill-book-curtain {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.main-menu-native-stage.skill-book-stage {
+  z-index: 1;
+  overflow: hidden;
+  outline: none;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.skill-book-renderer,
+.skill-book-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 1600px !important;
+  height: 900px !important;
+  pointer-events: none;
+}
+
+.skill-book-pages,
+.skill-book-quickbar-actions {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.skill-book-viewport {
+  position: absolute;
+  overflow: clip;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.skill-book-viewport[data-scrollable='true'] { cursor: grab; }
+
+.skill-book-close-action,
+.skill-book-inventory-action {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.skill-book-page-actions { position: absolute; }
+
+.skill-book-entry-action {
+  position: absolute;
+  top: 36.5px;
+  width: 87px;
+  height: 88px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.skill-book-entry-action[aria-disabled='true'] { cursor: default; }
+
+.skill-book-entry-action:focus,
+.skill-book-quickbar-action:focus { outline: none; }
+
+.skill-book-quickbar-action {
+  position: absolute;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.skill-book-semantic-title,
+.skill-book-semantic-help,
+.skill-book-drop-target {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skill-book-error {
+  position: absolute;
+  top: 760px;
+  left: 50%;
+  margin: 0;
+  color: #d8d4c8;
+  font: 18px var(--font-body);
+  transform: translateX(-50%);
+}

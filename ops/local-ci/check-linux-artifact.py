@@ -34,6 +34,22 @@ def check_release(root):
             or not re.fullmatch(r'[0-9a-f]{40}', game.get('revision', ''))
             or not isinstance(game.get('files'), dict)):
         raise ValueError('The Rust game manifest does not identify a Linux x64 release')
+    original_bytes = (root / 'game-source-artifact.json').read_bytes()
+    original = json.loads(original_bytes)
+    provenance = game.get('remountedFrom', {})
+    if (provenance.get('manifestSha256') != hashlib.sha256(original_bytes).hexdigest()
+            or provenance.get('gameMount') != '/game'
+            or provenance.get('websiteMount') != ''
+            or original.get('revision') != game['revision']
+            or original.get('target') != game['target']
+            or not isinstance(original.get('files'), dict)):
+        raise ValueError('The remounted game does not identify its original artifact')
+    added = set(game['files']) - set(original['files'])
+    if added - {'client/parallel-save-migration.mjs'} or set(original['files']) - set(game['files']):
+        raise ValueError('The remounted game changed original artifact membership')
+    for name, digest in original['files'].items():
+        if not name.endswith(('.html', '.mjs')) and game['files'].get(name) != digest:
+            raise ValueError(f'The remounted game must keep original bytes unchanged: {name}')
     client_files = set()
     for name, digest in game['files'].items():
         parts = PurePosixPath(name).parts
@@ -43,7 +59,7 @@ def check_release(root):
             path = root / 'GameHost/solomon-darker'
         elif name.startswith('client/'):
             client_files.add(name[7:])
-            path = root / 'wwwroot/game' / name[7:]
+            path = root / 'wwwroot/game-rust' / name[7:]
         else:
             raise ValueError('The Rust game manifest contains an unsupported release member')
         if (not re.fullmatch(r'[0-9a-f]{64}', digest) or not path.is_file()
@@ -54,18 +70,20 @@ def check_release(root):
         if actual != digest:
             raise ValueError(f'The Rust game release SHA-256 differs: {name}')
     actual_client = set()
-    for path in (root / 'wwwroot/game').rglob('*'):
+    for path in (root / 'wwwroot/game-rust').rglob('*'):
         if path.is_symlink():
             raise ValueError('The Rust game release contains a symbolic link')
         if path.is_file():
-            actual_client.add(path.relative_to(root / 'wwwroot/game').as_posix())
+            actual_client.add(path.relative_to(root / 'wwwroot/game-rust').as_posix())
     if actual_client != client_files or 'bin/solomon-darker' not in game['files']:
         raise ValueError('The Rust game release membership differs from its manifest')
-    deployment = json.loads((root / 'wwwroot/game/deployment.json').read_text())
+    deployment = json.loads((root / 'wwwroot/game-rust/deployment.json').read_text())
     if deployment.get('revision') != game['revision']:
         raise ValueError('The Rust game client identifies another revision')
     expected_environment = (f'SDR_GAME_REVISION={game["revision"]}\n'
-                            'SDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game\n')
+                            'SDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game-rust\n'
+                            'SDR_GAME_SUPERVISOR_PORT=5232\n'
+                            'SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/wwwroot/game-rust/assets/native/ml-bot-policy-v7-selected.sdml\n')
     if (root / 'GameHost/release.env').read_text() != expected_environment:
         raise ValueError('The Rust game service identifies another release')
     return {'runtime': 'linux-x64', 'game_revision': game['revision'],

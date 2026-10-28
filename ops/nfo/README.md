@@ -4,8 +4,9 @@ The isolated `/game-stg/` route serves a matching Rust artifact from
 `/opt/solomon-rust-stg/current/web` and the extracted Website build from its
 `site` directory. Build the Website with `VITE_WEBSITE_BASE=/game-stg`,
 `VITE_GAME_ARTIFACT_BASE=/game-stg` and `SDR_WEBSITE_ASSET_BASE=/game-stg/site/`.
-The staged Website output's `game` subdirectory is supplied by the separate
-Rust `web` artifact. Staging API/uploads use loopback 5229, and game sockets
+Build that companion Website with `VITE_GAME_RUNTIME=rust` using Vite directly;
+the normal production build deliberately creates the two production apps. The
+Rust `web` artifact supplies the staging game files. Staging API/uploads use loopback 5229, and game sockets
 use 5230; their services, credentials and persistent data are separate from
 production. Only the Boneyards shelf and editor Test document permit same-origin
 framing. Installing the route requires those staging services and assets first;
@@ -16,10 +17,15 @@ processes from the same release directory:
 
 - `solomon-dark-revived.service` serves the site and provisions a private
   endpoint through the loopback supervisor;
-- `solomon-dark-game.service` starts the verified Rust authoritative supervisor
-  directly with `GameHost/solomon-darker --supervisor`; and
+- `solomon-dark-game.service` starts the restored PixiJS supervisor at 5222 with
+  the pinned Node 22.17 runtime and `GameHost/Pixi/game-session-supervisor.mjs`;
+- `solomon-dark-rust-game.service` starts the verified Rust authority at 5232
+  with `GameHost/solomon-darker --supervisor`;
+- `solomon-dark-rust-api.service` runs the same C# source at 5231 using `RustSite`
+  and the Rust save namespace, with shared canonical account/content storage; and
 - Caddy terminates TLS and forwards `/game-hub` and `/game-sessions/*` to the
-  supervisor.
+  root supervisor. `/game-rust/*` routes to its own API/authority and client
+  files, while `/game-stg/*` retains its existing isolated services.
 
 `/etc/solomon-dark-game.env` must be mode `0600`, owned by root, and contain:
 
@@ -33,7 +39,7 @@ SDR_GAME_MAX_CONNECTIONS_PER_SESSION=16
 SDR_GAME_DEPLOYMENT_SAVE_TIMEOUT_SECONDS=30
 SDR_GAME_UNCLAIMED_TIMEOUT_SECONDS=120
 SDR_GAME_LOG_LEVEL=info
-SDR_GAME_ML_BOT_CHECKPOINT=/opt/solomon-dark-revived/wwwroot/game/assets/native/ml-bot-policy-v7-selected.sdml
+SDR_GAME_ML_BOT_CHECKPOINT=<release-owned override; do not edit for each deployment>
 SDR_RUNTIME_EVENT_ENDPOINT=http://127.0.0.1:5220/api/internal/runtime-events
 SDR_RUNTIME_EVENT_SECRET=<a separate random 32-byte base64url value>
 ```
@@ -44,18 +50,15 @@ uses `StateDirectory=solomon-dark-game` to create its writable directory before
 the supervisor starts. Do not duplicate that non-secret machine path in the
 protected environment file.
 
-During a versioned checkpoint cutover, the deployment worker backs up this
-protected environment file, atomically installs the selected checkpoint path
-after swapping in the matching release, and restores the prior file if release
-health rolls back.
-The deployment consumes an explicitly selected, hash-verified Rust artifact
-alongside the Website source. Its immutable `GameHost/release.env` supplies
-`SDR_GAME_REVISION` from that artifact's full Git revision and
-`SDR_GAME_ASSET_DIRECTORY=/opt/solomon-dark-revived/wwwroot/game`. The unit reads
-this release-owned file after the protected environment. Native and mounted
-client identity are checked against `game-artifact.json`; the Website's
-`DEPLOYED_GIT_SHA` remains a separate revision. See the
-[artifact contract](../../docs/RUST-GAME-CUTOVER.md).
+The release overrides the checkpoint path in `GameHost/Pixi/release.env` for
+PixiJS and `GameHost/release.env` for Rust. The latter also sets the Rust revision,
+`wwwroot/game-rust` asset root and port 5232. Protected secret files remain
+unchanged during deployment. The Rust unit owns
+`SDR_GAME_MEMORIAL_PATH=/var/lib/solomon-dark-rust-game/memoratorium.json` and its
+own `StateDirectory`. No mutable host-state file is shared between authorities.
+The first split copies only the existing memorial into an absent Rust destination.
+Original and mounted manifests document the released Rust executable and the
+Website mount transformation. See the [artifact contract](../../docs/RUST-GAME-CUTOVER.md).
 
 The same secret is supplied to the website through its existing protected
 environment file using these keys:
@@ -77,7 +80,7 @@ game-session credential.
 
 The supervisor also uses this secret as the key for domain-separated global
 leaderboard receipts. The website verifies those receipts with the matching
-protected value. Rotating it therefore requires restarting both services;
+protected value. Rotating it therefore requires coordinating both API/authority pairs;
 never expose it to the browser or a build-time variable.
 
 Never place the supervisor secret or a provisioned session credential in a
@@ -99,9 +102,9 @@ the result into the single-use ticket. Entitled users retain ordinary
 shared-Hub routing with `Enable Cheats` off. In the ordinary game Console, summon one bot per accepted execution with
 `return sd.bots.summon()`. No browser debug API is required.
 
-The immutable learned checkpoint is part of the verified Rust client assets;
-the inference/controller implementation lives in the native Rust authority.
-No Node inference worker or TypeScript gameplay package is installed. A bot is a normal party
+The immutable learned checkpoint remains part of the verified Rust client assets;
+the Rust inference/controller runs natively. The restored PixiJS host includes
+its retained learned checkpoint and Node inference worker. A bot is a normal party
 participant but is excluded from human occupancy, private-session teardown,
 and deployment-save counts.
 
@@ -123,20 +126,22 @@ when the production game revision has not changed. The staging Library and
 editor Test document allow same-origin frames; other staging documents deny them.
 
 The guarded main deployment worker packages the checked-in Caddy site and game
-systemd unit beside the runtime. It compares both live hashes even when the
+systemd units beside the runtime. It compares all managed service and Caddy hashes even when the
 deployed Git SHA is already current, validates each candidate before an atomic
 install, retains the prior files in the release backup, gracefully reloads
 Caddy, and daemon-reloads systemd before the candidate starts. Any later
-release failure restores and reloads both backups. The active-session guard
+release failure restores and reloads the backups. The active-session guard
 is replaced by an authenticated deployment drain for runtime cutover: the
 supervisor rejects new admissions, freezes every host, publishes a final
 owner-only checkpoint to every connected player, waits for bounded browser
 storage acknowledgements, and closes the clients with code `1012` and reason
 `game updating`. Caddy-only reconciliation remains a graceful reload and does
 not disconnect games. The Website stays live until the save grace completes so
-authenticated cloud-slot writes can finish. The Website release manifest at `/deployment.json` and the Rust game's
-`/game/deployment.json` are separate `no-store` documents. The restart drain
-and game reload use the Rust artifact revision.
+authenticated cloud-slot writes can finish. Root `/deployment.json` identifies Website/PixiJS. `/game-rust/deployment.json`
+identifies the immutable Rust artifact, while `/game-rust/api/game/deployment`
+exposes its separate ready publication. The root drain announces Website/PixiJS
+revision; the companion drain announces Rust revision. New admissions and PixiJS
+reload polling wait while their publication is pending.
 Before rollback, candidate unit status and bounded journal tails are streamed to
 the machine-local deployment receipt. That worker records the failed target and
 will not drain players for the same SHA again until an operator explicitly
@@ -145,8 +150,8 @@ reinstalls the worker or a different commit reaches `main`.
 Restart the game supervisor together with the website whenever the bundled game
 protocol changes. A release is healthy only when all of these pass:
 
-1. the website and game units are active with zero unexpected restarts;
-2. `http://127.0.0.1:5222/health` reports the release protocol;
+1. both API and both game units are active with zero unexpected restarts;
+2. health on 5222 identifies PixiJS and 5232 identifies the protocol-2 Rust authority;
 3. the live Caddy site checksum matches the release artifact, with
    `/game-hub` and `/game-sessions/*` before the Website fallback;
 4. private, shared-Hub, and party admission responses are `no-store` and
@@ -165,7 +170,7 @@ protocol changes. A release is healthy only when all of these pass:
 ## Embedded documents
 
 The checked-in Caddy policy permits same-origin framing only for the Website
-`/boneyard-library` shelf and Rust `/game/editor-test/` disposable Test document,
+`/boneyard-library` shelf and Rust `/game-rust/editor-test/` disposable Test document,
 including their explicit `/game-stg` mount equivalents. All other pages retain
 `frame-ancestors 'none'` and `X-Frame-Options: DENY`. A different mount must map
 those same two document routes explicitly. The CSP permits WASM through

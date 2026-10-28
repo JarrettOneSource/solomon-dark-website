@@ -2,7 +2,8 @@
 
 This glossary defines the shared language for authored content and behavior in
 Solomon Dark. The Website owns accounts, content, storage and authoring; the
-Rust game owns authoritative gameplay and browser presentation. The retired
+PixiJS and Rust games each own authoritative gameplay and browser presentation
+for their separate live routes and save namespaces. The retired
 native Mod Loader is not part of this context.
 
 ## Packages and definitions

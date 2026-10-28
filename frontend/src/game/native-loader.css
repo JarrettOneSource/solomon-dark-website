@@ -1,0 +1,90 @@
+.native-loader-page {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  overflow: hidden;
+  background: #000;
+  place-items: center;
+}
+
+.native-loader-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: rgb(0 0 84);
+}
+
+.native-loader-renderer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.native-loader-status {
+  position: absolute;
+  top: calc(50% + 11cqw);
+  left: 50%;
+  display: grid;
+  width: min(42rem, 82cqw);
+  gap: clamp(0.15rem, 0.35cqw, 0.35rem);
+  color: #d8e3ff;
+  font-family: var(--font-display);
+  font-size: clamp(0.72rem, 1.05cqw, 1rem);
+  line-height: 1.2;
+  text-align: center;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+  transform: translateX(-50%);
+}
+
+.native-loader-summary {
+  display: flex;
+  justify-content: center;
+  gap: 0.75em;
+  color: #fff;
+  font-weight: 700;
+}
+
+.native-loader-percent,
+.native-loader-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.native-loader-item {
+  overflow: hidden;
+  color: #b8c9ef;
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.native-loader-count {
+  color: #91a8d7;
+  font-family: var(--font-mono);
+  font-size: 0.75em;
+}
+
+.native-loader-canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.native-loader-error {
+  position: fixed;
+  z-index: 2;
+  right: 0;
+  bottom: 8vh;
+  left: 0;
+  width: max-content;
+  max-width: 80vw;
+  margin: auto;
+  padding: 0.75rem 1rem;
+  color: #ead8aa;
+  font-family: var(--font-display);
+  text-align: center;
+  background: rgb(7 6 14 / 0.9);
+  border: 1px solid rgb(211 177 101 / 0.6);
+}

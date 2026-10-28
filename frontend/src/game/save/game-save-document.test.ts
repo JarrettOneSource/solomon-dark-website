@@ -1,0 +1,3808 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { createNativeFacultyDeathSaveFixture } from '../../../tools/native-faculty-save-fixture.ts'
+import { createNativeWaterAuraActor, createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
+import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
+import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
+import { NATIVE_WELD_COMPONENT_SKILL_IDS, nativeSkillPassesOfferEligibility } from '../core-kernels/player-progression.ts'
+import { nativeEquipmentTooltipSets } from '../core-kernels/native-equipment-effects.ts'
+import type { EquipmentSlot, HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createEquipmentInventoryItem, insertLootInventoryItem } from '../core-kernels/hub-economy.ts'
+import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
+import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
+import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
+import { nativeDesaturateColor } from '../core-kernels/native-color.ts'
+import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
+import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
+import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
+import { createIdlePlayerCharacterInput, playerCharacterFacing } from '../core-kernels/player-character.ts'
+import { createBoneyardEnemyStore, stepBoneyardEnemyStore } from '../core-server/boneyard-enemy-store.ts'
+import { emitPlayerStatusBurst } from '../core-server/boneyard-player-status.ts'
+import { damageBoneyardEnemy } from '../core-server/enemies/damage.ts'
+import { dampenBoneyardCasters } from '../core-server/enemies/dampen.ts'
+import type { BoneyardEnemyDeathEffect, BoneyardEnemyStoreStepContext, BoneyardMageLightningPulse } from '../core-server/enemies/model.ts'
+import { applyGameSimulationHubAction, armGameSimulationCollegeIntro, bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoneyardWorld, getPlayerBelt, getPlayerEconomy, getPlayerProgression, getPlayerSkillBook, stepGameSimulationTick } from '../core-server/game-simulation.ts'
+import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
+import { HubStudentPopulationState } from '../core-server/hub-students.ts'
+import { HubWorldRuntime, createHubWorld } from '../core-server/hub-world.ts'
+import { grantPlayerEntitySkillRanks, playerCharacterAt, replacePlayerCharacter, replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import { createBoneyardCatalog, materializeBoneyard, materializeStockTutorial } from '../host/boneyard-catalog.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { projectBoneyardEnemies } from '../host/project-boneyard-enemies.ts'
+import { boneyardEnemyDescriptor, boneyardEnemySample, materializeBoneyardEnemy } from '../protocol/boneyard-enemy-replication.ts'
+import { boneyardEnemySnapshot } from '../protocol/codecs/enemies.ts'
+import { NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS } from '../hub-painter-order.ts'
+import { gameSnapshot as decodeGameSnapshot } from '../protocol/codecs/snapshot.ts'
+import { createGameSnapshotFrame, createReplicatedEntityBaseline } from '../protocol/entity-replication.ts'
+import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
+import { MAX_WEB_GAME_SAVE_BYTES, MAX_WEB_GAME_SAVE_JSON_NODES, WEB_GAME_SAVE_SCHEMA_VERSION, gameSaveDocumentFitsByteLimit, readGameSaveSummary } from './game-save-contract.ts'
+import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile, retireGameSaveWizard } from './game-save-document.ts'
+import { stepPlayerEntityRescueProtectionTick } from '../core-server/player-entity-store.ts'
+const OWNER = {
+  discipline: 'arcane',
+  displayName: 'Helvidius',
+  element: 'ether',
+} as const
+const GUEST = {
+  discipline: 'mind',
+  displayName: 'Vibia',
+  element: 'water',
+} as const
+
+test('save byte admission keeps the exact UTF-8 limit without measuring ordinary small documents', () => {
+  const guaranteedThreeByteLength = Math.floor(MAX_WEB_GAME_SAVE_BYTES / 3)
+  assert.equal(gameSaveDocumentFitsByteLimit('ordinary checkpoint'), true)
+  assert.equal(
+    gameSaveDocumentFitsByteLimit('\u2603'.repeat(guaranteedThreeByteLength)),
+    true,
+  )
+  assert.equal(
+    gameSaveDocumentFitsByteLimit('\u2603'.repeat(guaranteedThreeByteLength + 1)),
+    false,
+  )
+  assert.equal(gameSaveDocumentFitsByteLimit('x'.repeat(MAX_WEB_GAME_SAVE_BYTES)), true)
+  assert.equal(gameSaveDocumentFitsByteLimit('x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1)), false)
+})
+const MODS = [{
+  contentSha256: 'a'.repeat(64),
+  id: 'tests.save-mod',
+  version: '1.2.3',
+}] as const
+const MOD_STATE = {
+  'tests.save-mod': { enabled_encounters: 7, greeting: 'hello' },
+} as const
+const SIGNED_PARTY_RECOVERY_CLAIM = `sdrpr2.${'A'.repeat(96)}.${'B'.repeat(43)}`
+
+test('Create save roots reject stale, fractional, and out-of-range skill books', () => {
+  const character = { displayName: 'Mixed', element: 'fire', discipline: 'water' } as const
+  const state = createGameSimulation({ owner: character })
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  assert.deepEqual(restoreGameSaveDocument(document).state.playerEntities.configs[0], character)
+  for (const [field, value] of [
+    ['elementRoot', -1], ['elementRoot', 5], ['elementRoot', 1.5], ['elementRoot', 2],
+    ['disciplineRoot', -1], ['disciplineRoot', 8], ['disciplineRoot', 3.5], ['disciplineRoot', 7],
+  ] as const) {
+    const invalid = JSON.parse(document)
+    invalid.continuation.simulation.playerEntities.skillBooks[0][field] = value
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /root/, `${field}=${value}`)
+  }
+})
+
+test('continuations preserve rescue particles while old saves initialize an empty actor state', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      rescueProtection: { ...progression.rescueProtection, fraction: 1 } })) } }
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const stepped = stepPlayerEntityRescueProtectionTick(state.playerEntities, state.secondaryAbilities.rng,
+    () => 'hub:courtyard', order.register)
+  state = { ...state, playerEntities: stepped.store,
+    secondaryAbilities: { ...state.secondaryAbilities, rng: stepped.rng }, worldManagerOrder: order.state() }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(document).state
+  assert.deepEqual(restored.playerEntities.progressions[0]!.rescueProtection,
+    state.playerEntities.progressions[0]!.rescueProtection)
+  const historical = JSON.parse(document)
+  delete historical.continuation.simulation.playerEntities.progressions[0].rescueProtection
+  delete historical.continuation.simulation.secondaryAbilities.cameraDisplacements
+  const old = restoreGameSaveDocument(JSON.stringify(historical)).state
+  assert.deepEqual(old.playerEntities.progressions[0]!.rescueProtection,
+    { fraction: 0, nextParticleId: 1, particles: [] })
+  assert.deepEqual(old.secondaryAbilities.cameraDisplacements, [])
+})
+
+test('current saves preserve continuous Player heading and schema48 recovers its stored body facing', () => {
+  const initial = createGameSimulation({ owner: OWNER })
+  const character = { ...playerCharacterAt(initial.playerEntities, 'owner')!, ...playerCharacterFacing(22.25) }
+  const state = { ...initial, playerEntities: replacePlayerCharacter(initial.playerEntities, 'owner', character) }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const current = playerCharacterAt(restoreGameSaveDocument(document).state.playerEntities, 'owner')!
+  assert.equal(current.headingDegrees, 22.25)
+  assert.equal(current.headingIndex, 1)
+  const old = JSON.parse(document)
+  old.schemaVersion = 48
+  for (const locomotion of old.continuation.simulation.playerEntities.locomotions) delete locomotion.headingDegrees
+  const migrated = playerCharacterAt(restoreGameSaveDocument(JSON.stringify(old)).state.playerEntities, 'owner')!
+  assert.equal(migrated.headingDegrees, 15)
+  assert.equal(migrated.headingIndex, 1)
+  const mismatched = JSON.parse(document)
+  mismatched.continuation.simulation.playerEntities.locomotions[0].headingIndex = 2
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(mismatched)), /heading invariant/)
+})
+
+test('Enhanced Effects continuation preserves the world mode and old saves default On without RNG changes', () => {
+  const options = { gameRngSeed: 123, enhancedEffects: false }
+  const state = createGameSimulation({ owner: OWNER }, options)
+  assert.equal(state.enhancedEffects, false)
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner', state,
+  })
+  const restored = restoreGameSaveDocument(document).state
+  assert.equal(restored.enhancedEffects, false)
+  const onDocument = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner',
+    state: { ...state, enhancedEffects: true },
+  })
+  const on = restoreGameSaveDocument(onDocument).state
+  assert.deepEqual(restored.gameRng, on.gameRng)
+  assert.deepEqual(restored.combatRng, on.combatRng)
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 45)
+  delete legacy.continuation.simulation.enhancedEffects
+  delete legacy.continuation.simulation.screenFlashes
+  const old = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.equal(old.enhancedEffects, true)
+  assert.deepEqual(old.gameRng, on.gameRng)
+  for (const invalid of [undefined, 'false', 0, null]) {
+    const corrupt = JSON.parse(document)
+    corrupt.continuation.simulation.enhancedEffects = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(corrupt)), /enhancedEffects/)
+  }
+})
+
+test('native Faculty death peaks survive owner checkpoints and exact continuation restore', () => {
+  for (const members of [1, 3] as const) {
+    const options = createNativeFacultyDeathSaveFixture(members)
+    if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.ok(options.state.world.enemies.deathEffects.length > 8_192)
+    const document = createGameSaveDocument(options)
+    if (members === 3) assert.ok(Buffer.byteLength(document) > 16 * 1024 * 1024)
+    const checkpoint = decodeServerGameMessage(encodeGameMessage({
+      type: 'server-save-checkpoint', reason: 'progress', save: document, sequence: 1,
+    }))
+    if (checkpoint.type !== 'server-save-checkpoint') throw new Error('expected checkpoint')
+    const restored = restoreGameSaveDocument(checkpoint.save)
+    if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    assert.equal(restored.state.tick, options.state.tick)
+    assert.deepEqual(restored.state.world.enemies.deathEffects, options.state.world.enemies.deathEffects)
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {},
+    playerId: 'owner', state: createGameSimulation({ owner: OWNER }),
+  })
+  const oversized = JSON.parse(document)
+  oversized.continuation.simulation.excessValues = Array(MAX_WEB_GAME_SAVE_JSON_NODES).fill(null)
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(oversized)), /too many values/)
+})
+
+test('legacy growing fades recover native ring clocks and retire already expired rings', () => {
+  const options = createNativeFacultyDeathSaveFixture(1)
+  if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const world = options.state.world
+  const template = world.enemies.deathEffects[0]!
+  const multiplier = Math.fround(1.035)
+  const ageTicks = 40
+  let oldOpacity = 3, oldScale = 2, expectedOpacity = 3, expectedScale = 2
+  for (let step = 0; step <= ageTicks; step++) {
+    oldOpacity = Math.fround(oldOpacity - Math.fround(.005))
+    oldScale *= multiplier
+    expectedOpacity = Math.fround(expectedOpacity - Math.fround(.025))
+    expectedScale = Math.fround(expectedScale * multiplier)
+  }
+  const effect: BoneyardEnemyDeathEffect = { ...template, kind: 'fade-scale-perspective',
+    role: 'discorporeal-death-ring', atlas: 'DeadHawg', entry: 16, firstEntry: 16,
+    presentationOwner: 'pre-world-queue', painterRegistration: null, lifetimeTicks: 1000,
+    ageTicks, lastStepTick: options.state.tick, spawnTick: options.state.tick - ageTicks,
+    alpha: 1, alphaMultiplier: 1, opacityTimer: oldOpacity, alphaLossPerTick: Math.fround(.005),
+    scale: oldScale, scaleY: 2, scaleMultiplier: multiplier }
+  const document = createGameSaveDocument({ ...options, state: { ...options.state,
+    world: { ...world, enemies: { ...world.enemies, deathEffects: [effect,
+      { ...effect, id: effect.id + 1, ageTicks: 200, spawnTick: options.state.tick - 200,
+        scale: 10508004392577.607, opacityTimer: .7 },
+    ] } } } })
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 38)
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state.world
+  if (restored.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(restored.enemies.deathEffects.length, 1)
+  assert.equal(restored.enemies.deathEffects[0]?.scale, expectedScale)
+  assert.equal(restored.enemies.deathEffects[0]?.scaleY, expectedScale)
+  assert.equal(restored.enemies.deathEffects[0]?.opacityTimer, expectedOpacity)
+  assert.equal(restored.enemies.deathEffects[0]?.alphaLossPerTick, Math.fround(.025))
+  const current = restoreGameSaveDocument(document).state.world
+  if (current.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(current.enemies.deathEffects[0]?.scaleY, 2, 'current schema retains explicitly stored axes')
+})
+
+test('legacy Wraith and Tragic fades restore recovered constructors without consuming world RNG', () => {
+  const options = createNativeFacultyDeathSaveFixture(1)
+  if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const world = options.state.world
+  const template = world.enemies.deathEffects[0]!
+  const order = createNativeWorldManagerOrder(options.state.worldManagerOrder)
+  const cases = [
+    { role: 'wraith-dissolve-core', age: 5, initialOpacity: 2, oldLoss: .1,
+      initialScale: 1, nextInitialScale: 1, multiplier: 1.02, nextLoss: Math.fround(.1) },
+    { role: 'tragic-circle-contact', age: 7, initialOpacity: Math.fround(.63), oldLoss: Math.fround(.01),
+      initialScale: Math.fround(1 - Math.fround(.4) * Math.fround(.65)),
+      nextInitialScale: Math.fround(1 + Math.fround(.4) * Math.fround(.65)),
+      multiplier: Math.fround(1.1), nextLoss: Math.fround(.05) },
+  ]
+  const expected: Array<{ scale: number; opacity: number }> = []
+  const effects = cases.map((row, index): BoneyardEnemyDeathEffect => {
+    let opacity = row.initialOpacity, scale = row.initialScale
+    let nextOpacity = row.initialOpacity, nextScale = row.nextInitialScale
+    for (let step = 0; step < row.age; step++) {
+      opacity = Math.fround(opacity - row.oldLoss); scale *= row.multiplier
+      nextOpacity = Math.fround(nextOpacity - row.nextLoss)
+      nextScale = Math.fround(nextScale * Math.fround(row.multiplier))
+    }
+    expected.push({ scale: nextScale, opacity: nextOpacity })
+    return { ...template, id: world.enemies.nextDeathEffectId + index, kind: 'fade-scale', role: row.role,
+      atlas: 'BadGuys', entry: row.role === 'wraith-dissolve-core' ? 20 : 7,
+      firstEntry: row.role === 'wraith-dissolve-core' ? 20 : 7, lifetimeTicks: 1000,
+      presentationOwner: 'world-sorted', painterRegistration: order.register('transient'),
+      position: { x: 13, y: 19 }, ageTicks: row.age, lastStepTick: options.state.tick,
+      spawnTick: options.state.tick - row.age, alpha: Math.min(1, opacity), alphaMultiplier: 1,
+      opacityTimer: opacity, alphaLossPerTick: row.oldLoss, scale, scaleY: scale, scaleMultiplier: row.multiplier }
+  })
+  const document = JSON.parse(createGameSaveDocument({ ...options, state: { ...options.state,
+    worldManagerOrder: order.state(), world: { ...world, enemies: { ...world.enemies,
+      deathEffects: effects, nextDeathEffectId: world.enemies.nextDeathEffectId + effects.length } } } }))
+  downgradeSaveSchema(document, 38)
+  const restored = restoreGameSaveDocument(JSON.stringify(document)).state.world
+  if (restored.kind !== 'boneyard') throw new Error('expected Boneyard')
+  restored.enemies.deathEffects.forEach((effect, index) => {
+    assert.equal(effect.scale, expected[index]!.scale)
+    assert.equal(effect.scaleY, expected[index]!.scale)
+    assert.equal(effect.opacityTimer, expected[index]!.opacity)
+    assert.equal(effect.alphaLossPerTick, cases[index]!.nextLoss)
+  })
+  assert.equal(restored.enemies.deathEffects[0]?.position.x, 12)
+  assert.equal(restored.enemies.deathEffects[1]?.blendMode, 'add')
+  assert.deepEqual(restored.enemies.steeringRngState, world.enemies.steeringRngState)
+})
+
+test('mixed native smoke owners survive saves while invalid role and owner combinations reject', () => {
+  const options = createNativeFacultyDeathSaveFixture(1)
+  if (options.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const world = options.state.world
+  const template = world.enemies.deathEffects.find(effect => (
+    effect.kind === 'move-fade' && effect.presentationOwner === 'world-sorted'
+  ))
+  assert.ok(template)
+  const saveEffect = (effect: BoneyardEnemyDeathEffect) => createGameSaveDocument({
+    ...options,
+    state: { ...options.state, world: { ...world,
+      enemies: { ...world.enemies, deathEffects: [effect] } } },
+  })
+  for (const role of [
+    'dampen-caster-smoke', 'tragic-circle-smoke', 'skull-trail', 'dark-trail',
+    'skull-impact', 'dark-impact', 'dark-ring-impact', 'faculty-living-smoke',
+    'faculty-start-smoke', 'faculty-dying-smoke', 'faculty-terminal-smoke',
+  ]) {
+    for (const presentationOwner of ['pre-world-queue', 'world-sorted'] as const) {
+      const effect = { ...template, role, presentationOwner,
+        painterRegistration: presentationOwner === 'world-sorted' ? template.painterRegistration : null }
+      const restored = restoreGameSaveDocument(saveEffect(effect)).state
+      if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+      assert.deepEqual(restored.world.enemies.deathEffects, [effect], `${role}: ${presentationOwner}`)
+    }
+    for (const presentationOwner of ['background', 'direct-post-world', 'late-world-overlay'] as const) {
+      assert.throws(() => restoreGameSaveDocument(saveEffect({
+        ...template, role, presentationOwner, painterRegistration: null,
+      })), /presentation owner is invalid/, `${role}: ${presentationOwner}`)
+    }
+  }
+  for (const effect of [
+    { ...template, role: 'faculty-unknown-smoke', presentationOwner: 'pre-world-queue' as const, painterRegistration: null },
+    { ...template, kind: 'fade' as const, role: 'faculty-living-smoke', presentationOwner: 'pre-world-queue' as const, painterRegistration: null },
+    { ...template, role: 'faculty-living-smoke', presentationOwner: 'world-sorted' as const, painterRegistration: null },
+    { ...template, role: 'faculty-living-smoke', presentationOwner: 'pre-world-queue' as const },
+  ]) assert.throws(() => restoreGameSaveDocument(saveEffect(effect)), /presentation|painter registration/)
+})
+
+test('native rotten Zombie gas and Wraith wisps retain fixed pre-world ownership through saves', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 35))
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  for (const [enemyToken, role] of [['ZOMBIE', 'zombie-rotten-particle'], ['WRAITH', 'wraith-soul-wisp']] as const) {
+    const order = createNativeWorldManagerOrder(initial.worldManagerOrder)
+    const context: BoneyardEnemyStoreStepContext = {
+      clipSpellSegment: ({ end }) => end, projectileWorldBlocked: () => false,
+      players: {}, registerWorldPainter: order.register,
+      resolveMovement: ({ requestedPosition }) => requestedPosition,
+      resolveSpawnIntents: () => [], tick: initial.tick,
+    }
+    let store = stepBoneyardEnemyStore(createBoneyardEnemyStore(`save-${enemyToken}`), {
+      ...context,
+      resolveSpawnIntents: () => [{ enemyToken, flags: enemyToken === 'ZOMBIE' ? ['FLAG_ROTTEN'] : [],
+        id: 1, locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES[enemyToken],
+        position: { x: 20, y: 40 }, spawnTick: initial.tick, waveOrdinal: 1 }],
+    }).store
+    let tick = initial.tick
+    while (!store.deathEffects.some(effect => effect.role === role) && tick < initial.tick + 300) {
+      tick += 1
+      store = stepBoneyardEnemyStore(store, { ...context, tick }).store
+    }
+    const effect = store.deathEffects.find(candidate => candidate.role === role)
+    assert.ok(effect, role)
+    assert.equal(effect.presentationOwner, 'pre-world-queue')
+    assert.equal(effect.painterRegistration, null)
+    const options = { integrity: 'local-only' as const, loadedBoneyard, mods: [], modState: {}, playerId: 'owner',
+      state: { ...initial, tick, worldManagerOrder: order.state(), world: { ...initial.world, enemies: store } } }
+    const restored = restoreGameSaveDocument(createGameSaveDocument(options)).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    assert.deepEqual(restored.world.enemies.deathEffects, store.deathEffects)
+    for (const presentationOwner of ['world-sorted', 'direct-post-world', 'background', 'late-world-overlay'] as const) {
+      const invalid = { ...effect, presentationOwner,
+        painterRegistration: presentationOwner === 'world-sorted' ? order.register('transient') : null }
+      assert.throws(() => restoreGameSaveDocument(createGameSaveDocument({ ...options,
+        state: { ...options.state, worldManagerOrder: order.state(), world: { ...options.state.world,
+          enemies: { ...store, deathEffects: [invalid] } } },
+      })), /presentation owner is invalid/, `${role}: ${presentationOwner}`)
+    }
+  }
+})
+
+test('a fresh Boneyard save preserves its unstepped enemy sentinel without admitting pulses', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 72))
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemies.lastStepTick, -1)
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state,
+  })
+  const restored = restoreGameSaveDocument(document).state
+  if (restored.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(restored.world.enemies.lastStepTick, -1)
+  assert.deepEqual(restored.world.enemies.mageLightningPulses, [])
+  const invalid = JSON.parse(document)
+  invalid.continuation.simulation.world.enemies.mageLightningPulses = [{
+    id: 1, ownerActorId: 1, tick: 0,
+  }]
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /pulse 0 tick is invalid/)
+})
+
+test('Mage pulse saves preserve creator ownership and migrate schema 36 only from an exact live owner', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 73))
+  const initial = enterBoneyardWorld(
+    createGameSimulation({ owner: OWNER }),
+    loadedBoneyard,
+  )
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(initial.worldManagerOrder)
+  const spawned = stepBoneyardEnemyStore(initial.world.enemies, {
+    clipSpellSegment: ({ end }) => end,
+    players: {},
+    projectileWorldBlocked: () => false,
+    registerWorldPainter: order.register,
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'SKELETONMAGE',
+      flags: ['FLAG_CASTLIGHTNING'],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETONMAGE,
+      position: { x: 20, y: 40 },
+      spawnTick: initial.tick,
+      waveOrdinal: 1,
+    }],
+    tick: initial.tick,
+  }).store
+  const actor = spawned.actors[0]!
+  const pulse: BoneyardMageLightningPulse = {
+    contact: {
+      kind: 'target-attached',
+      localOffset: { x: -4, y: 6 },
+      targetPlayerId: 'owner',
+    },
+    endpoint: { x: 150, y: 40 },
+    id: 1,
+    lightRegistration: { ...actor.lightRegistration },
+    midpoint: { x: 85, y: 40 },
+    ownerActorId: actor.id,
+    painterRegistrations: order.registerMany('actor', 2),
+    seed: 0x1234_5678,
+    source: { x: 20, y: 40 },
+    tick: initial.tick,
+  }
+  const enemies = {
+    ...spawned,
+    mageLightningPulses: [pulse],
+    nextMageLightningPulseId: 2,
+  }
+  const options = {
+    integrity: 'local-only' as const,
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: {
+      ...initial,
+      worldManagerOrder: order.state(),
+      world: { ...initial.world, enemies },
+    },
+  }
+  const current = createGameSaveDocument(options)
+
+  const currentOrphan = JSON.parse(current)
+  currentOrphan.continuation.simulation.world.enemies.actors = []
+  const restoredOrphan = restoreGameSaveDocument(JSON.stringify(currentOrphan)).state
+  if (restoredOrphan.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(
+    restoredOrphan.world.enemies.mageLightningPulses[0]!.lightRegistration,
+    pulse.lightRegistration,
+  )
+  assert.notEqual(
+    restoredOrphan.world.enemies.mageLightningPulses[0]!.lightRegistration,
+    pulse.lightRegistration,
+  )
+
+  const legacy = JSON.parse(current)
+  downgradeSaveSchema(legacy, 36)
+  delete legacy.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration
+  const restoredLegacy = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  if (restoredLegacy.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(
+    restoredLegacy.world.enemies.mageLightningPulses[0]!.lightRegistration,
+    actor.lightRegistration,
+  )
+
+  const orphanedLegacy = structuredClone(legacy)
+  orphanedLegacy.continuation.simulation.world.enemies.actors = []
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(orphanedLegacy)),
+    /cannot recover its creator registration from an absent legacy owner/,
+  )
+
+  const missingCurrentRegistration = JSON.parse(current)
+  delete missingCurrentRegistration.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrentRegistration)),
+    /creator registration is invalid/,
+  )
+
+  const mismatchedCurrentRegistration = JSON.parse(current)
+  mismatchedCurrentRegistration.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration.registrationOrdinal += 10_000
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(mismatchedCurrentRegistration)),
+    /creator registration does not match its owner/,
+  )
+
+  const duplicateCurrentRegistration = JSON.parse(current)
+  duplicateCurrentRegistration.continuation.simulation.world.enemies
+    .mageLightningPulses[0].lightRegistration.registrationOrdinal
+      = duplicateCurrentRegistration.continuation.simulation.world.enemies
+        .mageLightningPulses[0].painterRegistrations[0].registrationOrdinal
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(duplicateCurrentRegistration)),
+    /creator and painter registrations must be distinct/,
+  )
+
+  const staleCurrentPulse = JSON.parse(current)
+  staleCurrentPulse.continuation.simulation.tick += 5
+  staleCurrentPulse.continuation.simulation.world.enemies.lastStepTick += 5
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(staleCurrentPulse)),
+    /live pulse age limit/,
+  )
+})
+
+test('cold and poison onset particles retain their native owner across saves', () => {
+  const loaded = materializeStockTutorial(Buffer.alloc(16, 35))
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loaded)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  for (const status of ['cold', 'poison'] as const) {
+    const emitted = emitPlayerStatusBurst(state.world.enemies, {
+      actorId: 1, playerId: 'owner', position: state.world.spawn, status, tick: state.tick,
+    }, state.gameRng)
+    const document = createGameSaveDocument({
+      state: { ...state, gameRng: emitted.rng, world: { ...state.world, enemies: emitted.store } },
+      loadedBoneyard: loaded, playerId: 'owner', mods: [], modState: {}, integrity: 'local-only',
+    })
+    const restored = restoreGameSaveDocument(document).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    const particles = restored.world.enemies.deathEffects
+    assert.equal(particles.length, 12)
+    for (const particle of particles) {
+      assert.equal(particle.presentationOwner, 'pre-world-queue')
+      assert.equal(particle.painterRegistration, null)
+      assert.equal(particle.role, `player-status-${status}`)
+    }
+    const invalid = JSON.parse(document)
+    invalid.continuation.simulation.world.enemies.deathEffects[0].presentationOwner = 'world-sorted'
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /presentation owner is invalid/)
+    invalid.continuation.simulation.world.enemies.deathEffects[0].painterRegistration = {
+      managerLane: 'transient', registrationOrdinal: 0,
+    }
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /presentation owner is invalid/)
+  }
+})
+
+test('Hail and Aura save cutovers retire obsolete particles while preserving current particles and the run', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const painterOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const aura = createNativeWaterAuraActor(
+    1, 'owner', 'hub:courtyard', 0, { x: 20, y: 30 }, 1, createNativeRng(37),
+  ).actor
+  const hail = createNativeWaterHailActor(
+    2, 'owner', 'hub:courtyard', 0, { x: 20, y: 30 }, { x: 1, y: 0 }, createNativeRng(37),
+  ).actor
+  const transients = [
+    { ...aura, painterRegistrations: [painterOrder.register('actor')] },
+    { ...hail, painterRegistrations: [painterOrder.register('actor')] },
+  ]
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner',
+    state: { ...state, primarySpells: { nextId: 3, projectiles: [], transients }, worldManagerOrder: painterOrder.state() },
+  })
+  const current = restoreGameSaveDocument(document).state
+  assert.deepEqual(current.primarySpells.transients, transients)
+  for (const schemaVersion of [28, 29, 39]) {
+    const previous = JSON.parse(document)
+    downgradeSaveSchema(previous, schemaVersion)
+    if (schemaVersion === 28) previous.continuation.simulation.primarySpells.transients[1].scale = 1.5
+    const migrated = restoreGameSaveDocument(JSON.stringify(previous)).state
+    assert.deepEqual(migrated.primarySpells, {
+      nextId: 3, projectiles: [], transients: schemaVersion < 29 ? [] : [transients[1]],
+    })
+    assert.deepEqual(migrated.run, current.run)
+    assert.deepEqual(migrated.playerEntities, current.playerEntities)
+    assert.deepEqual(migrated.combatRng, current.combatRng)
+    assert.deepEqual(migrated.gameRng, current.gameRng)
+  }
+})
+
+test('Harden saves retain current coating and migrate the former armor-only cache', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const active = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      skillRuntimes: [{ ...state.playerEntities.skillRuntimes[0]!, harden: { armor: 12, coating: 0.5 } }],
+    },
+    secondaryAbilities: {
+      ...state.secondaryAbilities,
+      nextEventId: 2,
+      events: [{
+        actorId: null, cameraDisplacement: null, cameraMagnitude: 0, cue: 'teleport' as const,
+        eventId: 1, gain: 1, kind: 'pulse' as const, ownerId: 'owner', pitch: 1,
+        position: { x: 20, y: 30 }, screenFlash: null, skillId: 48 as const,
+        tick: 0, worldKey: 'hub:courtyard',
+      }],
+    },
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: 'owner', state: active,
+  })
+  const restored = restoreGameSaveDocument(document).state
+  assert.deepEqual(restored.playerEntities.skillRuntimes[0]!.harden, { armor: 12, coating: 0.5 })
+  for (const schemaVersion of [28, 29]) {
+    const previous = JSON.parse(document)
+    downgradeSaveSchema(previous, schemaVersion)
+    const runtime = previous.continuation.simulation.playerEntities.skillRuntimes[0]
+    delete runtime.harden
+    runtime.hardenArmor = 12
+    delete previous.continuation.simulation.secondaryAbilities.events[0].gain
+    const migrated = restoreGameSaveDocument(JSON.stringify(previous)).state
+    assert.deepEqual(migrated.playerEntities.skillRuntimes[0]!.harden, { armor: 0, coating: 0 })
+    assert.equal('hardenArmor' in migrated.playerEntities.skillRuntimes[0]!, false)
+    assert.equal(migrated.secondaryAbilities.events[0]!.gain, 1)
+    assert.deepEqual(migrated.run, restored.run)
+    assert.deepEqual(migrated.playerEntities.economies, restored.playerEntities.economies)
+  }
+  for (const harden of [null, { armor: -1, coating: 0.5 }, { armor: 1, coating: -0.5 },
+    { armor: 1, coating: 1.5 }, { armor: 1, coating: 0 }, { armor: '12', coating: 0.5 }]) {
+    const malformed = JSON.parse(document)
+    malformed.continuation.simulation.playerEntities.skillRuntimes[0].harden = harden
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /Harden/)
+  }
+})
+
+test('current Hub restore allocates its reconstructed students after persisted owners', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const persistedNextActor = state.worldManagerOrder.nextRegistrationOrdinal.actor
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })).state
+  assert.equal(restored.world.kind, 'hub')
+  if (restored.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const studentRegistrations = restored.world.studentPopulation.students.map(
+    ({ painterRegistration }) => painterRegistration,
+  )
+  assert.ok(studentRegistrations.length > 0)
+  assert.equal(
+    studentRegistrations.every(({ managerLane, registrationOrdinal }) => (
+      managerLane === 'actor' && registrationOrdinal >= persistedNextActor
+    )),
+    true,
+  )
+  const actorRegistrations = [
+    ...NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.map((_, registrationOrdinal) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal,
+    })),
+    restored.playerEntities.lightings[0]!.lightRegistration,
+    ...studentRegistrations,
+  ]
+  assert.equal(
+    new Set(actorRegistrations.map(({ registrationOrdinal }) => registrationOrdinal)).size,
+    actorRegistrations.length,
+  )
+  assert.ok(
+    restored.worldManagerOrder.nextRegistrationOrdinal.actor
+      > Math.max(...actorRegistrations.map(({ registrationOrdinal }) => registrationOrdinal)),
+  )
+})
+
+test('checkpoints retain pending offers and schema 27 repairs the erased offer once', () => {
+  const state = createGameSimulation({ owner: OWNER }, { initialPlayerExperience: 100 })
+  const expectedOffer = state.playerEntities.progressions[0]!.pendingOffer
+  assert.ok(expectedOffer)
+  assert.ok(state.levelUpBarrier)
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  assert.equal(current.schemaVersion, WEB_GAME_SAVE_SCHEMA_VERSION)
+  assert.deepEqual(
+    current.continuation.simulation.playerEntities.progressions[0].pendingOffer,
+    expectedOffer,
+  )
+
+  const decodeCheckpoint = (document: string) => {
+    const restored = restoreGameSaveDocument(document)
+    const snapshot = createGameSnapshot(restored.state, restored.playerId)
+    return decodeServerGameMessage(encodeGameMessage({
+      type: 'server-snapshot',
+      acknowledgedInputSequence: 0,
+      frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+      sequence: 1,
+    }))
+  }
+  const currentMessage = decodeCheckpoint(JSON.stringify(current))
+  assert.equal(currentMessage.type, 'server-snapshot')
+
+  const legacy = structuredClone(current)
+  downgradeSaveSchema(legacy, 27)
+  legacy.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
+  const legacyMessage = decodeCheckpoint(JSON.stringify(legacy))
+  assert.equal(legacyMessage.type, 'server-snapshot')
+  assert.ok(legacyMessage.frame.players.owner?.progression.pendingOffer)
+  assert.deepEqual(legacyMessage.frame.levelUpBarrier?.pendingPlayerIds, ['owner'])
+
+  for (const schemaVersion of [28, WEB_GAME_SAVE_SCHEMA_VERSION]) {
+    const malformed = structuredClone(current)
+    downgradeSaveSchema(malformed, schemaVersion)
+    malformed.continuation.simulation.playerEntities.progressions[0].pendingOffer = null
+    assert.throws(
+      () => restoreGameSaveDocument(JSON.stringify(malformed)),
+      /level-up barrier pending player has no skill offer/,
+    )
+  }
+})
+
+test('schema 21 Hub saves migrate the old fixed and Student-before-player prefix', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  assert.equal(state.world.kind, 'hub')
+  if (state.world.kind !== 'hub') throw new Error('expected Hub world')
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  const simulation = document.continuation.simulation
+  const studentCount = simulation.world.studentPopulation.students.length
+  const currentFixedCount = NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.length
+  const fixedDelta = currentFixedCount - 11
+  const currentPlayerOrdinal = currentFixedCount
+  const currentStudentStart = currentPlayerOrdinal + 1
+  const downgradeRegistration = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(downgradeRegistration)
+    if (value === null || typeof value !== 'object') return value
+    const source = value as Record<string, unknown>
+    if (source.managerLane === 'actor' && Number.isSafeInteger(source.registrationOrdinal)) {
+      const ordinal = Number(source.registrationOrdinal)
+      return {
+        ...source,
+        registrationOrdinal: ordinal === currentPlayerOrdinal
+          ? 11 + studentCount
+          : ordinal >= currentStudentStart && ordinal < currentStudentStart + studentCount
+            ? 11 + ordinal - currentStudentStart
+            : ordinal - fixedDelta,
+      }
+    }
+    return Object.fromEntries(Object.entries(source).map(([key, entry]) => [
+      key,
+      downgradeRegistration(entry),
+    ]))
+  }
+  document.continuation.simulation = downgradeRegistration(simulation)
+  document.continuation.simulation.worldManagerOrder.nextRegistrationOrdinal.actor -= fixedDelta
+  downgradeSaveSchema(document, 21)
+
+  const restored = restoreGameSaveDocument(JSON.stringify(document)).state
+  assert.equal(restored.world.kind, 'hub')
+  if (restored.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.deepEqual(restored.playerEntities.lightings[0]!.lightRegistration, {
+    managerLane: 'actor',
+    registrationOrdinal: currentFixedCount,
+  })
+  assert.ok(restored.world.studentPopulation.students.every(({ painterRegistration }) => (
+    painterRegistration.registrationOrdinal > currentFixedCount
+  )))
+})
+
+test('schema 19 compact inventory roots migrate to schema 27 addressed slots', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const legacy = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  downgradeSaveSchema(legacy, 19)
+  const legacyBackpack = legacy.continuation.simulation.playerEntities.economies[0].backpack
+  for (const item of legacyBackpack) delete item.inventorySlot
+
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.deepEqual(
+    restored.state.playerEntities.economies[0]!.backpack.map(({ inventorySlot }) => inventorySlot),
+    [0, 1],
+  )
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: restored.state,
+  }))
+  assert.deepEqual(
+    current.continuation.simulation.playerEntities.economies[0].backpack
+      .map(({ inventorySlot }: { inventorySlot: number }) => inventorySlot),
+    [0, 1],
+  )
+})
+
+
+test('Maggot Tree query binding resets on current and legacy save restoration', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const context = { players: {}, projectileWorldBlocked: () => false,
+    registerWorldPainter: order.register, resolveMovement: (request: { requestedPosition: { x: number; y: number } }) => request.requestedPosition }
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    ...context, tick: state.tick,
+    resolveSpawnIntents: () => [{ enemyToken: 'COFFIN', flags: [], id: 1,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN, locationPolicy: 'anywhere',
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const coffin = spawned.actors[0]!
+  if (coffin.brain.family !== 'coffin') throw new Error('expected Coffin')
+  const released = stepBoneyardEnemyStore({ ...spawned, actors: [{ ...coffin,
+    brain: { ...coffin.brain, phase: 'opening', phaseTicksRemaining: 1 } }] }, {
+    ...context, tick: state.tick + 1, resolveSpawnIntents: () => [],
+  }).store
+  assert.ok(released.maggots.length > 0)
+  const maggots = released.maggots.map(maggot => ({ ...maggot, nativeTreeQueryMember: true }))
+  state = { ...state, tick: state.tick + 1, world: { ...state.world,
+    enemies: { ...released, maggots } }, worldManagerOrder: order.state() }
+  const document = createGameSaveDocument({ state, loadedBoneyard, integrity: 'local-only',
+    mods: [], modState: {}, playerId: 'owner' })
+  for (const fieldWasPresent of [false, true]) {
+    const saved = JSON.parse(document)
+    if (!fieldWasPresent) {
+      for (const maggot of saved.continuation.simulation.world.enemies.maggots) delete maggot.nativeTreeQueryMember
+    }
+    const restored = restoreGameSaveDocument(JSON.stringify(saved)).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    assert.deepEqual(restored.world.enemies.maggots,
+      maggots.map(maggot => ({ ...maggot, nativeTreeQueryMember: false })))
+    const projected = createGameSnapshot(restored, 'owner')
+    if (projected.world.kind !== 'boneyard') throw new Error('expected projected Boneyard')
+    assert.ok(projected.world.maggots.every(maggot => maggot.nativeTreeQueryMember === false))
+  }
+})
+
+
+test('schema 41 preserves independent hit reaction and legacy migration retires only the unrecoverable latch', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    tick: state.tick, players: {}, projectileWorldBlocked: () => false,
+    registerWorldPainter: order.register, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: [], id: 1,
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.SKELETON, locationPolicy: 'anywhere',
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const hit = damageBoneyardEnemy(spawned, { actorId: spawned.actors[0]!.id, amount: 0.1,
+    hitStrength: 0.375, sourcePlayerId: 'owner', tick: state.tick, registerWorldPainter: order.register })
+  state = { ...state, world: { ...state.world, enemies: hit.store }, worldManagerOrder: order.state() }
+  const document = createGameSaveDocument({ state, loadedBoneyard, integrity: 'global-clean',
+    mods: [], modState: {}, playerId: 'owner' })
+  const current = restoreGameSaveDocument(document).state
+  if (current.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  assert.equal(current.world.enemies.actors[0]!.hitReactionTimer, 1)
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 40)
+  delete legacy.continuation.simulation.world.enemies.actors[0].hitReactionTimer
+  const recovered = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.deepEqual(recovered, { ...current, screenFlashes: { epoch: 0, nextOrder: 1, writes: [] }, world: { ...current.world,
+    enemies: { ...current.world.enemies,
+      actors: current.world.enemies.actors.map(actor => ({ ...actor, hitReactionTimer: 0 })) } } })
+  for (const invalid of [undefined, null, -0.01, 1.01, '1']) {
+    const malformed = JSON.parse(document)
+    malformed.continuation.simulation.world.enemies.actors[0].hitReactionTimer = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /hit reaction/)
+  }
+  const future = { ...JSON.parse(document), schemaVersion: 999 }
+  assert.deepEqual(restoreGameSaveDocument(JSON.stringify(future)).state, current)
+  const suppressed = JSON.parse(document)
+  suppressed.continuation.simulation.world.enemies.actors[0].hitReactionTimer = 0
+  const suppressedRestore = restoreGameSaveDocument(JSON.stringify(suppressed)).state
+  if (suppressedRestore.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(suppressedRestore.world.enemies.actors[0]!.hitFeedback.timer, 1)
+  assert.equal(suppressedRestore.world.enemies.actors[0]!.hitReactionTimer, 0)
+})
+
+test('schema 25 active Wraiths migrate from the fabricated phase brain to native flight state', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 91),
+  )
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const spawnIntent: BoneyardEnemySpawnIntent = {
+    enemyToken: 'WRAITH',
+    flags: [],
+    id: 1,
+    locationPolicy: 'anywhere',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
+    position: { x: 300, y: 300 },
+    spawnTick: state.tick,
+    waveOrdinal: 1,
+  }
+  const spawned = stepBoneyardEnemyStore(state.world.enemies, {
+    projectileWorldBlocked: () => false,
+    players: {},
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [spawnIntent],
+    tick: state.tick,
+  })
+  state = { ...state, world: { ...state.world, enemies: spawned.store } }
+  const legacy = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  downgradeSaveSchema(legacy, 25)
+  legacy.continuation.simulation.world.enemies.actors[0].brain = {
+    actionTick: 0,
+    contactTargetPlayerId: null,
+    family: 'wraith',
+    markerEmitted: false,
+    phase: 'orbit',
+    phaseTicksRemaining: 400,
+  }
+
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.equal(restored.world.kind, 'boneyard')
+  if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  const brain = restored.world.enemies.actors[0]!.brain
+  assert.equal(brain.family, 'wraith')
+  if (brain.family !== 'wraith') throw new Error('expected restored Wraith')
+  assert.equal(brain.phase, 'flight')
+  assert.equal(brain.baseFlybySpeed, Math.fround(0.8))
+  assert.ok(brain.currentSpeed >= 20 && brain.currentSpeed < 60)
+  assert.ok(brain.restingSpeed >= 16 && brain.restingSpeed <= 24)
+  assert.ok(brain.flybyTicksRemaining >= 200 && brain.flybyTicksRemaining <= 800)
+})
+
+test('schema 26 reconstructs missing Demon articulation while schema 27 requires it', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 41),
+  )
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
+  const spawned = stepBoneyardEnemyStore(createBoneyardEnemyStore('saved-demon'), {
+    projectileWorldBlocked: () => false,
+    players: {
+      owner: {
+        alive: true,
+        collisionRadius: 25,
+        connected: true,
+        eligible: true,
+        position: { x: 500, y: 200 },
+        velocityPerTick: { x: 0, y: 0 },
+      },
+    },
+    resolveMovement: ({ requestedPosition }) => requestedPosition,
+    resolveSpawnIntents: () => [{
+      enemyToken: 'DEMON',
+      flags: [],
+      id: 1,
+      locationPolicy: 'anywhere',
+      nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.DEMON,
+      position: { x: 100, y: 200 },
+      spawnTick: state.tick,
+      waveOrdinal: 1,
+    }],
+    tick: state.tick,
+  })
+  state = {
+    ...state,
+    world: { ...state.world, enemies: spawned.store },
+  }
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  const currentBrain = current.continuation.simulation.world.enemies.actors[0].brain
+  assert.equal(currentBrain.family, 'demon')
+  assert.ok(currentBrain.articulation)
+
+  const legacy = structuredClone(current)
+  downgradeSaveSchema(legacy, 26)
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.articulation
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const restoredBrain = restored.state.world.enemies.actors[0]?.brain
+  assert.equal(restoredBrain?.family, 'demon')
+  if (restoredBrain?.family !== 'demon') throw new Error('expected Demon brain')
+  assert.deepEqual(restoredBrain.articulation, currentBrain.articulation)
+
+  const missingCurrent = structuredClone(current)
+  delete missingCurrent.continuation.simulation.world.enemies.actors[0].brain.articulation
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrent)),
+    /Demon 0 articulation is missing/,
+  )
+})
+
+test('schema 20 restores complete Hub and Boneyard world-painter ownership', () => {
+  const hubState = createGameSimulation({ owner: OWNER })
+  const hubLegacy = downgradeWorldPainterDocumentToSchema20(JSON.parse(
+    createGameSaveDocument({
+      integrity: 'local-only',
+      loadedBoneyard: null,
+      mods: [],
+      modState: {},
+      playerId: 'owner',
+      state: hubState,
+    }),
+  ))
+  const restoredHub = restoreGameSaveDocument(JSON.stringify(hubLegacy))
+  assert.equal(restoredHub.state.world.kind, 'hub')
+  if (restoredHub.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const hubActorRegistrations = [
+    ...NATIVE_HUB_FIXED_ACTOR_PAINTER_IDS.map((_, registrationOrdinal) => ({
+      managerLane: 'actor' as const,
+      registrationOrdinal,
+    })),
+    restoredHub.state.playerEntities.lightings[0]!.lightRegistration,
+    ...restoredHub.state.world.studentPopulation.students.map(
+      student => student.painterRegistration,
+    ),
+  ]
+  assert.equal(
+    hubActorRegistrations.every(registration => registration.managerLane === 'actor'),
+    true,
+  )
+  assert.equal(
+    new Set(hubActorRegistrations.map(registration => registration.registrationOrdinal)).size,
+    hubActorRegistrations.length,
+  )
+  assert.equal(
+    restoredHub.state.worldManagerOrder.nextRegistrationOrdinal.actor
+      > Math.max(...hubActorRegistrations.map(registration => registration.registrationOrdinal)),
+    true,
+  )
+  const reencodedHub = JSON.parse(createGameSaveDocument({
+    integrity: restoredHub.integrity,
+    loadedBoneyard: null,
+    mods: restoredHub.mods,
+    modState: restoredHub.modState,
+    playerId: restoredHub.playerId,
+    state: restoredHub.state,
+  }))
+  assert.equal('worldManagerOrder' in reencodedHub.continuation.simulation, true)
+  assert.equal('lightProviderOrder' in reencodedHub.continuation.simulation, false)
+
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 67),
+  )
+  assert.ok(loadedBoneyard)
+  const boneyardState = enterBoneyardWorld(hubState, loadedBoneyard)
+  const boneyardLegacy = downgradeWorldPainterDocumentToSchema20(JSON.parse(
+    createGameSaveDocument({
+      integrity: 'local-only',
+      loadedBoneyard,
+      mods: [],
+      modState: {},
+      playerId: 'owner',
+      state: boneyardState,
+    }),
+  ))
+  const restoredBoneyard = restoreGameSaveDocument(JSON.stringify(boneyardLegacy))
+  assert.equal(restoredBoneyard.state.world.kind, 'boneyard')
+  if (restoredBoneyard.state.world.kind !== 'boneyard') {
+    throw new Error('expected restored Boneyard')
+  }
+  assert.deepEqual(
+    restoredBoneyard.state.world.solomonPainterRegistration?.managerLane,
+    'actor',
+  )
+  for (const goodie of restoredBoneyard.state.world.loot.goodies) {
+    assert.equal(
+      goodie.sceneryRegistrationOrdinal,
+      loadedBoneyard.scene.objects.findIndex(object => object.eid === goodie.eid),
+    )
+  }
+  assert.doesNotThrow(() => createGameSnapshot(restoredBoneyard.state, 'owner'))
+})
+
+test('schema 22 retires obsolete Water painters and restores every native death-effect owner', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 83),
+  )
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(
+    createGameSimulation({ owner: { ...OWNER, element: 'water' } }),
+    loadedBoneyard,
+  )
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+
+  const painterOrder = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const deathEffect = (
+    id: number,
+    kind: BoneyardEnemyDeathEffect['kind'],
+    role: string,
+    presentationOwner: BoneyardEnemyDeathEffect['presentationOwner'],
+  ): BoneyardEnemyDeathEffect => ({
+    ageTicks: 0,
+    alpha: 1,
+    alphaMultiplier: 1,
+    alphaLossPerTick: 0.025,
+    angularVelocityDeg: 0,
+    atlas: 'BadGuys',
+    blendMode: 'normal',
+    bounceRetention: 0,
+    bounceVelocity: 0,
+    entry: 86,
+    firstEntry: 86,
+    frameCount: 1,
+    framePhase: 0,
+    frameVelocity: 0,
+    frameVelocityDamping: 1,
+    frameTicks: 1,
+    height: 0,
+    id,
+    kind,
+    lastStepTick: 0,
+    lifetimeTicks: 40,
+    opacityTimer: 1,
+    ownerActorId: 1,
+    painterRegistration: presentationOwner === 'world-sorted'
+      ? painterOrder.register('actor')
+      : null,
+    presentationOwner,
+    position: { x: 200, y: 150 },
+    role,
+    rotationDeg: 0,
+    scale: 1,
+    scaleMultiplier: 1,
+    shadow: false,
+    spawnTick: 0,
+    tint: 0xffffff,
+    verticalVelocity: 0,
+    velocity: { x: 0, y: 0 },
+    velocityDamping: 1,
+  })
+  const enemyDeathEffects = [
+    deathEffect(1, 'bouncer', 'skeleton-bone', 'world-sorted'),
+    deathEffect(2, 'unbind', 'death-unbind-star', 'late-world-overlay'),
+    deathEffect(3, 'sprite-array', 'imp-sprite-array', 'pre-world-queue'),
+    deathEffect(4, 'late-splat', 'zombie-late-splat:0', 'pre-world-queue'),
+    deathEffect(5, 'fire-array', 'demon-death-fire:0', 'pre-world-queue'),
+    deathEffect(6, 'fade', 'demon-death-fire-burst-glow', 'direct-post-world'),
+    deathEffect(
+      7,
+      'sprite-array',
+      'demon-death-fire-burst-frame',
+      'direct-post-world',
+    ),
+  ]
+  const lootDeathEffect = deathEffect(8, 'bouncer', 'goodie-break-particle-0', 'world-sorted')
+  const aura = createNativeWaterAuraActor(
+    100,
+    'owner',
+    `boneyard:${loadedBoneyard.runId}`,
+    0,
+    { x: 200, y: 150 },
+    1,
+    createNativeRng(1),
+  )
+  const hail = createNativeWaterHailActor(
+    101,
+    'owner',
+    `boneyard:${loadedBoneyard.runId}`,
+    0,
+    { x: 200, y: 150 },
+    { x: 1, y: 0 },
+    aura.rng,
+  )
+  state = {
+    ...state,
+    primarySpells: {
+      nextId: 102,
+      projectiles: [],
+      transients: [
+        { ...aura.actor, painterRegistrations: [painterOrder.register('actor')] },
+        { ...hail.actor, painterRegistrations: [painterOrder.register('actor')] },
+      ],
+    },
+    world: {
+      ...state.world,
+      enemies: {
+        ...state.world.enemies,
+        deathEffects: enemyDeathEffects,
+        lastStepTick: 0,
+        nextDeathEffectId: 9,
+      },
+      loot: {
+        ...state.world.loot,
+        effects: [lootDeathEffect],
+        nextEffectId: 9,
+      },
+    },
+    worldManagerOrder: painterOrder.state(),
+  }
+
+  const legacy = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  downgradeSaveSchema(legacy, 22)
+  for (const transient of legacy.continuation.simulation.primarySpells.transients) {
+    delete transient.painterRegistrations
+  }
+  const legacyEnemyEffects = legacy.continuation.simulation.world.enemies.deathEffects
+  const legacyLootEffects = legacy.continuation.simulation.world.loot.effects
+  for (const effect of [...legacyEnemyEffects, ...legacyLootEffects]) {
+    delete effect.presentationOwner
+  }
+  legacyEnemyEffects[2].painterRegistration = {
+    managerLane: 'actor',
+    registrationOrdinal: 999_999,
+  }
+
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(
+    restored.state.primarySpells.transients,
+    [],
+    'Both Hail and Aura predate their native constructor/save cutovers',
+  )
+  assert.deepEqual(
+    restored.state.world.enemies.deathEffects.map((effect) => ({
+      owner: effect.presentationOwner,
+      registration: effect.painterRegistration?.managerLane ?? null,
+      role: effect.role,
+    })),
+    [
+      { owner: 'world-sorted', registration: 'transient', role: 'skeleton-bone' },
+      { owner: 'late-world-overlay', registration: null, role: 'death-unbind-star' },
+      { owner: 'pre-world-queue', registration: null, role: 'imp-sprite-array' },
+      { owner: 'pre-world-queue', registration: null, role: 'zombie-late-splat:0' },
+      { owner: 'pre-world-queue', registration: null, role: 'demon-death-fire:0' },
+      {
+        owner: 'direct-post-world',
+        registration: null,
+        role: 'demon-death-fire-burst-glow',
+      },
+      {
+        owner: 'direct-post-world',
+        registration: null,
+        role: 'demon-death-fire-burst-frame',
+      },
+    ],
+  )
+  assert.equal(restored.state.world.loot.effects[0]?.presentationOwner, 'world-sorted')
+  assert.equal(restored.state.world.loot.effects[0]?.painterRegistration?.managerLane, 'transient')
+  assert.doesNotThrow(() => createReplicatedEntityBaseline(
+    createGameSnapshot(restored.state, 'owner'),
+  ))
+
+  // The legacy actors are intentionally gone. A newly created current-schema
+  // Aura must still carry a valid painter registration; do not weaken that rule.
+  const currentOrder = createNativeWorldManagerOrder(restored.state.worldManagerOrder)
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: restored.integrity,
+    loadedBoneyard,
+    mods: restored.mods,
+    modState: restored.modState,
+    playerId: restored.playerId,
+    state: {
+      ...restored.state,
+      primarySpells: { ...restored.state.primarySpells, transients: [{
+        ...aura.actor, painterRegistrations: [currentOrder.register('actor')],
+      }] },
+      worldManagerOrder: currentOrder.state(),
+    },
+  }))
+  assert.doesNotThrow(() => restoreGameSaveDocument(JSON.stringify(current)))
+  const missingOwner = structuredClone(current)
+  delete missingOwner.continuation.simulation.world.enemies.deathEffects[0]
+    .presentationOwner
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingOwner)),
+    /presentation owner/,
+  )
+  const missingPainters = structuredClone(current)
+  delete missingPainters.continuation.simulation.primarySpells.transients[0]
+    .painterRegistrations
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingPainters)),
+    /painter registrations/,
+  )
+})
+
+test('host save documents round-trip the complete owner state and revive Hub runtimes', () => {
+  let state = createGameSimulation({ owner: OWNER, guest: GUEST }, {
+    hubTraderAnimationSeed: 2,
+    gameRngSeed: 91,
+  })
+  for (let tick = 0; tick < 17; tick += 1) {
+    state = stepGameSimulationTick(state, {
+      owner: createIdlePlayerCharacterInput(),
+      guest: createIdlePlayerCharacterInput(),
+    })
+  }
+
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state,
+  })
+  const encoded = JSON.parse(document) as Record<string, unknown>
+  assert.deepEqual(encoded.mods, MODS)
+  assert.deepEqual(encoded.modState, MOD_STATE)
+  assert.equal(encoded.integrity, 'local-only')
+  const serializedHub = (
+    encoded.continuation as { simulation: { world: Record<string, unknown> } }
+  ).simulation.world
+  assert.equal('skorchaHiddenTicks' in serializedHub, false)
+  assert.equal('skorchaPopulationRng' in serializedHub, false)
+  assert.equal('skorchaTransitionTicksRemaining' in serializedHub, false)
+  assert.equal('skorchaVisibleTicks' in serializedHub, false)
+  assert.equal(new TextEncoder().encode(document).byteLength <= MAX_WEB_GAME_SAVE_BYTES, true)
+  assert.deepEqual(readGameSaveSummary(document), {
+    activeRun: false,
+    character: OWNER,
+    partyRejoinToken: null,
+    phase: 'hub',
+    playerId: 'owner',
+    savedAtTick: state.tick,
+    worldKind: 'hub',
+  })
+
+  const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const reconstructedHub = createHubWorld(['owner'], {
+    traderAnimationSeed: hubSeed.value,
+  })
+  const restored = restoreGameSaveDocument(document)
+  assert.equal(restored.playerId, 'owner')
+  assert.equal(restored.integrity, 'local-only')
+  assert.deepEqual(restored.mods, MODS)
+  assert.deepEqual(restored.modState, MOD_STATE)
+  assert.equal(restored.loadedBoneyard, null)
+  assert.equal(restored.state.tick, state.tick)
+  assert.deepEqual(restored.state.playerEntities.identities, [{ playerId: 'owner' }])
+  assert.deepEqual(restored.state.playerEntities.configs, [OWNER])
+  assert.deepEqual(
+    restored.state.playerEntities.economies[0],
+    state.playerEntities.economies[0],
+  )
+
+  const schemaSeventeen = JSON.parse(document)
+  const oldSecondaryPlayer = schemaSeventeen.continuation.simulation.secondaryAbilities.players.owner
+  oldSecondaryPlayer.staffCastTicksRemaining = 41
+  delete oldSecondaryPlayer.castAction
+  const newSecondaryPlayer = JSON.parse(document)
+  newSecondaryPlayer.continuation.simulation.secondaryAbilities.players.owner.castAction = {
+    weaponKind: 'wand', progress: 0.95,
+  }
+  assert.equal(
+    restoreGameSaveDocument(JSON.stringify(newSecondaryPlayer))
+      .state.secondaryAbilities.players.owner?.castAction,
+    null,
+  )
+  const oldActionRestored = restoreGameSaveDocument(JSON.stringify(schemaSeventeen))
+    .state.secondaryAbilities.players.owner!
+  assert.equal(oldActionRestored.castAction, null)
+  assert.equal('staffCastTicksRemaining' in oldActionRestored, false)
+  downgradeSaveSchema(schemaSeventeen, 17)
+  downgradePlayerBeltsToLegacyQuickbar(
+    schemaSeventeen.continuation.simulation.playerEntities,
+  )
+  assert.deepEqual(
+    restoreGameSaveDocument(JSON.stringify(schemaSeventeen)).state.playerEntities.belts[0],
+    state.playerEntities.belts[0],
+  )
+
+  const schemaTwelve = JSON.parse(document)
+  downgradeSaveSchema(schemaTwelve, 12)
+  delete schemaTwelve.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    schemaTwelve.continuation.simulation.playerEntities,
+  )
+  delete schemaTwelve.profile.economy.collegeIntroPending
+  delete schemaTwelve.continuation.simulation.playerEntities.economies[0]
+    .collegeIntroPending
+  delete schemaTwelve.continuation.simulation.world.participants.owner.collegeIntro
+  const migratedProfile = restoreGameSaveProfile(JSON.stringify(schemaTwelve))
+  const migratedContinuation = restoreGameSaveDocument(JSON.stringify(schemaTwelve))
+  assert.equal(migratedProfile.economy.collegeIntroPending, false)
+  assert.equal(
+    migratedContinuation.state.playerEntities.economies[0]?.collegeIntroPending,
+    false,
+  )
+  downgradeSaveSchema(schemaTwelve, 13)
+  assert.throws(
+    () => restoreGameSaveProfile(JSON.stringify(schemaTwelve)),
+    /College intro state is invalid/,
+  )
+  assert.deepEqual(
+    restored.state.playerEntities.progressions[0],
+    state.playerEntities.progressions[0],
+  )
+  assert.equal(restored.state.world.kind, 'hub')
+  if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)
+  assert.equal(
+    restored.state.world.skorchaTransitionTicksRemaining,
+    reconstructedHub.skorchaTransitionTicksRemaining,
+  )
+  assert.deepEqual(restored.state.gameRng, hubSeed.state)
+  assert.ok(restored.state.world.runtime instanceof HubWorldRuntime)
+  assert.ok(restored.state.world.studentPopulation instanceof HubStudentPopulationState)
+  assert.deepEqual(Object.keys(restored.state.world.participants), ['owner'])
+  assert.deepEqual(restored.state.playerEntities.locomotions[0]?.position, HUB_SPAWN)
+  assert.equal(restored.state.world.participants.owner?.region, 'courtyard')
+  assert.equal(restored.state.world.participants.owner?.transition, null)
+})
+
+test('restore drops only the stale completed-Tutorial attachment from a Hub College save', () => {
+  const tutorial = materializeStockTutorial(Buffer.alloc(16, 31))
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), tutorial)
+  state = {
+    ...state,
+    run: {
+      ...state.run,
+      gameOverEventId: 1,
+      gameOverExitKind: 'automatic',
+      gameOverExitTicks: GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS,
+      gameOverTicks: 1_200,
+      nextGameOverEventId: 2,
+      phase: 'game-over',
+    },
+  }
+  state = stepGameSimulationTick(state, {})
+  assert.equal(state.world.kind, 'hub')
+  assert.equal(state.run.phase, 'hub')
+  assert.equal(getPlayerEconomy(state, 'owner').tutorialPending, false)
+
+  const clean = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const affected = JSON.parse(clean)
+  affected.continuation.loadedBoneyard = tutorial
+  const restored = restoreGameSaveDocument(JSON.stringify(affected))
+  assert.equal(restored.loadedBoneyard, null)
+  assert.equal(restored.state.world.kind, 'hub')
+  assert.equal(
+    restored.state.world.kind === 'hub'
+      ? restored.state.world.participants.owner?.collegeIntro?.phase
+      : null,
+    'courtyard-walk',
+  )
+
+  const ordinary = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 37),
+  )
+  assert.ok(ordinary)
+  affected.continuation.loadedBoneyard = ordinary
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(affected)),
+    /Hub game save carries a Boneyard/,
+  )
+})
+
+test('save creation rejects every world and Boneyard attachment mismatch', () => {
+  const tutorial = materializeStockTutorial(Buffer.alloc(16, 31))
+  const hub = createGameSimulation({ owner: OWNER })
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: tutorial,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: hub,
+  }), /Hub game save carries a Boneyard/)
+
+  const active = enterBoneyardWorld(hub, tutorial)
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: active,
+  }), /Boneyard game save is missing its loaded content/)
+
+  const other = materializeStockTutorial(Buffer.alloc(16, 32))
+  assert.notEqual(other.runId, tutorial.runId)
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: other,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: active,
+  }), /Boneyard run ownership is inconsistent/)
+})
+
+test('save restore repairs only the superseded vivid starter pair to the Stock roll', () => {
+  const character = { ...OWNER, element: 'fire' as const }
+  let state = createGameSimulation({ owner: character })
+  const economy = getPlayerEconomy(state, 'owner')
+  const vividTints = [0xff1919, 0xffffff] as const
+  const appearance = rollNativeStarterEquipmentAppearance(
+    createNativeRng(getPlayerProgression(state, 'owner').offerSeed),
+    'fire',
+  )
+  const stockTints = [appearance.primaryTint, appearance.secondaryTint] as const
+  const staleEconomy = {
+    ...economy,
+    collegeIntroPending: false,
+    equipment: {
+      ...economy.equipment,
+      hat: { ...economy.equipment.hat!, iconTints: vividTints },
+      robe: { ...economy.equipment.robe!, iconTints: vividTints },
+    },
+    revision: 7,
+    tutorialPending: false,
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', staleEconomy),
+  }
+  const continuation = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const restored = restoreGameSaveDocument(continuation).state
+  const restoredEconomy = getPlayerEconomy(restored, 'owner')
+  assert.deepEqual(restoredEconomy.equipment.hat?.iconTints, stockTints)
+  assert.deepEqual(restoredEconomy.equipment.robe?.iconTints, stockTints)
+  assert.equal(restoredEconomy.revision, 8)
+
+  const profile = restoreGameSaveProfile(createGameProfileSaveDocument({
+    integrity: 'global-clean',
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  const profileTints = profile.economy.equipment.hat?.iconTints
+  assert.ok(profileTints)
+  assert.notDeepEqual(profileTints, vividTints)
+  assert.deepEqual(profile.economy.equipment.robe?.iconTints, profileTints)
+  const fresh = createGameSimulation({ owner: character })
+  const hydrated = hydrateGameSaveProfile(fresh, 'owner', profile)
+  const hydratedEconomy = getPlayerEconomy(hydrated, 'owner')
+  assert.deepEqual(hydratedEconomy.equipment.hat?.iconTints, profileTints)
+  assert.deepEqual(hydratedEconomy.equipment.robe?.iconTints, profileTints)
+  assert.equal(hydratedEconomy.revision, 8)
+
+  const collegeTints = [0x6f7e72, 0xffffff] as const
+  const collegeState = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...staleEconomy,
+      collegeIntroPending: true,
+      equipment: {
+        ...staleEconomy.equipment,
+        hat: { ...staleEconomy.equipment.hat!, iconTints: collegeTints },
+        robe: { ...staleEconomy.equipment.robe!, iconTints: collegeTints },
+      },
+    }),
+  }
+  const pending = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: collegeState,
+  })).state
+  assert.deepEqual(getPlayerEconomy(pending, 'owner').equipment.hat?.iconTints, collegeTints)
+  assert.deepEqual(getPlayerEconomy(pending, 'owner').equipment.robe?.iconTints, collegeTints)
+})
+
+test('Hub resume reconstructs its authoritative Skorcha population with the other Region actors', () => {
+  const state = createGameSimulation({ owner: OWNER }, {
+    hubTraderAnimationSeed: 2,
+    gameRngSeed: 91,
+  })
+  const hubSeed = drawNativeInteger(state.gameRng, 0x40000000)
+  const reconstructedHub = createHubWorld(['owner'], {
+    traderAnimationSeed: hubSeed.value,
+  })
+  const serializedVariant = reconstructedHub.skorcha?.variant === 0 ? 1 : 0
+  const serializedSkorcha = createHubSkorchaAtVariant(
+    createNativeRng(317),
+    serializedVariant,
+  )
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  document.continuation.simulation.playerEntities.locomotions[0].position = {
+    x: 1_700,
+    y: 700,
+  }
+  document.continuation.simulation.world.participants.owner = {
+    collegeIntro: null,
+    region: 'library',
+    transition: null,
+  }
+  document.continuation.simulation.world.skorcha = serializedSkorcha
+  document.continuation.simulation.world.traderAnimationSeed = 2
+
+  const restored = restoreGameSaveDocument(JSON.stringify(document))
+  assert.equal(restored.state.world.kind, 'hub')
+  assert.deepEqual(restored.state.playerEntities.locomotions[0]?.position, { x: 1_700, y: 700 })
+  if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.equal(restored.state.world.participants.owner?.region, 'library')
+  assert.equal(restored.state.world.participants.owner?.transition, null)
+  assert.equal(restored.state.world.traderAnimationSeed, hubSeed.value)
+  assert.deepEqual(restored.state.world.skorcha, reconstructedHub.skorcha)
+  assert.notDeepEqual(restored.state.world.skorcha, serializedSkorcha)
+  assert.deepEqual(restored.state.gameRng, hubSeed.state)
+
+  for (const gestureTicksRemaining of [0, 1, 29]) {
+    document.continuation.simulation.world.skorcha = {
+      ...serializedSkorcha,
+      gestureTicksRemaining,
+      hatActive: true,
+      hatPhaseDegrees: 90,
+      hatRateDegreesPerTick: Math.fround(0.45),
+    }
+    const legacy = restoreGameSaveDocument(JSON.stringify(document)).state
+    assert.equal(legacy.world.kind, 'hub')
+    if (legacy.world.kind !== 'hub') throw new Error('expected restored Hub')
+    assert.deepEqual(legacy.world.skorcha, reconstructedHub.skorcha)
+  }
+  for (const gestureTicksRemaining of [-1, 30]) {
+    document.continuation.simulation.world.skorcha.gestureTicksRemaining = gestureTicksRemaining
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(document)), /Skorcha gesture timer/)
+  }
+})
+
+test('schema 16 resumes every College admission phase and its exact player position', () => {
+  const resume = (state: ReturnType<typeof createGameSimulation>) => restoreGameSaveDocument(
+    createGameSaveDocument({
+      integrity: 'global-clean',
+      loadedBoneyard: null,
+      mods: [],
+      modState: {},
+      playerId: 'owner',
+      state,
+    }),
+  ).state
+  const participant = (state: ReturnType<typeof createGameSimulation>) => (
+    state.world.kind === 'hub' ? state.world.participants.owner : null
+  )
+  const assertResumed = (source: ReturnType<typeof createGameSimulation>) => {
+    const restored = resume(source)
+    assert.deepEqual(participant(restored), participant(source))
+    assert.deepEqual(
+      restored.playerEntities.locomotions[0]?.position,
+      source.playerEntities.locomotions[0]?.position,
+    )
+    return restored
+  }
+  const step = (source: ReturnType<typeof createGameSimulation>) => stepGameSimulationTick(
+    source,
+    { owner: createIdlePlayerCharacterInput() },
+    { collegeIntroReadyPlayerIds: new Set(['owner']) },
+  )
+  const advanceUntil = (
+    source: ReturnType<typeof createGameSimulation>,
+    phase: 'office-walk' | 'arch-dialogue',
+  ) => {
+    let current = source
+    for (let ticks = 0; ticks < 4_000 && participant(current)?.collegeIntro?.phase !== phase; ticks += 1) {
+      current = step(current)
+    }
+    assert.equal(participant(current)?.collegeIntro?.phase, phase)
+    return current
+  }
+
+  let state = armGameSimulationCollegeIntro(createGameSimulation({ owner: OWNER }), 'owner')
+  for (let ticks = 0; ticks < 50; ticks += 1) state = step(state)
+  assert.equal(participant(state)?.collegeIntro?.phase, 'courtyard-walk')
+  state = assertResumed(state)
+  state = assertResumed(advanceUntil(state, 'office-walk'))
+  state = assertResumed(advanceUntil(state, 'arch-dialogue'))
+
+  const acknowledged = applyGameSimulationHubAction(state, 'owner', {
+    type: 'acknowledge-college-intro-dialogue',
+  })
+  assert.equal(acknowledged.accepted, true)
+  const restoredAcknowledged = assertResumed(acknowledged.state)
+  assert.equal(participant(restoredAcknowledged)?.collegeIntro, null)
+  assert.equal(participant(restoredAcknowledged)?.region, 'office')
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    participant(restoredAcknowledged) ?? undefined,
+    getPlayerEconomy(restoredAcknowledged, 'owner').collegeIntroPending,
+  ), true)
+  assert.strictEqual(
+    armGameSimulationCollegeIntro(restoredAcknowledged, 'owner'),
+    restoredAcknowledged,
+  )
+  if (restoredAcknowledged.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const collegeLoadout = assertResumed({
+    ...restoredAcknowledged,
+    world: {
+      ...restoredAcknowledged.world,
+      participants: {
+        ...restoredAcknowledged.world.participants,
+        owner: {
+          collegeIntro: null,
+          region: 'courtyard',
+          transition: {
+            alpha: 1,
+            destination: 'courtyard',
+            phase: 'college-loadout',
+            scriptedSpeed: 1,
+            scriptedTarget: { x: 952.5, y: 157.5 },
+            sourceRegion: 'office',
+          },
+        },
+      },
+    },
+  })
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    participant(collegeLoadout) ?? undefined,
+    getPlayerEconomy(collegeLoadout, 'owner').collegeIntroPending,
+  ), true)
+  if (collegeLoadout.world.kind !== 'hub') throw new Error('expected restored Hub')
+  const returnedIncoming = assertResumed({
+    ...collegeLoadout,
+    world: {
+      ...collegeLoadout.world,
+      participants: {
+        ...collegeLoadout.world.participants,
+        owner: {
+          ...collegeLoadout.world.participants.owner!,
+          transition: {
+            ...collegeLoadout.world.participants.owner!.transition!,
+            phase: 'incoming',
+          },
+        },
+      },
+    },
+  })
+  assert.equal(hubCollegeAdmissionPreLoadout(
+    participant(returnedIncoming) ?? undefined,
+    getPlayerEconomy(returnedIncoming, 'owner').collegeIntroPending,
+  ), false)
+})
+
+test('a client-held save cannot fork the process-owned shared memorial', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  if (state.world.kind !== 'hub') throw new Error('expected Hub')
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      memorial: archiveHubMemorialPortrait(state.world.memorial, {
+        accountUsername: 'owner',
+        awesomeness: 4_567,
+        awesomestKill: 'Horned Skeleton',
+        capturedAtTick: 300,
+        config: OWNER,
+        elapsedTicks: 12_345,
+        equipment: { hat: null, robe: null, weapon: null },
+        headingIndex: 12,
+        level: 7,
+        monstersKilled: 321,
+        playerId: 'owner',
+        portraitScale: 0.925,
+        runId: 'completed-run',
+        wave: 12,
+      }, 0),
+    },
+  }
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const encoded = JSON.parse(document)
+  assert.equal('memorial' in encoded.continuation.simulation.world, false)
+  const restored = restoreGameSaveDocument(document)
+  if (restored.state.world.kind !== 'hub') throw new Error('expected restored Hub')
+  assert.equal(restored.state.world.memorial.nextAge, 1001)
+  assert.equal(restored.state.world.memorial.slots.every(({ portrait }) => portrait === null), true)
+})
+
+test('native NPC help rows persist after acknowledgement and pre-v11 saves migrate as acknowledged', () => {
+  const initial = createGameSimulation({ owner: OWNER })
+  const acknowledged = applyGameSimulationHubAction(initial, 'owner', {
+    interactionId: 'annalist',
+    type: 'acknowledge-npc-hint',
+  })
+  assert.equal(acknowledged.accepted, true)
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: acknowledged.state,
+  })
+  assert.deepEqual(
+    restoreGameSaveDocument(document).state.playerEntities.economies[0]?.npc.helpFlags,
+    [false, true, true, true, true, true, true, true, true, true],
+  )
+
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 10)
+  delete legacy.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
+  delete legacy.profile.economy.collegeIntroPending
+  delete legacy.continuation.simulation.playerEntities.economies[0].collegeIntroPending
+  delete legacy.continuation.simulation.world.participants.owner.collegeIntro
+  delete legacy.profile.economy.npc.helpFlags
+  delete legacy.continuation.simulation.playerEntities.economies[0].npc.helpFlags
+  assert.deepEqual(
+    restoreGameSaveDocument(JSON.stringify(legacy))
+      .state.playerEntities.economies[0]?.npc.helpFlags,
+    Array<boolean>(10).fill(false),
+  )
+
+  downgradeSaveSchema(legacy, 12)
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(legacy)),
+    /Hub NPC help flags are missing/,
+  )
+})
+
+test('save documents admit the complete Sack wire depth and reject one level beyond it', () => {
+  const sackChain = (deepestDepth: number): HubInventoryItem => {
+    let item: HubInventoryItem | null = null
+    for (let depth = deepestDepth; depth >= 0; depth -= 1) {
+      item = {
+        contents: item === null ? [] : [item],
+        equipmentType: null,
+        iconRecords: [70],
+        id: 920_000 + depth,
+        kind: 'sack',
+        name: `Sack ${depth}`,
+        nativeSubtype: 0,
+        nativeTypeId: 7008,
+        quantity: 1,
+        rarity: null,
+        recipeIndex: null,
+      }
+    }
+    return item!
+  }
+  const withDepth = (deepestDepth: number) => {
+    const initial = createGameSimulation({ owner: OWNER })
+    const economy = getPlayerEconomy(initial, 'owner')
+    return {
+      ...initial,
+      playerEntities: replacePlayerEconomy(initial.playerEntities, 'owner', {
+        ...economy,
+        backpack: [sackChain(deepestDepth)],
+        nextItemId: 930_000,
+      }),
+    }
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: withDepth(HUB_SACK_REPLICATION_DEPTH_LIMIT),
+  })
+
+  const restored = restoreGameSaveDocument(document)
+  const retiredProfile = restoreGameSaveProfile(document)
+  assert.equal(retiredProfile.economy.storage.at(-1)?.kind, 'sack')
+  assert.equal(
+    restored.state.playerEntities.economies[0]?.backpack[0]?.id,
+    920_000,
+  )
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: withDepth(HUB_SACK_REPLICATION_DEPTH_LIMIT + 1),
+  }), /inventory is invalid/)
+  const malformed = JSON.parse(document)
+  malformed.continuation.simulation.playerEntities.economies[0].backpack = [
+    sackChain(HUB_SACK_REPLICATION_DEPTH_LIMIT + 1),
+  ]
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /inventory is invalid/,
+  )
+})
+
+test('current saves retain exact nested and equipped belt identities and reject owner drift', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  const economy = getPlayerEconomy(state, 'owner')
+  const ringRecipe = DOWSING_EQUIPMENT_RECIPES.find(({ type }) => type === 'ring')!
+  const ring = createEquipmentInventoryItem(ringRecipe, economy.nextItemId)
+  const sack: HubInventoryItem = {
+    contents: [ring],
+    equipmentType: null,
+    iconRecords: [70],
+    id: economy.nextItemId + 1,
+    kind: 'sack',
+    name: 'Saved belt Sack',
+    nativeSubtype: 0,
+    nativeTypeId: 7008,
+    quantity: 1,
+    rarity: null,
+    recipeIndex: null,
+  }
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      backpack: [...economy.backpack, sack],
+      nextItemId: economy.nextItemId + 2,
+    }),
+  }
+  const bound = applyGameSimulationHubAction(state, 'owner', {
+    itemId: ring.id,
+    slot: 2,
+    type: 'bind-belt-item',
+  })
+  assert.equal(bound.accepted, true)
+  const equipped = applyGameSimulationHubAction(bound.state, 'owner', {
+    slot: 2,
+    type: 'activate-belt-slot',
+  })
+  assert.equal(equipped.accepted, true)
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: equipped.state,
+  })
+  const restored = restoreGameSaveDocument(document)
+  assert.deepEqual(getPlayerBelt(restored.state, 'owner')[2], {
+    itemId: ring.id,
+    kind: 'item',
+    nativeTypeId: 7002,
+  })
+  assert.equal(getPlayerEconomy(restored.state, 'owner').equipment.rings[0]?.id, ring.id)
+
+  const drifted = JSON.parse(document)
+  drifted.continuation.simulation.playerEntities.belts[0][2].itemId += 100_000
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(drifted)),
+    /player belt 0 slot 2 item is invalid/,
+  )
+})
+
+test('schema-4 saves normalize pre-unforge and pre-Hagatha runtime fields', () => {
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+  const parsed = JSON.parse(legacyDocument(document, 4))
+  const economy = parsed.simulation.playerEntities.economies[0]
+  economy.ownedPerkSelectors = [7, 24, 25]
+  delete economy.unforgeBonuses
+  delete parsed.simulation.playerEntities.progressions[0].hagathaRuntime
+  delete parsed.simulation.playerEntities.skillBooks[0].weldComponentRanks
+  economy.actionFeedback = {
+    accepted: true,
+    action: 'consume',
+    dowsingPitch: null,
+    reason: null,
+    sequence: 1,
+    transferDirection: null,
+    transferGesture: null,
+  }
+  const restored = restoreGameSaveDocument(JSON.stringify(parsed))
+  assert.deepEqual(restored.state.playerEntities.economies[0]?.unforgeBonuses, {
+    experience: 0,
+    manaCostReduction: 0,
+    maximumHealth: 0,
+    maximumMana: 0,
+    offensiveDamage: 0,
+    recipeAttemptCount: 0,
+  })
+  assert.equal(
+    restored.state.playerEntities.economies[0]?.actionFeedback?.unforgeOutcome,
+    null,
+  )
+  assert.deepEqual(restored.state.playerEntities.progressions[0]?.hagathaRuntime, {
+    cheatDeathCharges: 1,
+    reverieActive: true,
+    serendipityActive: true,
+  })
+  assert.equal(restored.state.playerEntities.skillBooks[0]?.weldComponentRanks, null)
+  assert.equal(restored.state.playerEntities.economies[0]?.tutorialPending, false)
+})
+
+test('host save documents retain the active Boneyard and its authoritative run id', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 7),
+  )
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(
+    createGameSimulation({ owner: OWNER }),
+    loadedBoneyard,
+  )
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) {
+    throw new Error('expected active Boneyard encounter')
+  }
+  state = {
+    ...state,
+    world: {
+      ...state.world,
+      encounter: {
+        ...state.world.encounter,
+        escapeCollisionSourceIds: ['scenery:grave-4'],
+        escapeTarget: { x: 980, y: 3000 },
+      },
+      waves: state.world.waves === null
+        ? null
+        : {
+            ...state.world.waves,
+            portalPhaseIndex: 0,
+            portalScriptPhase: 'boss-wait',
+            portalSpawnRemaining: 0,
+            portalTicksRemaining: 123,
+            portalTimelinePaused: true,
+            slumpgutPhase: 'script-sleep',
+            slumpgutTicksRemaining: 731,
+          },
+    },
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard,
+    mods: MODS,
+    modState: MOD_STATE,
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
+    playerId: 'owner',
+    state,
+  })
+  const restored = restoreGameSaveDocument(document)
+
+  assert.deepEqual(readGameSaveSummary(document), {
+    activeRun: true,
+    character: OWNER,
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
+    phase: 'active',
+    playerId: 'owner',
+    savedAtTick: state.tick,
+    worldKind: 'boneyard',
+  })
+  const schema5 = legacySchema5Document(document)
+  assert.equal(readGameSaveSummary(schema5)?.activeRun, true)
+  assert.equal(readGameSaveSummary(schema5)?.partyRejoinToken, null)
+  assert.equal(restoreGameSaveDocument(schema5).state.world.kind, 'boneyard')
+
+  assert.deepEqual(restored.loadedBoneyard, loadedBoneyard)
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  assert.equal(restored.state.world.runId, loadedBoneyard.runId)
+  assert.ok(restored.state.world.encounter?.digBodyBobAmplitude >= 5)
+  assert.ok(restored.state.world.encounter?.digBodyBobAmplitude < 10)
+  assert.equal(restored.state.world.encounter?.digBodyOffsetY, 0)
+  assert.deepEqual(restored.state.world.encounter?.digEvents, [])
+  assert.deepEqual(restored.state.world.encounter?.escapeCollisionSourceIds, [
+    'scenery:grave-4',
+  ])
+  assert.deepEqual(restored.state.world.encounter?.escapeTarget, { x: 980, y: 3000 })
+  assert.equal(restored.state.world.waves?.slumpgutPhase, 'script-sleep')
+  assert.equal(restored.state.world.waves?.slumpgutTicksRemaining, 731)
+  assert.equal(restored.state.world.waves?.portalScriptPhase, 'boss-wait')
+  assert.equal(restored.state.world.waves?.portalTicksRemaining, 123)
+  assert.equal(restored.state.world.waves?.portalTimelinePaused, true)
+  assert.deepEqual(
+    restored.state.world.waves?.portalProgram,
+    state.world.kind === 'boneyard' ? state.world.waves?.portalProgram : null,
+  )
+  assert.deepEqual(restored.state.world.hallOfFameRuns, state.world.kind === 'boneyard'
+    ? state.world.hallOfFameRuns
+    : {})
+  assert.deepEqual(restored.state.world.enemyWorldFeedback, state.world.kind === 'boneyard'
+    ? state.world.enemyWorldFeedback
+    : {})
+  assert.equal(restored.state.run.runId, loadedBoneyard.runId)
+  assert.equal(restored.state.run.phase, 'active')
+})
+
+test('active-party capability is strict, active-run-only, and absent from old schemas and profiles', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 37),
+  )
+  assert.ok(loadedBoneyard)
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  const current = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
+    playerId: 'owner',
+    state,
+  }))
+
+  for (const schemaVersion of [11, 10]) {
+    const previous = structuredClone(current)
+    downgradeSaveSchema(previous, schemaVersion)
+    delete previous.nativeSource
+    previous.continuation.summary.partyRejoinToken = 'A'.repeat(43)
+    assert.equal(
+      readGameSaveSummary(JSON.stringify(previous))?.partyRejoinToken,
+      'A'.repeat(43),
+    )
+  }
+
+  for (const schemaVersion of [9, 8, 7, 6]) {
+    const previous = structuredClone(current)
+    downgradeSaveSchema(previous, schemaVersion)
+    delete previous.nativeSource
+    delete previous.continuation.summary.partyRejoinToken
+    assert.equal(
+      readGameSaveSummary(JSON.stringify(previous))?.partyRejoinToken,
+      null,
+    )
+  }
+
+  const malformed = structuredClone(current)
+  malformed.continuation.summary.partyRejoinToken = 'short'
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /party rejoin token/i,
+  )
+  assert.throws(() => createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    partyRejoinToken: SIGNED_PARTY_RECOVERY_CLAIM,
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  }), /active Boneyard/i)
+
+  const profile = JSON.parse(createGameProfileSaveDocument({
+    integrity: 'global-clean',
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  assert.equal(profile.continuation, null)
+  assert.doesNotMatch(JSON.stringify(profile), /partyRejoinToken/)
+  const retired = JSON.parse(retireGameSaveWizard(JSON.stringify(current)))
+  assert.equal(retired.continuation, null)
+  assert.doesNotMatch(JSON.stringify(retired), /partyRejoinToken/)
+})
+
+test('current saves migrate the former audio-only Dig lane without replaying dirt', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 17),
+  )
+  assert.ok(loadedBoneyard)
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard),
+  }))
+  const encounter = document.continuation.simulation.world.encounter
+  delete encounter.digBodyBobAmplitude
+  delete encounter.digBodyOffsetY
+  delete encounter.digEventId
+  delete encounter.digEvents
+  delete encounter.escapeCollisionSourceIds
+  delete encounter.escapeTarget
+  encounter.digAudioEventId = 12
+  encounter.digAudioEvents = [{ cue: 'throw-dirt-1', id: 12 }]
+
+  const restored = restoreGameSaveDocument(JSON.stringify(document))
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(restored.state.world.encounter?.digEventId, 12)
+  assert.deepEqual(restored.state.world.encounter?.digEvents, [])
+  assert.equal('digAudioEventId' in restored.state.world.encounter!, false)
+  assert.equal('digAudioEvents' in restored.state.world.encounter!, false)
+  assert.ok(restored.state.world.encounter!.digBodyBobAmplitude >= 5)
+  assert.ok(restored.state.world.encounter!.digBodyBobAmplitude < 10)
+  assert.deepEqual(restored.state.world.encounter!.escapeCollisionSourceIds, [])
+  assert.equal(restored.state.world.encounter!.escapeTarget, null)
+})
+
+test('saves preserve projectile channels, Chill accumulation and status order with historical defaults', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(),
+    'default-random',
+    Buffer.alloc(16, 23),
+  )
+  assert.ok(loadedBoneyard)
+  const waterCharacter = { ...OWNER, element: 'water' as const }
+  let state = enterBoneyardWorld(createGameSimulation({ owner: waterCharacter }), loadedBoneyard)
+  state = stepGameSimulationTick(state, { owner: createIdlePlayerCharacterInput() })
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  }))
+  const simulation = document.continuation.simulation
+  simulation.playerEntities.progressions[0].poisonBeforeCold = true
+  simulation.playerEntities.progressions[0].poisonTicksRemaining = 100
+  simulation.playerEntities.progressions[0].coldSlowTicksRemaining = 100
+  const worldKey = `boneyard:${loadedBoneyard.runId}`
+  const painterRegistration = {
+    managerLane: 'transient',
+    registrationOrdinal: simulation.worldManagerOrder.nextRegistrationOrdinal.transient++,
+  }
+  simulation.primarySpells = {
+    nextId: 2,
+    projectiles: [],
+    transients: [{
+      ageTicks: 1,
+      direction: { x: 1, y: 0 },
+      id: 1,
+      kind: 'water',
+      lightRegistration: null,
+      obstructionDistance: null,
+      obstructionPoint: null,
+      origin: { x: 250, y: 250 },
+      ownerId: 'owner',
+      painterRegistrations: [painterRegistration],
+      speed: 4,
+      underpowered: false,
+      variant: 0,
+      worldKey,
+    }],
+  }
+  const enemies = simulation.world.enemies
+  const arrowId = enemies.nextProjectileId
+  const arrowRegistration = { managerLane: 'transient',
+    registrationOrdinal: simulation.worldManagerOrder.nextRegistrationOrdinal.transient++ }
+  enemies.projectiles = [{
+    ageTicks: 1,
+    bounceVelocity: 0,
+    chillTumbleAccumulator: 0,
+    coldSlowTicks: 0,
+    contactRadius: 8,
+    damage: 1,
+    secondaryDamage: 5,
+    headingDeg: 90,
+    hitPlayerIds: [],
+    homing: false,
+    id: arrowId,
+    kind: 'arrow',
+    velocity: { x: 0, y: 0 },
+    lastStepTick: state.tick,
+    lightRegistration: arrowRegistration,
+    painterRegistration: arrowRegistration,
+    lifetimeTicks: 300,
+    minimumSpeed: 0,
+    nativeCellBindingOrder: enemies.nextNativeCellBindingOrder,
+    nativeRegistrationOrder: enemies.nextNativeRegistrationOrder,
+    nativeTypeId: 0x7da,
+    ownerActorId: 1,
+    payload: 'fire',
+    poisonDamage: 0,
+    poisonDuration: 0,
+    position: { x: 330, y: 250 },
+    settledTicksRemaining: 300,
+    spawnTick: state.tick - 1,
+    speed: 0,
+    targetPlayerId: null,
+    turnSpeed: 0,
+    verticalOffset: -25,
+    verticalVelocity: 0,
+    visualPhaseDeg: 0,
+    visualScale: 1,
+  }]
+  enemies.nextProjectileId = arrowId + 1
+  enemies.nextNativeCellBindingOrder += 1
+  enemies.nextNativeRegistrationOrder += 1
+
+  const current = restoreGameSaveDocument(JSON.stringify(document))
+  assert.equal(current.state.playerEntities.progressions[0]?.poisonBeforeCold, true)
+  assert.equal(current.state.playerEntities.progressions[0]?.poisonTicksRemaining, 100)
+  assert.equal(current.state.playerEntities.progressions[0]?.coldSlowTicksRemaining, 100)
+  if (current.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(current.state.world.enemies.projectiles[0]?.damage, 1)
+  assert.equal(current.state.world.enemies.projectiles[0]?.secondaryDamage, 5)
+  assert.equal(current.state.primarySpells.transients[0]?.kind, 'water')
+  assert.equal(
+    current.state.primarySpells.transients[0]?.kind === 'water'
+      ? current.state.primarySpells.transients[0].speed
+      : null,
+    4,
+  )
+  assert.equal(
+    current.state.world.kind === 'boneyard'
+      ? current.state.world.enemies.projectiles[0]?.chillTumbleAccumulator
+      : null,
+    0,
+  )
+
+  const withKnockback = structuredClone(document)
+  const pendingKnockback = { actorId: 1, delta: { x: -4.5, y: 0 }, eventId: 1,
+    lastStepTick: state.tick, playerId: 'owner', remainingTicks: 5 }
+  withKnockback.continuation.simulation.world.enemies.projectileKnockbacks = [pendingKnockback]
+  const pendingWorld = restoreGameSaveDocument(JSON.stringify(withKnockback)).state.world
+  assert.ok(pendingWorld.kind === 'boneyard')
+  assert.deepEqual(pendingWorld.enemies.projectileKnockbacks, [pendingKnockback])
+  for (const remainingTicks of [0, 11, null]) {
+    const malformed = structuredClone(withKnockback)
+    malformed.continuation.simulation.world.enemies.projectileKnockbacks[0].remainingTicks = remainingTicks
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /projectile knockback/)
+  }
+
+  const missingTurn = structuredClone(document)
+  delete missingTurn.continuation.simulation.world.enemies.projectiles[0].turnSpeed
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(missingTurn)), /turn speed/)
+  downgradeSaveSchema(missingTurn, 31)
+  const oldArrow = restoreGameSaveDocument(JSON.stringify(missingTurn)).state.world
+  assert.ok(oldArrow.kind === 'boneyard')
+  assert.equal(oldArrow.enemies.projectiles[0]?.turnSpeed, 0)
+
+  const oldGuidedDocument = structuredClone(missingTurn)
+  const oldGuided = oldGuidedDocument.continuation.simulation.world.enemies.projectiles[0]
+  Object.assign(oldGuided, {
+    kind: 'guided-missile', nativeTypeId: 0x7ec, payload: 'cold', visualScale: 1,
+    lightRegistration: { managerLane: 'actor', registrationOrdinal: 200 },
+  })
+  const migratedGuided = restoreGameSaveDocument(JSON.stringify(oldGuidedDocument)).state.world
+  assert.ok(migratedGuided.kind === 'boneyard')
+  const guided = migratedGuided.enemies.projectiles[0]!
+  assert.ok(guided.turnSpeed >= 0.5 && guided.turnSpeed <= 1.25)
+  assert.equal(guided.lifetimeTicks, 1300)
+
+  const legacy = structuredClone(document)
+  downgradeSaveSchema(legacy, 18)
+  delete legacy.continuation.simulation.primarySpells.transients[0].painterRegistrations
+  delete legacy.continuation.simulation.primarySpells.transients[0].speed
+  delete legacy.continuation.simulation.world.enemies.projectiles[0].chillTumbleAccumulator
+  const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(migrated.state.playerEntities.progressions[0]?.poisonBeforeCold, false)
+  if (migrated.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(migrated.state.world.enemies.projectiles[0]?.damage, 1)
+  assert.equal(migrated.state.world.enemies.projectiles[0]?.secondaryDamage, 0)
+  assert.equal(
+    migrated.state.primarySpells.transients[0]?.kind === 'water'
+      ? migrated.state.primarySpells.transients[0].speed
+      : null,
+    4,
+  )
+  assert.equal(
+    migrated.state.world.kind === 'boneyard'
+      ? migrated.state.world.enemies.projectiles[0]?.chillTumbleAccumulator
+      : null,
+    0,
+  )
+
+  const missingCurrent = structuredClone(document)
+  delete missingCurrent.continuation.simulation.primarySpells.transients[0].speed
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrent)),
+    /Water transient 0 speed/,
+  )
+  const missingAccumulator = structuredClone(document)
+  const missingArrow = missingAccumulator.continuation.simulation.world.enemies.projectiles[0]
+  delete missingArrow.chillTumbleAccumulator
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingAccumulator)),
+    /enemy projectile 0 Chill accumulator/,
+  )
+
+  const missingContactFields = structuredClone(document)
+  delete missingContactFields.continuation.simulation.playerEntities.progressions[0].poisonBeforeCold
+  delete missingContactFields.continuation.simulation.world.enemies.projectiles[0].secondaryDamage
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(missingContactFields)), /poison\/cold order/)
+  downgradeSaveSchema(missingContactFields, 30)
+  const precedingSchema = restoreGameSaveDocument(JSON.stringify(missingContactFields))
+  assert.equal(precedingSchema.state.playerEntities.progressions[0]?.poisonBeforeCold, false)
+  if (precedingSchema.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(precedingSchema.state.world.enemies.projectiles[0]?.secondaryDamage, 0)
+
+  for (const magicDamage of [undefined, -1, null]) {
+    const invalidDamage = structuredClone(document)
+    invalidDamage.continuation.simulation.world.enemies.projectiles[0].secondaryDamage = magicDamage
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalidDamage)), /enemy projectile 0 magic damage/)
+  }
+})
+
+test('current schema resumes the complete stock Tutorial controller and exact level identity', () => {
+  const loadedBoneyard = materializeStockTutorial(Buffer.alloc(16, 19))
+  let state = enterBoneyardWorld(
+    createGameSimulation({ owner: OWNER }),
+    loadedBoneyard,
+  )
+  const tutorialEconomy = getPlayerEconomy(state, 'owner')
+  const inserted = insertLootInventoryItem(tutorialEconomy, nativeTutorialAmuletItem())
+  assert.equal(inserted.accepted, true)
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(
+      state.playerEntities,
+      'owner',
+      inserted.state,
+    ),
+  }
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  const encoded = JSON.parse(document)
+  assert.equal(encoded.continuation.simulation.world.tutorial.stage, 0)
+  assert.equal(
+    encoded.continuation.simulation.world.tutorial.movementInstructionAcknowledged,
+    false,
+  )
+  assert.equal(
+    encoded.continuation.simulation.world.tutorial.selectedSkillHudAcknowledged,
+    false,
+  )
+  assert.equal(encoded.continuation.simulation.world.tutorial.cameraLockAgeTicks, 0)
+  assert.deepEqual(
+    encoded.profile.economy,
+    encoded.continuation.simulation.world.tutorialProfileEconomy,
+  )
+  assert.equal(encoded.profile.economy.backpack.length, 2)
+  assert.deepEqual(
+    encoded.continuation.simulation.playerEntities.economies[0].backpack[0],
+    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId, inventorySlot: 0 },
+  )
+  const retired = JSON.parse(retireGameSaveWizard(document))
+  assert.equal(retired.continuation, null)
+  assert.equal(retired.profile.economy.tutorialPending, false)
+  assert.deepEqual(
+    { ...retired.profile.economy, tutorialPending: true },
+    encoded.continuation.simulation.world.tutorialProfileEconomy,
+  )
+
+  const restored = restoreGameSaveDocument(document)
+  assert.equal(restored.loadedBoneyard?.choice.id, 'stock-tutorial')
+  assert.equal(restored.loadedBoneyard?.sourceSha256, '97802f2ca45d9bc6f90a497e7c12a55926298161e191fa70eee5e666b90106ed')
+  assert.equal(restored.state.world.kind, 'boneyard')
+  assert.deepEqual(
+    restored.state.playerEntities.economies[0]?.backpack[0],
+    { ...nativeTutorialAmuletItem(), id: tutorialEconomy.nextItemId, inventorySlot: 0 },
+  )
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Tutorial')
+  assert.deepEqual(restored.state.world.tutorial, state.world.kind === 'boneyard'
+    ? state.world.tutorial
+    : null)
+  assert.equal(restored.state.world.encounter?.dialogueMode, 'tutorial')
+  assert.equal(restored.state.world.waves, null)
+  assert.equal(restored.state.world.arenaTransition, null)
+
+  const missingCurrentMovement = structuredClone(encoded)
+  delete missingCurrentMovement.continuation.simulation.world.tutorial
+    .movementInstructionAcknowledged
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(missingCurrentMovement)),
+    /movementInstructionAcknowledged must be boolean/,
+  )
+  const malformedCurrentMovement = structuredClone(encoded)
+  malformedCurrentMovement.continuation.simulation.world.tutorial
+    .movementInstructionAcknowledged = 1
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformedCurrentMovement)),
+    /movementInstructionAcknowledged must be boolean/,
+  )
+
+  const legacy = structuredClone(encoded)
+  downgradeSaveSchema(legacy, 8)
+  delete legacy.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
+  delete legacy.continuation.summary.partyRejoinToken
+  delete legacy.continuation.simulation.world.tutorial.cameraLockAgeTicks
+  legacy.continuation.simulation.world.tutorial.cameraLockTriggered = true
+  legacy.continuation.simulation.world.tutorial.cameraLockTicksRemaining = 0
+  const migratedCamera = restoreGameSaveDocument(JSON.stringify(legacy))
+  assert.equal(migratedCamera.state.world.kind, 'boneyard')
+  if (migratedCamera.state.world.kind !== 'boneyard') throw new Error('expected Tutorial')
+  assert.equal(
+    migratedCamera.state.world.tutorial?.cameraLockAgeTicks,
+    NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS,
+  )
+
+  if (state.world.kind !== 'boneyard' || !state.world.tutorial) {
+    throw new Error('expected Tutorial state')
+  }
+  const acknowledgedState = {
+    ...state,
+    world: {
+      ...state.world,
+      tutorial: {
+        ...state.world.tutorial!,
+        movementInstructionAcknowledged: true,
+        selectedSkillHudAcknowledged: true,
+      },
+    },
+  }
+  const acknowledged = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: acknowledgedState,
+  }))
+  assert.equal(
+    acknowledged.state.world.kind === 'boneyard'
+      ? acknowledged.state.world.tutorial?.selectedSkillHudAcknowledged
+      : null,
+    true,
+  )
+  assert.equal(
+    acknowledged.state.world.kind === 'boneyard'
+      ? acknowledged.state.world.tutorial?.movementInstructionAcknowledged
+      : null,
+    true,
+  )
+
+  const priorSchemaFifteen = structuredClone(encoded)
+  downgradeSaveSchema(priorSchemaFifteen, 15)
+  delete priorSchemaFifteen.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    priorSchemaFifteen.continuation.simulation.playerEntities,
+  )
+  delete priorSchemaFifteen.continuation.simulation.world.tutorial
+    .movementInstructionAcknowledged
+  const migratedMovement = restoreGameSaveDocument(JSON.stringify(priorSchemaFifteen))
+  assert.equal(
+    migratedMovement.state.world.kind === 'boneyard'
+      ? migratedMovement.state.world.tutorial?.movementInstructionAcknowledged
+      : null,
+    false,
+  )
+
+  const priorSchemaSeven = structuredClone(encoded)
+  downgradeSaveSchema(priorSchemaSeven, 7)
+  delete priorSchemaSeven.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    priorSchemaSeven.continuation.simulation.playerEntities,
+  )
+  delete priorSchemaSeven.continuation.simulation.world.tutorial.cameraLockAgeTicks
+  delete priorSchemaSeven.continuation.summary.partyRejoinToken
+  delete priorSchemaSeven.continuation.simulation.world.tutorial
+    .selectedSkillHudAcknowledged
+  const migrated = restoreGameSaveDocument(JSON.stringify(priorSchemaSeven))
+  assert.equal(
+    migrated.state.world.kind === 'boneyard'
+      ? migrated.state.world.tutorial?.selectedSkillHudAcknowledged
+      : null,
+    false,
+  )
+})
+
+test('schema 7 and 6 saves migrate absent NPC state as acknowledged without archival', () => {
+  const current = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+  const currentProfile = restoreGameSaveProfile(current)
+  const acknowledgedNpc = {
+    ...createNativeHubNpcState(),
+    helpFlags: Array<boolean>(10).fill(false),
+  }
+  for (const schemaVersion of [7, 6]) {
+    const previous = JSON.parse(current)
+    downgradeSaveSchema(previous, schemaVersion)
+    delete previous.nativeSource
+    downgradePlayerBeltsToLegacyQuickbar(
+      previous.continuation.simulation.playerEntities,
+    )
+    delete previous.continuation.summary.partyRejoinToken
+    delete previous.profile.economy.npc
+    delete previous.profile.economy.collegeIntroPending
+    delete previous.continuation.simulation.playerEntities.economies[0].npc
+    delete previous.continuation.simulation.playerEntities.economies[0].collegeIntroPending
+    delete previous.continuation.simulation.world.participants.owner.collegeIntro
+    delete previous.continuation.simulation.world.skorcha
+    const document = JSON.stringify(previous)
+    const profile = restoreGameSaveProfile(document)
+    const restored = restoreGameSaveDocument(document)
+    assert.deepEqual(profile.economy, {
+      ...currentProfile.economy,
+      collegeIntroPending: false,
+      npc: acknowledgedNpc,
+    })
+    assert.equal(restored.state.world.kind, 'hub')
+    assert.deepEqual(getPlayerEconomy(restored.state, 'owner').npc, acknowledgedNpc)
+  }
+})
+
+test('host save documents fail closed for invalid schema, extra fields, owner drift, and size', () => {
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+  const parsed = JSON.parse(document)
+
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, schemaVersion: 0 })),
+    /schema version/,
+  )
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify({ ...parsed, surprise: true })),
+    /unexpected field/,
+  )
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify({
+      ...parsed,
+      continuation: {
+        ...parsed.continuation,
+        summary: { ...parsed.continuation.summary, playerId: 'someone-else' },
+      },
+    })),
+    /owner/,
+  )
+  const invalidHagatha = structuredClone(parsed)
+  invalidHagatha.continuation.simulation.playerEntities.progressions[0]
+    .hagathaRuntime.cheatDeathCharges = 2
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(invalidHagatha)),
+    /Hagatha runtime/,
+  )
+  const invalidWeld = structuredClone(parsed)
+  invalidWeld.continuation.simulation.playerEntities.skillBooks[0].weldComponentRanks = [1]
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(invalidWeld)),
+    /Weld cache/,
+  )
+  const invalidRun = structuredClone(parsed)
+  invalidRun.continuation.summary.activeRun = true
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(invalidRun)),
+    /active run/,
+  )
+  assert.throws(
+    () => restoreGameSaveDocument('x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1)),
+    /size limit/,
+  )
+})
+
+test('schema 17 carries bounded native provenance through resume, profile archival, and retirement', () => {
+  const nativeSource = {
+    darkdataBase64: 'AA==',
+    darkdataSha256: '0'.repeat(64),
+    gamestateBase64: 'AA==',
+    gamestateSha256: '1'.repeat(64),
+    retainedFiles: [{
+      base64: '',
+      path: 'solomondark/Portraits/empty.raw',
+      sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    }],
+    runName: '_survival',
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    nativeSource,
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+  assert.deepEqual(restoreGameSaveDocument(document).nativeSource, nativeSource)
+  assert.deepEqual(restoreGameSaveProfile(document).nativeSource, nativeSource)
+  assert.deepEqual(restoreGameSaveProfile(retireGameSaveWizard(document)).nativeSource, nativeSource)
+
+  const malformed = JSON.parse(document)
+  malformed.nativeSource.runName = '../escape'
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /native source/,
+  )
+  malformed.nativeSource.runName = '_survival'
+  malformed.nativeSource.retainedFiles[0].path = 'solomondark/../escape.raw'
+  assert.throws(
+    () => restoreGameSaveDocument(JSON.stringify(malformed)),
+    /retained file/,
+  )
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 16)
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
+  delete legacy.nativeSource
+  assert.equal(restoreGameSaveDocument(JSON.stringify(legacy)).nativeSource, null)
+})
+
+test('schema-3 saves migrate conservatively to local-only integrity', () => {
+  const current = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+
+  const restored = restoreGameSaveDocument(legacyDocument(current, 3))
+  assert.equal(restored.integrity, 'local-only')
+})
+
+test('schema-18 retains ordered Hagatha outcomes and schema 16 materializes Tonic rows', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  const economy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      charmCapacity: 9,
+      ownedPerkSelectors: [5, 27, 0, 27],
+      tonicPurchases: 2,
+    }),
+  }
+  const document = createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state,
+  })
+  assert.deepEqual(
+    restoreGameSaveDocument(document).state.playerEntities.economies[0]?.ownedPerkSelectors,
+    [5, 27, 0, 27],
+  )
+
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 16)
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
+  delete legacy.nativeSource
+  legacy.profile.economy.ownedPerkSelectors = [0, 5]
+  legacy.continuation.simulation.playerEntities.economies[0].ownedPerkSelectors = [0, 5]
+  assert.deepEqual(
+    restoreGameSaveDocument(JSON.stringify(legacy))
+      .state.playerEntities.economies[0]?.ownedPerkSelectors,
+    [0, 5, 27, 27],
+  )
+  assert.deepEqual(
+    restoreGameSaveProfile(JSON.stringify(legacy)).economy.ownedPerkSelectors,
+    [0, 5, 27, 27],
+  )
+})
+
+test('schema 23 repairs Tonic-inclusive overflow while schema 27 rejects it', () => {
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  }))
+  const overflow = [27, 27, 0, 1, 2, 3, 4, 5, 6, 24, 25]
+  const expected = overflow.slice(0, 9)
+  const profileEconomy = document.profile.economy
+  const continuationEconomy = document.continuation.simulation.playerEntities.economies[0]
+  for (const economy of [profileEconomy, continuationEconomy]) {
+    economy.charmCapacity = 9
+    economy.firstMixedSelectors = [...new Set(overflow)]
+    economy.ownedPerkSelectors = overflow
+    economy.tonicPurchases = 2
+  }
+  document.profile.hagathaRuntime = {
+    cheatDeathCharges: 0,
+    reverieActive: true,
+    serendipityActive: true,
+  }
+  document.continuation.simulation.playerEntities.progressions[0].hagathaRuntime = {
+    cheatDeathCharges: 0,
+    reverieActive: true,
+    serendipityActive: true,
+  }
+  downgradeSaveSchema(document, 23)
+
+  const legacy = JSON.stringify(document)
+  const restored = restoreGameSaveDocument(legacy)
+  assert.deepEqual(restored.state.playerEntities.economies[0]?.ownedPerkSelectors, expected)
+  assert.deepEqual(restored.state.playerEntities.progressions[0]?.hagathaRuntime, {
+    cheatDeathCharges: 0,
+    reverieActive: false,
+    serendipityActive: false,
+  })
+  const profile = restoreGameSaveProfile(legacy)
+  assert.deepEqual(profile.economy.ownedPerkSelectors, expected)
+  assert.deepEqual(profile.hagathaRuntime, {
+    cheatDeathCharges: 0,
+    reverieActive: false,
+    serendipityActive: false,
+  })
+  assert.equal(profile.economy.gold, continuationEconomy.gold)
+  assert.deepEqual(profile.economy.firstMixedSelectors, [...new Set(overflow)])
+
+  const lateTonics = structuredClone(document)
+  lateTonics.profile.economy.ownedPerkSelectors = [0, 1, 2, 3, 4, 5, 6, 7, 9, 27, 27]
+  assert.deepEqual(
+    restoreGameSaveProfile(JSON.stringify(lateTonics)).economy.ownedPerkSelectors,
+    [0, 1, 2, 3, 4, 5, 6, 27, 27],
+  )
+
+  downgradeSaveSchema(document, 24)
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(document)), /Hagatha|inventory/)
+  assert.throws(() => restoreGameSaveProfile(JSON.stringify(document)), /Hagatha|inventory/)
+})
+
+test('known schema 1 through 5 continuations migrate through current authority', () => {
+  const document = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: [],
+    modState: {},
+    playerId: 'owner',
+    state: createGameSimulation({ owner: OWNER }),
+  })
+
+  for (const schemaVersion of [1, 2, 3, 4, 5]) {
+    const migrated = schemaVersion === 5
+      ? legacySchema5Document(document)
+      : legacyDocument(document, schemaVersion)
+    const restored = restoreGameSaveDocument(migrated)
+    assert.equal(restored.playerId, 'owner')
+    assert.equal(restored.state.world.kind, 'hub')
+    assert.equal(readGameSaveSummary(migrated)?.activeRun, false)
+    assert.equal(restored.state.playerEntities.identities[0]?.playerId, 'owner')
+    assert.equal(restored.state.playerEntities.economies[0]?.tutorialPending, false)
+    assert.equal(restored.state.run.gameOverExitKind, null)
+    assert.deepEqual(restored.state.run.loadoutReadyPlayerIds, [])
+    assert.equal(restored.state.playerEntities.primaryCasts[0]?.oneShotAttackPoseHeld, false)
+    assert.equal(
+      restored.state.playerEntities.primaryCasts[0]?.selectedPrimaryId,
+      schemaVersion < 4 ? 8 : -1,
+    )
+    assert.ok(restored.state.playerEntities.skillRuntimes[0])
+    assert.deepEqual(restored.state.playerEntities.skillBooks[0]?.learnedSkillOrder, [8, 11])
+  }
+})
+
+test('Game Over retains a durable profile while removing only the continuation', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const economy = state.playerEntities.economies[0]!
+  const profiledState = {
+    ...state,
+    playerEntities: {
+      ...state.playerEntities,
+      economies: [{
+        ...economy,
+        dowsingFee: 950,
+        gold: 12_345,
+        ownedPerkSelectors: [7, 24, 25],
+        storage: [{ ...economy.backpack[0]!, id: 99_999 }],
+        unforgeBonuses: {
+          experience: 0.15,
+          manaCostReduction: 3,
+          maximumHealth: 20,
+          maximumMana: 40,
+          offensiveDamage: 5,
+          recipeAttemptCount: 7,
+        },
+      }],
+      progressions: [{
+        ...state.playerEntities.progressions[0]!,
+        hagathaRuntime: {
+          cheatDeathCharges: 0,
+          reverieActive: false,
+          serendipityActive: true,
+        },
+      }],
+    },
+  }
+  const document = createGameProfileSaveDocument({
+    integrity: 'global-clean',
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state: profiledState,
+  })
+  const profile = restoreGameSaveProfile(document)
+
+  assert.equal(profile.continuation, null)
+  assert.equal(profile.economy.gold, 12_345)
+  assert.equal(profile.economy.dowsingFee, 950)
+  assert.equal(profile.economy.storage.length, 1)
+  assert.equal(profile.economy.tutorialPending, true)
+  assert.deepEqual(profile.hagathaRuntime, {
+    cheatDeathCharges: 0,
+    reverieActive: false,
+    serendipityActive: true,
+  })
+  assert.deepEqual(profile.economy.unforgeBonuses, {
+    experience: 0.15,
+    manaCostReduction: 3,
+    maximumHealth: 20,
+    maximumMana: 40,
+    offensiveDamage: 5,
+    recipeAttemptCount: 7,
+  })
+  assert.throws(() => restoreGameSaveDocument(document), /no resumable continuation/)
+
+  const nextCharacter = { ...OWNER, displayName: 'Next Run', element: 'fire' as const }
+  const fresh = createGameSimulation({ next: nextCharacter })
+  const hydrated = hydrateGameSaveProfile(fresh, 'next', profile)
+  assert.deepEqual(hydrated.playerEntities.configs[0], nextCharacter)
+  assert.equal(hydrated.playerEntities.economies[0]?.gold, 12_345)
+  assert.deepEqual(
+    hydrated.playerEntities.economies[0]?.unforgeBonuses,
+    profile.economy.unforgeBonuses,
+  )
+  assert.deepEqual(
+    hydrated.playerEntities.progressions[0]?.hagathaRuntime,
+    profile.hagathaRuntime,
+  )
+})
+
+test('killing the current wizard scavenges carried items and removes only the continuation', () => {
+  const state = createGameSimulation({ owner: OWNER })
+  const liveDocument = createGameSaveDocument({
+    integrity: 'global-clean',
+    loadedBoneyard: null,
+    mods: MODS,
+    modState: MOD_STATE,
+    playerId: 'owner',
+    state,
+  })
+  const latent = restoreGameSaveProfile(liveDocument)
+  assert.equal(latent.continuation?.summary.activeRun, false)
+  assert.equal(latent.economy.storage.at(-1)?.kind, 'sack')
+  assert.equal(latent.economy.tutorialPending, true)
+  assert.deepEqual(
+    latent.economy.storage.at(-1)?.contents?.map(({ name }) => name).sort(),
+    ['Hat', 'Health Potion', 'Mana Potion', 'Robe', 'Staff'],
+  )
+  assert.deepEqual(
+    restoreGameSaveDocument(liveDocument).state.playerEntities.economies[0]?.backpack
+      .map(({ kind }) => kind),
+    ['health-potion', 'mana-potion'],
+  )
+
+  const retiredDocument = retireGameSaveWizard(liveDocument)
+  const retired = restoreGameSaveProfile(retiredDocument)
+  assert.equal(retired.continuation, null)
+  assert.equal(retired.economy.gold, state.playerEntities.economies[0]?.gold)
+  assert.deepEqual(retired.economy.storage, latent.economy.storage)
+  assert.throws(() => restoreGameSaveDocument(retiredDocument), /no resumable continuation/)
+})
+
+test('a purchased Mindstar survives wizard retirement without granting an immediate rank', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  const economy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      gold: 20_465,
+      revision: economy.revision + 1,
+    }),
+  }
+  const purchased = applyGameSimulationHubAction(state, 'owner', {
+    skillId: 78,
+    type: 'buy-teacher-spell',
+  })
+  assert.equal(purchased.accepted, true)
+  state = purchased.state
+  assert.equal(getPlayerEconomy(state, 'owner').gold, 15_165)
+  assert.equal(getPlayerSkillBook(state, 'owner').advancedUnlocks[6], true)
+  assert.equal(getPlayerSkillBook(state, 'owner').permanentRanks[78], 0)
+
+  const options = { integrity: 'global-clean' as const, mods: MODS, modState: MOD_STATE,
+    playerId: 'owner', state }
+  const continuation = createGameSaveDocument({ ...options, loadedBoneyard: null })
+  const encoded = JSON.parse(continuation)
+  assert.equal(encoded.schemaVersion, WEB_GAME_SAVE_SCHEMA_VERSION)
+  assert.deepEqual(encoded.profile.advancedUnlocks,
+    [false, false, false, false, false, false, true, false])
+  const profiles = [
+    restoreGameSaveProfile(continuation),
+    restoreGameSaveProfile(retireGameSaveWizard(continuation)),
+    restoreGameSaveProfile(createGameProfileSaveDocument(options)),
+  ]
+  for (const profile of profiles) {
+    const next = createGameSimulation({ owner: { ...OWNER, displayName: 'New Wizard' } })
+    const hydrated = hydrateGameSaveProfile(next, 'owner', profile)
+    assert.equal(getPlayerEconomy(hydrated, 'owner').gold, 15_165)
+    assert.equal(getPlayerSkillBook(hydrated, 'owner').advancedUnlocks[6], true)
+    assert.equal(getPlayerSkillBook(hydrated, 'owner').permanentRanks[78], 0)
+    assert.equal(nativeSkillPassesOfferEligibility(78, 10, getPlayerSkillBook(hydrated, 'owner')), true)
+    assert.equal(applyGameSimulationHubAction(hydrated, 'owner', {
+      skillId: 78,
+      type: 'buy-teacher-spell',
+    }).reason, 'invalid-offer')
+  }
+
+  const legacyProfile = structuredClone(encoded)
+  downgradeSaveSchema(legacyProfile, 44)
+  const migratedProfile = restoreGameSaveProfile(JSON.stringify(legacyProfile))
+  assert.deepEqual(migratedProfile.advancedUnlocks, Array<boolean>(8).fill(false))
+  const retiredLegacy = restoreGameSaveProfile(retireGameSaveWizard(JSON.stringify(legacyProfile)))
+  assert.equal(retiredLegacy.advancedUnlocks[6], true,
+    'a schema-44 active wizard still owns its purchased spell')
+  for (const value of [undefined, [true], [...Array<boolean>(7).fill(false), 'true']]) {
+    const malformed = structuredClone(encoded)
+    if (value === undefined) delete malformed.profile.advancedUnlocks
+    else malformed.profile.advancedUnlocks = value
+    assert.throws(() => restoreGameSaveProfile(JSON.stringify(malformed)), /advanced.*unlocks/i)
+  }
+})
+
+test('all eight Teacher purchases project only to their owner profile', () => {
+  const peer = { ...OWNER, displayName: 'Peer', element: 'water' as const }
+  let state = createGameSimulation({ owner: OWNER, peer })
+  const economy = getPlayerEconomy(state, 'owner')
+  state = {
+    ...state,
+    playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy,
+      gold: 100_000,
+      revision: economy.revision + 1,
+    }),
+  }
+  for (let skillId = 72; skillId <= 79; skillId += 1) {
+    const purchase = applyGameSimulationHubAction(state, 'owner', {
+      skillId,
+      type: 'buy-teacher-spell',
+    })
+    assert.equal(purchase.accepted, true, `Teacher skill ${skillId} was rejected`)
+    state = purchase.state
+  }
+  const options = { integrity: 'global-clean' as const, mods: MODS, modState: MOD_STATE,
+    state }
+  const owner = restoreGameSaveProfile(createGameProfileSaveDocument({
+    ...options, playerId: 'owner',
+  }))
+  const other = restoreGameSaveProfile(createGameProfileSaveDocument({
+    ...options, playerId: 'peer',
+  }))
+  assert.deepEqual(owner.advancedUnlocks, Array<boolean>(8).fill(true))
+  assert.deepEqual(other.advancedUnlocks, Array<boolean>(8).fill(false))
+  const next = hydrateGameSaveProfile(
+    createGameSimulation({ next: { ...OWNER, displayName: 'Another Wizard' } }),
+    'next',
+    owner,
+  )
+  assert.deepEqual(getPlayerSkillBook(next, 'next').advancedUnlocks, Array<boolean>(8).fill(true))
+  assert.ok(getPlayerSkillBook(next, 'next').permanentRanks.slice(72, 80).every(rank => rank === 0))
+  for (let skillId = 72; skillId <= 79; skillId += 1) {
+    assert.equal(applyGameSimulationHubAction(next, 'next', {
+      skillId,
+      type: 'buy-teacher-spell',
+    }).reason, 'invalid-offer')
+  }
+})
+
+function downgradeWorldPainterDocumentToSchema20(
+  document: Record<string, unknown>,
+): Record<string, unknown> {
+  const continuation = document.continuation as Record<string, unknown>
+  const simulation = continuation.simulation as Record<string, unknown>
+  downgradeSaveSchema(document, 20)
+  simulation.lightProviderOrder = simulation.worldManagerOrder
+  delete simulation.worldManagerOrder
+  removeSchema21WorldPainterFields(simulation)
+  return document
+}
+
+function removeSchema21WorldPainterFields(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const entry of value) removeSchema21WorldPainterFields(entry)
+    return
+  }
+  if (value === null || typeof value !== 'object') return
+  const source = value as Record<string, unknown>
+  for (const key of [
+    'deathWeaponPainterRegistration',
+    'painterRegistration',
+    'painterRegistrations',
+    'sceneryRegistrationOrdinal',
+    'solomonPainterRegistration',
+  ]) delete source[key]
+  for (const entry of Object.values(source)) removeSchema21WorldPainterFields(entry)
+}
+
+function downgradeSaveSchema(
+  document: { schemaVersion: number; profile?: { advancedUnlocks?: unknown };
+    continuation?: { simulation?: { enhancedEffects?: boolean; screenFlashes?: unknown } } },
+  schemaVersion: number,
+): void {
+  document.schemaVersion = schemaVersion
+  if (schemaVersion < 46 && document.continuation?.simulation) {
+    delete document.continuation.simulation.enhancedEffects
+  }
+  if (schemaVersion < 47 && document.continuation?.simulation) delete document.continuation.simulation.screenFlashes
+  if (schemaVersion < 45 && document.profile) delete document.profile.advancedUnlocks
+}
+
+function legacyDocument(document: string, schemaVersion: number): string {
+  const current = JSON.parse(document)
+  const continuation = current.continuation
+  const simulation = continuation.simulation
+  const playerStore = simulation.playerEntities
+  const run = simulation.run
+  delete simulation.enhancedEffects
+  delete simulation.screenFlashes
+
+  downgradePlayerBeltsToLegacyQuickbar(playerStore)
+
+  delete simulation.world.skorcha
+  delete continuation.summary.activeRun
+  delete continuation.summary.partyRejoinToken
+  for (const economy of playerStore.economies) {
+    delete economy.collegeIntroPending
+    delete economy.npc
+    delete economy.tutorialPending
+  }
+  for (const participant of Object.values(simulation.world.participants ?? {}) as Record<string, unknown>[]) {
+    delete participant.collegeIntro
+  }
+
+  delete run.gameOverExitKind
+  delete run.loadoutReadyPlayerIds
+  for (const primaryCast of playerStore.primaryCasts) delete primaryCast.oneShotAttackPoseHeld
+  if (schemaVersion < 4) {
+    delete current.integrity
+    delete simulation.combatRng
+    delete simulation.modEffects
+    delete simulation.nextModConsumableUseId
+    delete playerStore.skillRuntimes
+    for (const economy of playerStore.economies) delete economy.unforgeBonuses
+    for (const primaryCast of playerStore.primaryCasts) {
+      delete primaryCast.etherBlastCharge
+      delete primaryCast.etherBlastChargeCueSequence
+      delete primaryCast.lastWeldPlaybackRate
+      delete primaryCast.lastWeldSoundVariant
+      delete primaryCast.selectedPrimaryAgeTicks
+      delete primaryCast.selectedPrimaryId
+      delete primaryCast.weaponPulse
+    }
+  }
+  if (schemaVersion < 3) {
+    simulation.playerOfferRng = simulation.gameRng
+    delete simulation.gameRng
+    delete simulation.hallOfFameClockStartedAtTick
+  }
+
+  const legacy = {
+    ...(schemaVersion >= 4 ? { integrity: current.integrity } : {}),
+    loadedBoneyard: continuation.loadedBoneyard,
+    ...(schemaVersion >= 2 ? { mods: current.mods, modState: current.modState } : {}),
+    schemaVersion,
+    simulation,
+    summary: continuation.summary,
+  }
+  return JSON.stringify(legacy)
+}
+
+function legacySchema5Document(document: string): string {
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 5)
+  delete legacy.nativeSource
+  downgradePlayerBeltsToLegacyQuickbar(
+    legacy.continuation.simulation.playerEntities,
+  )
+  delete legacy.profile.economy.collegeIntroPending
+  delete legacy.profile.economy.npc
+  delete legacy.continuation.simulation.world.skorcha
+  delete legacy.continuation.summary.activeRun
+  delete legacy.continuation.summary.partyRejoinToken
+  for (const economy of legacy.continuation.simulation.playerEntities.economies) {
+    delete economy.collegeIntroPending
+    delete economy.npc
+    delete economy.tutorialPending
+  }
+  for (const participant of Object.values(
+    legacy.continuation.simulation.world.participants ?? {},
+  ) as Record<string, unknown>[]) delete participant.collegeIntro
+  return JSON.stringify(legacy)
+}
+
+function downgradePlayerBeltsToLegacyQuickbar(playerStore: {
+  belts?: Array<Array<{ kind?: string, skillId?: number } | null>>
+  skillBooks: Array<{ skillQuickbar?: Array<number | null> }>
+}): void {
+  if (!Array.isArray(playerStore.belts)) return
+  for (let index = 0; index < playerStore.skillBooks.length; index += 1) {
+    const belt = playerStore.belts[index] ?? []
+    playerStore.skillBooks[index]!.skillQuickbar = belt.slice(0, 8).map((entry) => (
+      entry?.kind === 'skill' && typeof entry.skillId === 'number'
+        ? entry.skillId
+        : null
+    ))
+  }
+  delete playerStore.belts
+}
+
+test('a moved Lantern survives save restore and network snapshot creation', () => {
+  const loadedBoneyard = materializeBoneyard(
+    createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 7),
+  )
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard' || initial.world.lanternPosition === null) {
+    throw new Error('fixture must contain the native Lantern')
+  }
+  const moved = { x: initial.world.lanternPosition.x + 35, y: initial.world.lanternPosition.y + 20 }
+  const state = { ...initial, world: { ...initial.world, lanternPosition: moved } }
+  const document = createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state,
+  })
+  const restored = restoreGameSaveDocument(document)
+  assert.equal(restored.state.world.kind, 'boneyard')
+  if (restored.state.world.kind !== 'boneyard') return
+  assert.deepEqual(restored.state.world.lanternPosition, moved)
+  const snapshot = createGameSnapshot(restored.state, restored.loadedBoneyard)
+  assert.equal(snapshot.world.kind, 'boneyard')
+  if (snapshot.world.kind !== 'boneyard') return
+  assert.deepEqual(snapshot.world.lanternPosition, moved)
+  assert.notEqual(snapshot.world.lanternPosition, restored.state.world.lanternPosition)
+})
+
+test('Pike attachment and recoil survive saves and both enemy wire formats', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 44))
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const players = { owner: { alive: true, connected: true, eligible: true, collisionRadius: 25,
+    position: { x: 310, y: 300 }, velocityPerTick: { x: 0, y: 0 } } }
+  const context = { projectileWorldBlocked: () => false, players,
+    resolveMovement: (request: { requestedPosition: { x: number; y: number } }) => request.requestedPosition,
+    resolveSpawnIntents: () => [], tick: initial.tick }
+  let enemies = stepBoneyardEnemyStore(initial.world.enemies, { ...context,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETON', flags: ['FLAG_PIKE'], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1001, position: { x: 300, y: 300 },
+      spawnTick: initial.tick, waveOrdinal: 1 }],
+  }).store
+  for (let tick = initial.tick + 1; tick <= initial.tick + 18; tick += 1) {
+    enemies = stepBoneyardEnemyStore(enemies, { ...context, tick }).store
+  }
+  const tick = initial.tick + 18
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner',
+    state: { ...initial, tick, world: { ...initial.world, enemies } } })
+  const restored = restoreGameSaveDocument(document)
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  const brain = restored.state.world.enemies.actors[0]!.brain
+  if (brain.family !== 'skeleton') throw new Error('expected Skeleton')
+  assert.equal(brain.pike?.playerId, 'owner')
+  assert.ok(brain.verticalOffset < 0)
+  assert.deepEqual(brain, enemies.actors[0]!.brain)
+  const snapshot = projectBoneyardEnemies(restored.state.world.enemies, tick, {
+    lightAt: () => 0, players: { owner: { position: { x: 400, y: 310 }, primaryTint: 0 } },
+  })[0]!
+  assert.deepEqual(snapshot.animation.pikeTargetOffset, { x: 100, y: 10 })
+  assert.deepEqual(boneyardEnemySnapshot(JSON.parse(JSON.stringify(snapshot)), 'enemy'), snapshot)
+  const transported = materializeBoneyardEnemy(boneyardEnemyDescriptor(snapshot), boneyardEnemySample(snapshot))
+  assert.deepEqual(transported.animation.pikeTargetOffset, { x: 100, y: 10 })
+  assert.ok(Math.abs(transported.animation.verticalOffset - brain.verticalOffset) < .002)
+  const invalidSample = [...boneyardEnemySample(snapshot)]
+  invalidSample[73] = 0
+  assert.throws(() => materializeBoneyardEnemy(boneyardEnemyDescriptor(snapshot), invalidSample), /sample shape/)
+  assert.throws(() => boneyardEnemySnapshot({ ...snapshot, weapon: 'claw' }, 'enemy'), /active Pike/)
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 34)
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.pike
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.verticalOffset
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.verticalVelocity
+  const migrated = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  if (migrated.world.kind !== 'boneyard') throw new Error('expected migrated Boneyard')
+  const migratedBrain = migrated.world.enemies.actors[0]!.brain
+  if (migratedBrain.family !== 'skeleton') throw new Error('expected migrated Skeleton')
+  assert.equal(migratedBrain.pike, null)
+  assert.equal(migratedBrain.verticalOffset, 0)
+  for (const invalid of [undefined, { ...brain.pike, distance: 0 }, { ...brain.pike, playerId: '' }]) {
+    const bad = JSON.parse(document)
+    bad.continuation.simulation.world.enemies.actors[0].brain.pike = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(bad)), /Pike/)
+  }
+})
+
+test('legacy stock Faculty saves recover their palette from the native recipe instead of inverting clamped colors', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 47))
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const recipe = nativeFacultyRecipe(loadedBoneyard.sourceSha256, 'Dire Sirmin')
+  if (recipe.family.kind !== 'faculty') throw new Error('expected Faculty recipe')
+  const enemies = stepBoneyardEnemyStore(initial.world.enemies, {
+    projectileWorldBlocked: () => false, players: {}, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'DIREFACULTY', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1010, position: { x: 300, y: 300 }, authoredRecipe: recipe,
+      spawnTick: initial.tick, waveOrdinal: 1 }], tick: initial.tick,
+  }).store
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner',
+    state: { ...initial, world: { ...initial.world, enemies } } })
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 34)
+  const family = legacy.continuation.simulation.world.enemies.actors[0].config.family
+  family.bodyColor = nativeDesaturateColor(recipe.family.bodyColor, 1 - Math.fround(.7))
+  family.headColor = nativeDesaturateColor(recipe.family.headColor, 1 - Math.fround(.7))
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  if (restored.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+  assert.deepEqual(restored.world.enemies.actors[0]!.config.family, enemies.actors[0]!.config.family)
+})
+
+test('featured boss identity survives continuation saves, raw snapshots and incremental frames', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 41))
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const spawned = stepBoneyardEnemyStore(initial.world.enemies, {
+    projectileWorldBlocked: () => false, players: {}, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'DEMON', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1009, position: { x: 300, y: 300 },
+      spawnTick: initial.tick, waveOrdinal: 1 }], tick: initial.tick,
+  }).store
+  const actors = spawned.actors.map(actor => ({ ...actor, config: {
+    ...actor.config, classification: 'boss' as const, recipeName: 'Saved Boss',
+  } }))
+  const selected = actors[0]!.id
+  for (const featuredBossId of [selected, null]) {
+    const state = { ...initial, world: { ...initial.world, enemies: { ...spawned, actors, featuredBossId } } }
+    const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state })
+    const restored = restoreGameSaveDocument(document)
+    if (restored.state.world.kind !== 'boneyard') throw new Error('expected restored Boneyard')
+    assert.equal(restored.state.world.enemies.featuredBossId, featuredBossId)
+    const snapshot = createGameSnapshot(restored.state, 'owner')
+    if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard snapshot')
+    assert.equal(snapshot.world.featuredBossId, featuredBossId)
+    const rawSnapshot = JSON.parse(JSON.stringify(snapshot))
+    assert.deepEqual(decodeGameSnapshot(rawSnapshot), rawSnapshot)
+    for (const baseline of [undefined, createReplicatedEntityBaseline(snapshot)]) {
+      const frame = createGameSnapshotFrame(snapshot, 0, baseline, baseline === undefined)
+      const decoded = decodeServerGameMessage(JSON.stringify({ type: 'server-snapshot',
+        acknowledgedInputSequence: 0, frame, sequence: 1 }))
+      assert.equal(decoded.type, 'server-snapshot')
+      if (decoded.type !== 'server-snapshot' || decoded.frame.world.kind !== 'boneyard') throw new Error('expected Boneyard frame')
+      assert.equal(decoded.frame.world.featuredBossId, featuredBossId)
+    }
+    const legacy = JSON.parse(document)
+    downgradeSaveSchema(legacy, 32)
+    delete legacy.continuation.simulation.world.enemies.featuredBossId
+    const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
+    if (migrated.state.world.kind !== 'boneyard') throw new Error('expected migrated Boneyard')
+    assert.equal(migrated.state.world.enemies.featuredBossId, selected)
+    for (const invalid of [0, 9999, '1', -1]) {
+      const bad = JSON.parse(document)
+      bad.continuation.simulation.world.enemies.featuredBossId = invalid
+      assert.throws(() => restoreGameSaveDocument(JSON.stringify(bad)), /featuredBossId/)
+    }
+  }
+})
+
+test('Ring visual RNG and late ground fade survive save restoration without a schema change', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) throw new Error('expected stock encounter')
+  state = { ...state, world: { ...state.world, encounter: { ...state.world.encounter,
+    phase: 'gone', lifetimeTicksRemaining: 0, runEventId: 1 } } }
+  const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'owner', 35, 1, state.gameRng)
+  state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 35, 0)!
+  const position = state.playerEntities.locomotions[0]!.position
+  state = stepGameSimulationTick(state, { owner: {
+    aim: { x: position.x + 100, y: position.y }, cast: { primary: false, quickbar: 0 },
+    movement: { x: 0, y: 0 }, viewportWidth: 1600, viewportHeight: 900,
+  } })
+  const visual = state.secondaryAbilities.actors.find(actor => actor.kind === 'freeze-wave-visual')
+  assert.ok(visual?.presentationRng)
+  assert.equal(visual.lifetimeTicks, 176)
+  for (const age of [0, 69, 70, 90, 91, 174, 175]) {
+    while ((state.secondaryAbilities.actors.find(actor => actor.id === visual.id)?.ageTicks ?? 176) < age) {
+      state = stepGameSimulationTick(state, {})
+    }
+    const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+      mods: [], modState: {}, playerId: 'owner', state })
+    const restored = restoreGameSaveDocument(document).state
+    assert.deepEqual(restored.secondaryAbilities.actors.find(actor => actor.id === visual.id),
+      state.secondaryAbilities.actors.find(actor => actor.id === visual.id))
+    const resumed = stepGameSimulationTick(restored, {}).secondaryAbilities
+    const uninterrupted = stepGameSimulationTick(state, {}).secondaryAbilities
+    // Resume intentionally cancels the old held-input/cast-pose state; the
+    // already-born world actors, their RNG and target effects must continue.
+    assert.equal(restored.secondaryAbilities.players.owner?.castAction, null)
+    assert.deepEqual(resumed.actors, uninterrupted.actors, `resumed Ring age ${age}`)
+    assert.deepEqual(resumed.rng, uninterrupted.rng)
+    assert.deepEqual(resumed.targetEffects, uninterrupted.targetEffects)
+    const legacyDuration = JSON.parse(document)
+    legacyDuration.continuation.simulation.secondaryAbilities.actors
+      .find((actor: { id: number }) => actor.id === visual.id).lifetimeTicks = 175
+    if (age < 175) {
+      assert.equal(restoreGameSaveDocument(JSON.stringify(legacyDuration)).state.secondaryAbilities.actors
+        .find(actor => actor.id === visual.id)?.lifetimeTicks, 175)
+    }
+  }
+  const ended = stepGameSimulationTick(state, {})
+  assert.equal(ended.secondaryAbilities.actors.some(actor => actor.id === visual.id), false)
+})
+
+test('Golem CircleSlow continues through a save and old saves default to an unmodified Golem', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) throw new Error('expected stock encounter')
+  state = { ...state, world: { ...state.world, encounter: { ...state.world.encounter,
+    phase: 'gone', lifetimeTicksRemaining: 0, runEventId: 1 } } }
+  const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'owner', 45, 1, state.gameRng)
+  state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 45, 0)!
+  const position = state.playerEntities.locomotions[0]!.position
+  state = stepGameSimulationTick(state, { owner: {
+    aim: { x: position.x + 100, y: position.y }, cast: { primary: false, quickbar: 0 },
+    movement: { x: 0, y: 0 }, viewportWidth: 1600, viewportHeight: 900,
+  } })
+  const golem = state.secondaryAbilities.actors.find(actor => actor.kind === 'golem')
+  assert.ok(golem?.golem)
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities,
+    actors: state.secondaryAbilities.actors.map(actor => actor.id === golem.id
+      ? { ...golem, golem: { ...golem.golem!, circleSlowTicks: 14 } } : actor),
+  } }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(document)
+  const next = stepGameSimulationTick(state, {})
+  const resumed = stepGameSimulationTick(restored.state, {})
+  assert.deepEqual(resumed.secondaryAbilities.actors.find(actor => actor.id === golem.id),
+    next.secondaryAbilities.actors.find(actor => actor.id === golem.id))
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 32)
+  delete legacy.continuation.simulation.secondaryAbilities.actors.find((actor: { id: number }) => actor.id === golem.id).golem.circleSlowTicks
+  assert.equal(restoreGameSaveDocument(JSON.stringify(legacy)).state.secondaryAbilities.actors
+    .find(actor => actor.id === golem.id)!.golem!.circleSlowTicks, 0)
+  for (const invalid of [-1, 21, .5, '14']) {
+    const bad = JSON.parse(document)
+    bad.continuation.simulation.secondaryAbilities.actors.find((actor: { id: number }) => actor.id === golem.id).golem.circleSlowTicks = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(bad)), /CircleSlow/)
+  }
+})
+
+test('lethal magic provenance survives continuation before the death effect is born', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const context = { projectileWorldBlocked: () => false, players: {},
+    resolveMovement: (request: { requestedPosition: { x: number; y: number } }) => request.requestedPosition,
+    resolveSpawnIntents: () => [], tick: initial.tick }
+  const spawned = stepBoneyardEnemyStore(initial.world.enemies, { ...context,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETONMAGE', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1003, position: { x: 300, y: 300 },
+      spawnTick: initial.tick, waveOrdinal: 1 }],
+  }).store
+  const enemies = damageBoneyardEnemy(spawned, { actorId: spawned.actors[0]!.id,
+    amount: 1000, hasMagicDamage: true, sourcePlayerId: 'owner', tick: initial.tick }).store
+  const state = { ...initial, world: { ...initial.world, enemies } }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(document)
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const next = stepBoneyardEnemyStore(restored.state.world.enemies, { ...context, tick: state.tick + 1 })
+  assert.equal(next.store.deathEffects.find(effect => effect.kind === 'unbind')?.alpha, 1.25)
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 32)
+  delete legacy.continuation.simulation.world.enemies.actors[0].lethalMagicDamage
+  const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
+  if (migrated.state.world.kind !== 'boneyard') throw new Error('expected legacy Boneyard')
+  assert.equal(migrated.state.world.enemies.actors[0]!.lethalMagicDamage, false)
+  const bad = JSON.parse(document)
+  bad.continuation.simulation.world.enemies.actors[0].lethalMagicDamage = 1
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(bad)), /lethal magic provenance/)
+})
+
+test('Dampen caster delay survives saves and legacy Mages initialize it explicitly', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))
+  assert.ok(loadedBoneyard)
+  const initial = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const spawned = stepBoneyardEnemyStore(initial.world.enemies, {
+    projectileWorldBlocked: () => false, players: {}, resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'SKELETONMAGE', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: 1003, position: { x: 300, y: 300 },
+      spawnTick: initial.tick, waveOrdinal: 1 }], tick: initial.tick,
+  }).store
+  const enemies = dampenBoneyardCasters(spawned, [spawned.actors[0]!.id], initial.tick)
+  const state = { ...initial, world: { ...initial.world, enemies } }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(document)
+  if (restored.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const restoredMage = restored.state.world.enemies.actors[0]!
+  if (restoredMage.brain.family !== 'mage') throw new Error('expected Mage')
+  assert.equal(restoredMage.brain.disabledPrimaryTicks, 600)
+  const projected = projectBoneyardEnemies(restored.state.world.enemies, initial.tick)[0]!
+  assert.equal(projected.animation.mageChargeSuppressed, true)
+  assert.equal(boneyardEnemySnapshot(JSON.parse(JSON.stringify(projected)), 'Mage').animation.mageChargeSuppressed, true)
+  assert.equal(materializeBoneyardEnemy(boneyardEnemyDescriptor(projected), boneyardEnemySample(projected))
+    .animation.mageChargeSuppressed, true)
+  assert.equal(restored.state.world.enemies.deathEffects.length, 73)
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 32)
+  delete legacy.continuation.simulation.world.enemies.actors[0].brain.disabledPrimaryTicks
+  const migrated = restoreGameSaveDocument(JSON.stringify(legacy))
+  if (migrated.state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const migratedMage = migrated.state.world.enemies.actors[0]!
+  if (migratedMage.brain.family !== 'mage') throw new Error('expected Mage')
+  assert.equal(migratedMage.brain.disabledPrimaryTicks, 0)
+  for (const invalid of [-1, .5, 601, null]) {
+    const bad = JSON.parse(document)
+    bad.continuation.simulation.world.enemies.actors[0].brain.disabledPrimaryTicks = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(bad)), /casting delay/)
+  }
+})
+
+
+test('every complete item set survives authoritative equip, refresh, save, and member removal', () => {
+  const expectedBits = [0, 0x1800, 1, 2, 4, 16, 8]
+  for (const [setIndex, set] of nativeEquipmentTooltipSets().entries()) {
+    let state = createGameSimulation({ owner: OWNER })
+    const economy = getPlayerEconomy(state, 'owner')
+    const permanent = [...state.playerEntities.skillBooks[0]!.permanentRanks]
+    const items = set.memberRecipeIndices.map(recipeIndex => createEquipmentInventoryItem(
+      DOWSING_EQUIPMENT_RECIPES[recipeIndex]!, 100 + recipeIndex,
+    ))
+    state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'owner', {
+      ...economy, backpack: items, nextItemId: 200,
+    }) }
+    let ringIndex = 0
+    for (const item of items) {
+      const slot: EquipmentSlot = item.equipmentType === 'ring'
+        ? ringIndex++ === 0 ? 'ring-0' : 'ring-1'
+        : item.equipmentType === 'wand' || item.equipmentType === 'staff' ? 'weapon'
+          : item.equipmentType === 'hat' ? 'hat' : item.equipmentType === 'robe' ? 'robe' : 'amulet'
+      const result = applyGameSimulationHubAction(state, 'owner', { type: 'equip', itemId: item.id, slot })
+      assert.equal(result.accepted, true, `${set.name}: ${item.name}: ${result.reason}`)
+      state = result.state
+    }
+    const full = state.playerEntities.skillRuntimes[0]!.equipmentModifiers
+    const book = state.playerEntities.skillBooks[0]!
+    assert.equal(full.featureBits, expectedBits[setIndex], set.name)
+    if (setIndex === 0) assert.equal(full.recharge.scale, 3)
+    if (setIndex === 1) {
+      assert.ok(Math.abs(full.weldEffect - 1.5) < 0.000001)
+      assert.ok(NATIVE_WELD_COMPONENT_SKILL_IDS.every(id => book.effectiveRanks[id]! >= 1))
+    }
+    if (setIndex === 2) {
+      assert.equal(full.skillDamageMultiplier[11], 2)
+      assert.equal(full.skillDamageFlat[11], 4)
+    }
+    if (setIndex === 3) {
+      assert.equal(book.effectiveRanks[29], 1)
+      assert.equal(full.classManaCostMultiplier[2], Math.fround(0.8))
+    }
+    if (setIndex === 5) assert.equal(full.classCastSpeedMultiplier[3], Math.fround(1.1))
+    if (setIndex === 6) assert.equal(full.classCastSpeedMultiplier[4], Math.fround(1.1))
+    assert.deepEqual(book.permanentRanks, permanent, 'set grants never become permanent skills')
+    const refreshed = replacePlayerEconomy(state.playerEntities, 'owner', getPlayerEconomy(state, 'owner'))
+    assert.deepEqual(refreshed.skillRuntimes[0]!.equipmentModifiers, full, 'refresh never stacks bonuses')
+    const save = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+      mods: [], modState: {}, playerId: 'owner', state })
+    const restored = restoreGameSaveDocument(save).state
+    assert.deepEqual(restored.playerEntities.skillRuntimes[0]!.equipmentModifiers, full, set.name)
+    assert.deepEqual(restored.playerEntities.skillBooks[0]!.effectiveRanks, book.effectiveRanks)
+    for (const item of items) {
+      const equipped = getPlayerEconomy(restored, 'owner')
+      const without = { ...equipped, equipment: {
+        hat: equipped.equipment.hat?.id === item.id ? economy.equipment.hat : equipped.equipment.hat,
+        robe: equipped.equipment.robe?.id === item.id ? economy.equipment.robe : equipped.equipment.robe,
+        weapon: equipped.equipment.weapon?.id === item.id ? null : equipped.equipment.weapon,
+        amulet: equipped.equipment.amulet?.id === item.id ? null : equipped.equipment.amulet,
+        rings: equipped.equipment.rings.map(ring => ring?.id === item.id ? null : ring) as [HubInventoryItem | null, HubInventoryItem | null, HubInventoryItem | null],
+      } }
+      const removed = replacePlayerEconomy(restored.playerEntities, 'owner', without)
+      assert.equal(removed.skillRuntimes[0]!.equipmentModifiers.featureBits & 0x81f, 0, item.name)
+      if (setIndex === 0) assert.equal(removed.skillRuntimes[0]!.equipmentModifiers.recharge.scale, 1)
+      if (setIndex === 3) assert.equal(removed.skillBooks[0]!.effectiveRanks[29], 0)
+      const reequipped = replacePlayerEconomy(removed, 'owner', equipped)
+      assert.deepEqual(reequipped.skillRuntimes[0]!.equipmentModifiers, full, item.name)
+      assert.deepEqual(reequipped.skillBooks[0]!.permanentRanks, permanent)
+    }
+  }
+})
+
+
+test('saved Leviathans recover raw cast-rank damage without changing clocks or RNG', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 11))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) throw new Error('expected stock encounter')
+  state = { ...state, world: { ...state.world, encounter: { ...state.world.encounter,
+    phase: 'gone', lifetimeTicksRemaining: 0, runEventId: 1 } } }
+  const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'owner', 11, 2, state.gameRng)
+  state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 11, 0)!
+  const position = state.playerEntities.locomotions[0]!.position
+  state = stepGameSimulationTick(state, { owner: {
+    aim: { x: position.x + 100, y: position.y }, cast: { primary: false, quickbar: 0 },
+    movement: { x: 0, y: 0 }, viewportWidth: 1600, viewportHeight: 900,
+  } })
+  assert.ok(state.secondaryAbilities.actors.some(actor => actor.kind === 'leviathan'))
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state })
+  const legacy = JSON.parse(document)
+  for (const actor of legacy.continuation.simulation.secondaryAbilities.actors) actor.damage = 28
+  const resumed = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.deepEqual(resumed.secondaryAbilities.actors, state.secondaryAbilities.actors)
+  assert.deepEqual(resumed.secondaryAbilities.rng, state.secondaryAbilities.rng)
+  assert.deepEqual(resumed.playerEntities.skillBooks, state.playerEntities.skillBooks)
+})
+
+
+test('schema 43 repairs stalled Wraith flight without changing identity, cooldown or RNG', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 91))
+  assert.ok(loadedBoneyard)
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  assert.ok(state.world.kind === 'boneyard')
+  const enemies = stepBoneyardEnemyStore(state.world.enemies, {
+    projectileWorldBlocked: () => false, players: {},
+    resolveMovement: request => request.requestedPosition, tick: state.tick,
+    resolveSpawnIntents: () => [{ enemyToken: 'WRAITH', flags: [], id: 1,
+      locationPolicy: 'anywhere', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.WRAITH,
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const document = createGameSaveDocument({ integrity: 'global-clean', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'owner', state: { ...state, world: { ...state.world, enemies } } })
+  const unchanged = restoreGameSaveDocument(document).state
+  assert.ok(unchanged.world.kind === 'boneyard')
+  assert.deepEqual(unchanged.world.enemies.actors[0]!.brain, enemies.actors[0]!.brain)
+  const legacy = JSON.parse(document)
+  downgradeSaveSchema(legacy, 43)
+  const actor = legacy.continuation.simulation.world.enemies.actors[0]
+  actor.brain = { ...actor.brain, restingSpeed: 2, currentSpeed: .001,
+    currentTurnGain: 5455.5, targetTurnGain: 5457.5, flybyTicksRemaining: 0, contactCooldownTicks: 17 }
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.ok(restored.world.kind === 'boneyard')
+  const repaired = restored.world.enemies.actors[0]!
+  assert.ok(repaired.brain.family === 'wraith')
+  assert.equal(repaired.brain.restingSpeed, 18)
+  assert.equal(repaired.brain.currentSpeed, 18)
+  assert.equal(repaired.brain.currentTurnGain, 1.5)
+  assert.equal(repaired.brain.targetTurnGain, 3)
+  assert.equal(repaired.brain.flybyTicksRemaining, 0)
+  assert.equal(repaired.brain.contactCooldownTicks, 17)
+  assert.equal(repaired.id, actor.id)
+  assert.deepEqual(repaired.position, actor.position)
+  assert.equal(restored.world.enemies.rngState, enemies.rngState)
+  assert.deepEqual(restored.world.enemies.steeringRngState, enemies.steeringRngState)
+  actor.brain.baseFlybySpeed = 0
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /legacy Wraith base speed/)
+})
+
+
+test('continuations retain already compiled repeated Coffin bursts and their emitted actor', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 78))
+  assert.ok(loadedBoneyard)
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.waves === null) throw new Error('expected survival Boneyard')
+  const waves = state.world.waves
+  const section = waves.compiledSchedule[35]
+  const entries = waves.schedule[35].groups[6].entries
+  const legacyBursts = [121, 129].map((count, index) => ({
+    afterDelayTicks: 100, count, entries, groupIndex: 6 + index,
+    locationPolicy: 'near-player' as const, positionPolicy: 'light' as const,
+    spreadTicks: 25, startDelayTicks: index === 0 ? 10 : 0, steady: true,
+  }))
+  const compiledSchedule = waves.compiledSchedule.map((value, index) => index === 35
+    ? { ...section, bursts: legacyBursts } : value)
+  const emitted = stepBoneyardEnemyStore(state.world.enemies, {
+    projectileWorldBlocked: () => false, players: {},
+    resolveMovement: request => request.requestedPosition,
+    resolveSpawnIntents: () => [{ enemyToken: 'COFFIN', flags: [], id: 1,
+      locationPolicy: 'near-player', nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.COFFIN,
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 53 }],
+    tick: state.tick,
+  })
+  state = { ...state, world: { ...state.world, enemies: emitted.store,
+    waves: { ...waves, compiledSchedule } } }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'owner', state })
+  for (const schemaVersion of [47, WEB_GAME_SAVE_SCHEMA_VERSION]) {
+    const saved = JSON.parse(document)
+    if (schemaVersion === 47) downgradeSaveSchema(saved, 47)
+    const restored = restoreGameSaveDocument(JSON.stringify(saved)).state
+    if (restored.world.kind !== 'boneyard' || restored.world.waves === null) throw new Error('expected continuation')
+    assert.deepEqual(restored.world.waves.compiledSchedule, compiledSchedule)
+    assert.deepEqual(restored.world.enemies.actors, emitted.store.actors)
+  }
+})
+
+test('three hotbars round-trip while pre-expansion saves retain their first eight assignments', () => {
+  let state = createGameSimulation({ owner: OWNER })
+  for (const slot of [7, 8, 15, 16, 23]) {
+    state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 11, slot)!
+  }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  assert.deepEqual(restoreGameSaveDocument(document).state.playerEntities.belts[0],
+    state.playerEntities.belts[0])
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 49
+  const entries = legacy.continuation.simulation.playerEntities.belts[0].slice(0, 8)
+  legacy.continuation.simulation.playerEntities.belts[0] = entries
+  const restored = restoreGameSaveDocument(JSON.stringify(legacy)).state.playerEntities.belts[0]!
+  assert.deepEqual(restored.slice(0, 8), entries)
+  assert.deepEqual(restored.slice(8), Array(16).fill(null))
+  legacy.schemaVersion = 50
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /player belt 0 is invalid/)
+})
+
+test('Wraith recipient state round-trips birth, paused birth and completed first tick', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 91))
+  assert.ok(loadedBoneyard)
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  assert.ok(state.world.kind === 'boneyard')
+  const context = { projectileWorldBlocked: () => false, players: {},
+    resolveMovement: (request: { requestedPosition: { x: number; y: number } }) => request.requestedPosition,
+    resolveSpawnIntents: () => [] }
+  const born = stepBoneyardEnemyStore(state.world.enemies, { ...context, tick: state.tick,
+    resolveSpawnIntents: () => [{ enemyToken: 'WRAITH', flags: [], id: 1, locationPolicy: 'anywhere', nativeTypeId: 1007,
+      position: { x: 300, y: 300 }, spawnTick: state.tick, waveOrdinal: 1 }],
+  }).store
+  const paused = stepBoneyardEnemyStore(born, { ...context, tick: state.tick + 10, paused: true }).store
+  const completed = stepBoneyardEnemyStore(paused, { ...context, tick: state.tick + 11 }).store
+  for (const [enemies, expected] of [[born, true], [paused, true], [completed, false]] as const) {
+    const document = createGameSaveDocument({ integrity: 'global-clean', loadedBoneyard,
+      mods: [], modState: {}, playerId: 'owner', state: { ...state, tick: Math.max(state.tick, enemies.lastStepTick),
+        world: { ...state.world, enemies } } })
+    const restored = restoreGameSaveDocument(document).state
+    assert.ok(restored.world.kind === 'boneyard')
+    const brain = restored.world.enemies.actors[0]!.brain
+    assert.ok(brain.family === 'wraith')
+    assert.equal(brain.collisionRecipient, expected)
+    const legacy = JSON.parse(document)
+    delete legacy.continuation.simulation.world.enemies.actors[0].brain.collisionRecipient
+    const migrated = restoreGameSaveDocument(JSON.stringify(legacy)).state
+    assert.ok(migrated.world.kind === 'boneyard')
+    const migratedBrain = migrated.world.enemies.actors[0]!.brain
+    assert.ok(migratedBrain.family === 'wraith')
+    assert.equal(migratedBrain.collisionRecipient, enemies === born,
+      'legacy files distinguish current birth from older actors; unticked paused history was not stored')
+    legacy.continuation.simulation.world.enemies.actors[0].brain.collisionRecipient = 'yes'
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /Wraith collision recipient/)
+  }
+})

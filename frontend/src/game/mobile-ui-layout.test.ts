@@ -1,0 +1,441 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { freezeNativeBelt } from './core-kernels/native-belt.ts'
+
+import {
+  DEFAULT_MOBILE_UI_LAYOUT,
+  MOBILE_UI_CANONICAL_HEIGHT,
+  MOBILE_UI_CANONICAL_WIDTH,
+  MOBILE_UI_ELEMENT_IDS,
+  MOBILE_UI_GRID_SIZE,
+  MOBILE_UI_LAYOUT_STORAGE_KEY,
+  MOBILE_UI_PAGE_ZOOM_MAX,
+  MOBILE_UI_PAGE_ZOOM_MIN,
+  MOBILE_UI_RESIZE_HANDLES,
+  MOBILE_UI_SCALE_MAX,
+  MOBILE_UI_SCALE_MIN,
+  constrainMobileUiTransform,
+  defaultMobileUiGeometry,
+  mobileUiEditorPageSize,
+  mobileUiElementPinchScale,
+  mobileUiElementRotation,
+  mobileUiElementSnapRect,
+  mobileUiElementStyle,
+  mobileUiLayoutWith,
+  mobileUiBeltElementId,
+  mobileUiLayoutDocument,
+  mobileUiLayoutFromDocument,
+  mobileUiPagePinchZoom,
+  mobileUiResizeTransform,
+  readMobileUiLayoutState,
+  resetMobileUiLayout,
+  resetMobileUiLayoutListenersForTests,
+  setMobileUiLayout,
+  snapMobileUiMove,
+  snapMobileUiResize,
+  snapMobileUiScale,
+  subscribeMobileUiLayout,
+  type MobileUiLayoutStorage,
+  type MobileUiPoint,
+  type MobileUiResizeHandle,
+  type MobileUiElementTransform,
+  type MobileUiSize,
+} from './mobile-ui-layout.ts'
+
+class MemoryStorage implements MobileUiLayoutStorage {
+  readonly values = new Map<string, string>()
+  getItem(key: string) { return this.values.get(key) ?? null }
+  setItem(key: string, value: string) { this.values.set(key, value) }
+  removeItem(key: string) { this.values.delete(key) }
+}
+
+test('duplicate potion aliases retain distinct mobile slot positions', () => {
+  const belt = freezeNativeBelt([
+    { kind: 'skill', skillId: 32 }, null, { kind: 'health-potion' },
+    { kind: 'health-potion' }, { kind: 'mana-potion' }, { kind: 'mana-potion' },
+    { kind: 'health-potion' }, { kind: 'mana-potion' },
+  ])
+  const visibleBelt = belt.slice(0, 8)
+  const owners = visibleBelt.map((_, slot) => mobileUiBeltElementId(visibleBelt, slot))
+  assert.throws(() => mobileUiBeltElementId(belt, 8), /0..7/)
+  assert.deepEqual(owners, ['slot1', 'slot2', 'healthPotion', 'slot4', 'manaPotion', 'slot6', 'slot7', 'slot8'])
+  assert.equal(new Set(owners).size, 8)
+})
+
+test('the mobile layout catalog drains every requested HUD member exactly once', () => {
+  assert.deepEqual(MOBILE_UI_ELEMENT_IDS, [
+    'pause',
+    'diagnostics',
+    'meters',
+    'leftJoystick',
+    'rightJoystick',
+    'slot1',
+    'slot2',
+    'slot3',
+    'slot4',
+    'slot5',
+    'slot6',
+    'slot7',
+    'slot8',
+    'inventory',
+    'skillbook',
+    'xp',
+    'healthPotion',
+    'manaPotion',
+  ])
+  assert.deepEqual(Object.keys(DEFAULT_MOBILE_UI_LAYOUT), MOBILE_UI_ELEMENT_IDS)
+  assert.ok(Object.values(DEFAULT_MOBILE_UI_LAYOUT).every((transform) => (
+    transform.scale === 1 && transform.rotation === 0
+  )))
+})
+
+test('the editor seed projects the accepted 896 x 414 touch HUD from its owning constants', () => {
+  assert.equal(MOBILE_UI_CANONICAL_WIDTH, 896)
+  assert.equal(MOBILE_UI_CANONICAL_HEIGHT, 414)
+  const geometry = defaultMobileUiGeometry(896, 414, 1)
+  const near = (actual: number, expected: number) => assert.ok(
+    Math.abs(actual - expected) < 0.02,
+    `${actual} is not within 0.02 of ${expected}`,
+  )
+  near(geometry.layout.pause.x, 2.9018)
+  near(geometry.layout.pause.y, 6.2802)
+  near(geometry.layout.diagnostics.x, 14.159)
+  near(geometry.layout.diagnostics.y, 4.8551)
+  near(geometry.layout.meters.x, 50)
+  near(geometry.layout.meters.y, 2.7222)
+  near(geometry.layout.leftJoystick.x, 8.5608)
+  near(geometry.layout.leftJoystick.y, 80.5833)
+  near(geometry.layout.rightJoystick.x, 91.4392)
+  near(geometry.layout.slot1.x, 18.4821)
+  near(geometry.layout.slot1.y, 75.5556)
+  near(geometry.layout.slot8.x, 81.5167)
+  near(geometry.layout.slot8.y, 87.5556)
+  near(geometry.layout.inventory.x, 46.6629)
+  near(geometry.layout.skillbook.x, 53.3371)
+  near(geometry.layout.xp.y, 95.1111)
+  assert.deepEqual(geometry.sizes.pause, { height: 44, width: 44 })
+  assert.deepEqual(geometry.sizes.diagnostics, { height: 10.2, width: 69.73 })
+  near(geometry.sizes.meters.height, 9.2)
+  near(geometry.sizes.meters.width, 147.2)
+  assert.deepEqual(geometry.sizes.leftJoystick, { height: 109.25, width: 109.25 })
+  assert.deepEqual(geometry.sizes.slot1, { height: 46, width: 46 })
+  near(geometry.sizes.inventory.height, 59.8)
+  near(geometry.sizes.inventory.width, 59.8)
+  assert.deepEqual(geometry.sizes.healthPotion, { height: 46, width: 46 })
+})
+
+test('default projection follows the current device aspect and UI scale without storing device pixels', () => {
+  assert.deepEqual(mobileUiEditorPageSize(390, 844, true), { height: 844, width: 390 })
+  assert.deepEqual(mobileUiEditorPageSize(844, 390, true), { height: 390, width: 844 })
+  assert.deepEqual(mobileUiEditorPageSize(1280, 800, true), { height: 800, width: 1280 })
+  assert.deepEqual(mobileUiEditorPageSize(1920, 1080, false), { height: 414, width: 896 })
+  const enlarged = defaultMobileUiGeometry(896, 414, 1.5)
+  assert.equal(enlarged.sizes.leftJoystick.width, 163.875)
+  assert.equal(enlarged.sizes.inventory.width, 89.7)
+  assert.ok(enlarged.layout.leftJoystick.x > DEFAULT_MOBILE_UI_LAYOUT.leftJoystick.x)
+})
+
+test('layout persistence is complete, bounded, observable, and resettable', () => {
+  resetMobileUiLayoutListenersForTests()
+  const storage = new MemoryStorage()
+  assert.deepEqual(readMobileUiLayoutState(storage), {
+    customized: false,
+    layout: DEFAULT_MOBILE_UI_LAYOUT,
+  })
+  const changed = mobileUiLayoutWith(DEFAULT_MOBILE_UI_LAYOUT, 'inventory', {
+    rotation: 37.5,
+    scale: 1.4,
+    x: 31.25,
+    y: 72.5,
+  })
+  const events: boolean[] = []
+  const unsubscribe = subscribeMobileUiLayout((state) => events.push(state.customized))
+  assert.deepEqual(setMobileUiLayout(changed, storage), { customized: true, layout: changed })
+  assert.deepEqual(readMobileUiLayoutState(storage), { customized: true, layout: changed })
+  assert.ok(storage.values.has(MOBILE_UI_LAYOUT_STORAGE_KEY))
+  assert.deepEqual(mobileUiLayoutFromDocument(mobileUiLayoutDocument(changed)), changed)
+  resetMobileUiLayout(storage)
+  assert.deepEqual(readMobileUiLayoutState(storage), {
+    customized: false,
+    layout: DEFAULT_MOBILE_UI_LAYOUT,
+  })
+  unsubscribe()
+  assert.deepEqual(events, [true, false])
+
+  for (const malformed of [
+    '{',
+    '{"version":3,"elements":{}}',
+    JSON.stringify({ version: 2, elements: { ...changed, slot8: undefined } }),
+    JSON.stringify({
+      version: 2,
+      elements: { ...changed, inventory: { ...changed.inventory, scale: 99 } },
+    }),
+    JSON.stringify({ version: 2, elements: { ...changed, extra: changed.inventory } }),
+  ]) {
+    storage.values.set(MOBILE_UI_LAYOUT_STORAGE_KEY, malformed)
+    assert.equal(readMobileUiLayoutState(storage).customized, false, malformed)
+  }
+
+  const { meters: _meters, ...legacyElements } = changed
+  storage.values.set(MOBILE_UI_LAYOUT_STORAGE_KEY, JSON.stringify({
+    elements: legacyElements,
+    version: 1,
+  }))
+  const migrated = readMobileUiLayoutState(storage)
+  assert.equal(migrated.customized, true)
+  assert.deepEqual(migrated.layout.meters, DEFAULT_MOBILE_UI_LAYOUT.meters)
+  assert.deepEqual(migrated.layout.inventory, changed.inventory)
+
+  assert.equal(mobileUiLayoutFromDocument({
+    ...mobileUiLayoutDocument(changed),
+    extra: true,
+  }), null)
+})
+
+test('smart move snapping aligns edges to grid, page, and sibling guides without escaping bounds', () => {
+  const page = { height: 100, width: 100 }
+  const size = { height: 20, width: 20 }
+  const moved = snapMobileUiMove(
+    { rotation: 0, scale: 1, x: 25, y: 37 },
+    size,
+    page,
+  )
+  assert.deepEqual(moved.transform, { rotation: 0, scale: 1, x: 26, y: 38 })
+  assert.deepEqual(moved.guides, [
+    { axis: 'x', kind: 'grid', position: 16 },
+    { axis: 'y', kind: 'grid', position: 48 },
+  ])
+
+  const sibling = mobileUiElementSnapRect(
+    { rotation: 0, scale: 1, x: 60, y: 80 },
+    size,
+    page,
+  )
+  const aligned = snapMobileUiMove(
+    { rotation: 0, scale: 1, x: 40.5, y: 12.5 },
+    size,
+    page,
+    [sibling],
+  )
+  assert.equal(aligned.transform.x, 40)
+  assert.deepEqual(aligned.guides.find((guide) => guide.axis === 'x'), {
+    axis: 'x',
+    kind: 'element',
+    position: 50,
+  })
+
+  const bounded = snapMobileUiMove(
+    { rotation: 0, scale: 1, x: -20, y: 140 },
+    size,
+    page,
+  )
+  assert.deepEqual(bounded.transform, { rotation: 0, scale: 1, x: 10, y: 90 })
+  assert.deepEqual(bounded.guides, [
+    { axis: 'x', kind: 'page', position: 0 },
+    { axis: 'y', kind: 'page', position: 100 },
+  ])
+})
+
+test('all resize nodes keep their opposite anchor fixed and the dragged node snaps to geometry', () => {
+  const page = { height: 100, width: 100 }
+  const size = { height: 20, width: 20 }
+  const initial = { rotation: 0, scale: 1, x: 50, y: 50 }
+  const pointers: Readonly<Record<MobileUiResizeHandle, readonly [MobileUiPoint, MobileUiPoint]>> = {
+    'north-west': [{ x: 40, y: 40 }, { x: 35, y: 35 }],
+    north: [{ x: 50, y: 40 }, { x: 50, y: 35 }],
+    'north-east': [{ x: 60, y: 40 }, { x: 65, y: 35 }],
+    east: [{ x: 60, y: 50 }, { x: 65, y: 50 }],
+    'south-east': [{ x: 60, y: 60 }, { x: 65, y: 65 }],
+    south: [{ x: 50, y: 60 }, { x: 50, y: 65 }],
+    'south-west': [{ x: 40, y: 60 }, { x: 35, y: 65 }],
+    west: [{ x: 40, y: 50 }, { x: 35, y: 50 }],
+  }
+  assert.deepEqual(Object.keys(pointers), [...MOBILE_UI_RESIZE_HANDLES])
+  for (const handle of MOBILE_UI_RESIZE_HANDLES) {
+    const [start, current] = pointers[handle]
+    const resized = mobileUiResizeTransform(initial, size, page, handle, start, current)
+    const frame = mobileUiElementSnapRect(resized, size, page)
+    if (handle.includes('north')) assert.equal(frame.bottom, 60, handle)
+    if (handle.includes('south')) assert.equal(frame.top, 40, handle)
+    if (handle.includes('west')) assert.equal(frame.right, 60, handle)
+    if (handle.includes('east')) assert.equal(frame.left, 40, handle)
+  }
+
+  const eastStart = { x: 50, y: 40 }
+  const eastCurrent = { x: 65, y: 40 }
+  const raw = mobileUiResizeTransform(
+    { rotation: 0, scale: 1, x: 40, y: 40 },
+    size,
+    page,
+    'east',
+    eastStart,
+    eastCurrent,
+  )
+  assert.deepEqual(raw, { rotation: 0, scale: 1.75, x: 47.5, y: 40 })
+  assert.deepEqual(mobileUiResizeTransform(
+    { rotation: 0, scale: 1, x: 20, y: 40 },
+    size,
+    { height: 100, width: 200 },
+    'east',
+    eastStart,
+    eastCurrent,
+  ), { rotation: 0, scale: 1.75, x: 23.75, y: 40 })
+  assert.deepEqual(mobileUiResizeTransform(
+    { rotation: 0, scale: 1, x: 90, y: 50 },
+    size,
+    page,
+    'east',
+    { x: 100, y: 50 },
+    { x: 120, y: 50 },
+  ), { rotation: 0, scale: 1, x: 90, y: 50 })
+  const snapped = snapMobileUiResize(
+    { rotation: 0, scale: 1, x: 40, y: 40 },
+    size,
+    page,
+    'east',
+    eastStart,
+    eastCurrent,
+  )
+  assert.deepEqual(snapped.transform, { rotation: 0, scale: 1.7, x: 47, y: 40 })
+  assert.deepEqual(snapped.guides, [{ axis: 'x', kind: 'grid', position: 64 }])
+  assert.equal(mobileUiElementSnapRect(snapped.transform, size, page).right, 64)
+})
+
+for (const page of [{ width: 896, height: 414 }, { width: 667, height: 375 }]) {
+  for (const uiScale of [0.75, 1, 1.25, 1.5]) {
+    const geometry = defaultMobileUiGeometry(page.width, page.height, uiScale)
+    for (const id of MOBILE_UI_ELEMENT_IDS) {
+      test(`${id} has accurate grid anchors and resize guides at ${page.width}x${page.height}, UI ${uiScale}`, () => {
+        const size = geometry.sizes[id]
+        for (const rotation of [0, 30, 90, -45]) {
+          const initial = { x: 50, y: 50, rotation, scale: 1 }
+          const frame = mobileUiElementSnapRect(initial, size, page)
+          const extent = { x: (frame.right - frame.left) / 2, y: (frame.bottom - frame.top) / 2 }
+          for (const anchor of [-1, 0, 1]) {
+            const target = {
+              x: Math.round((page.width / 2 + anchor * extent.x) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+              y: Math.round((page.height / 2 + anchor * extent.y) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+            }
+            const moved = snapMobileUiMove({
+              ...initial,
+              x: (target.x - anchor * extent.x) / page.width * 100,
+              y: (target.y - anchor * extent.y) / page.height * 100,
+            }, size, page)
+            const actual = mobileUiElementSnapRect(moved.transform, size, page)
+            near(actual.centerX + anchor * extent.x, target.x)
+            near(actual.centerY + anchor * extent.y, target.y)
+            assert.equal(moved.guides.length, 2)
+            for (const guide of moved.guides) {
+              const positions = guide.axis === 'x'
+                ? [actual.left, actual.centerX, actual.right]
+                : [actual.top, actual.centerY, actual.bottom]
+              assert.ok(positions.some(position => Math.abs(position - guide.position) < 1e-6))
+              if (guide.kind === 'grid') near(guide.position % MOBILE_UI_GRID_SIZE, 0)
+              else {
+                const dimension = guide.axis === 'x' ? page.width : page.height
+                assert.ok([0, dimension / 2, dimension].includes(guide.position))
+              }
+            }
+          }
+
+          for (const handle of MOBILE_UI_RESIZE_HANDLES) {
+            const direction = {
+              x: handle.includes('west') ? -1 : handle.includes('east') ? 1 : 0,
+              y: handle.includes('north') ? -1 : handle.includes('south') ? 1 : 0,
+            }
+            const radians = rotation * Math.PI / 180
+            const unit = {
+              x: direction.x * size.width / 2 * Math.cos(radians) - direction.y * size.height / 2 * Math.sin(radians),
+              y: direction.x * size.width / 2 * Math.sin(radians) + direction.y * size.height / 2 * Math.cos(radians),
+            }
+            const target = {
+              x: Math.round((page.width / 2 + unit.x * 1.05) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+              y: Math.round((page.height / 2 + unit.y * 1.05) / MOBILE_UI_GRID_SIZE) * MOBILE_UI_GRID_SIZE,
+            }
+            const start = {
+              ...initial,
+              x: (target.x - unit.x * 1.1) / page.width * 100,
+              y: (target.y - unit.y * 1.1) / page.height * 100,
+            }
+            const startPointer = gridTestHandlePoint(start, size, page, direction)
+            const opposite = gridTestHandlePoint(start, size, page, { x: -direction.x, y: -direction.y })
+            const resized = snapMobileUiResize(start, size, page, handle, startPointer, target)
+            const active = gridTestHandlePoint(resized.transform, size, page, direction)
+            const fixed = gridTestHandlePoint(resized.transform, size, page, { x: -direction.x, y: -direction.y })
+            near(active.x, target.x)
+            near(active.y, target.y)
+            near(fixed.x, opposite.x)
+            near(fixed.y, opposite.y)
+            assert.ok(resized.guides.length > 0, `${id} ${handle} ${rotation}`)
+            for (const guide of resized.guides) near(active[guide.axis], guide.position)
+          }
+        }
+      })
+    }
+  }
+}
+
+function gridTestHandlePoint(
+  transform: MobileUiElementTransform,
+  size: MobileUiSize,
+  page: MobileUiSize,
+  direction: MobileUiPoint,
+): MobileUiPoint {
+  const radians = transform.rotation * Math.PI / 180
+  const x = direction.x * size.width * transform.scale / 2
+  const y = direction.y * size.height * transform.scale / 2
+  return {
+    x: transform.x / 100 * page.width + x * Math.cos(radians) - y * Math.sin(radians),
+    y: transform.y / 100 * page.height + x * Math.sin(radians) + y * Math.cos(radians),
+  }
+}
+
+function near(actual: number, expected: number): void {
+  assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} should equal ${expected}`)
+}
+
+test('pinch resizing snaps scaled bounds while unsnapped gesture and page zoom math stay independent', () => {
+  const page = { height: 100, width: 100 }
+  const size = { height: 20, width: 20 }
+  const raw = { rotation: 0, scale: 1.45, x: 50, y: 50 }
+  const snapped = snapMobileUiScale(raw, size, page)
+  assert.deepEqual(snapped.transform, { rotation: 0, scale: 1.4, x: 50, y: 50 })
+  assert.deepEqual(snapped.guides, [
+    { axis: 'x', kind: 'grid', position: 64 },
+    { axis: 'y', kind: 'grid', position: 64 },
+  ])
+  assert.equal(constrainMobileUiTransform(raw, size, page).scale, 1.45)
+
+  assert.equal(mobileUiElementPinchScale(1, 100, 180), 1.8)
+  assert.equal(mobileUiElementPinchScale(2.8, 100, 180), MOBILE_UI_SCALE_MAX)
+  assert.equal(mobileUiElementPinchScale(0.5, 100, 20), MOBILE_UI_SCALE_MIN)
+  assert.equal(mobileUiElementRotation(170, 0, Math.PI / 6, false), -160)
+  assert.equal(mobileUiElementRotation(0, 0, Math.PI / 13, true), 15)
+  assert.equal(mobileUiPagePinchZoom(1, 100, 250), 2.5)
+  assert.equal(mobileUiPagePinchZoom(3, 100, 250), MOBILE_UI_PAGE_ZOOM_MAX)
+  assert.equal(mobileUiPagePinchZoom(0.5, 100, 20), MOBILE_UI_PAGE_ZOOM_MIN)
+
+  const constrained = constrainMobileUiTransform(
+    { rotation: 45, scale: 3, x: -20, y: 140 },
+    { height: 100, width: 100 },
+    { height: 414, width: 896 },
+  )
+  assert.ok(constrained.x >= 0 && constrained.x <= 100)
+  assert.ok(constrained.y >= 0 && constrained.y <= 100)
+  const style = mobileUiElementStyle({
+    customized: true,
+    layout: mobileUiLayoutWith(DEFAULT_MOBILE_UI_LAYOUT, 'pause', {
+      rotation: 25,
+      scale: 1.25,
+      x: 40,
+      y: 30,
+    }),
+  }, 'pause') as Record<string, string | number>
+  assert.deepEqual(style, {
+    '--mobile-ui-rotation': '25deg',
+    '--mobile-ui-scale': 1.25,
+    '--mobile-ui-x': '40%',
+    '--mobile-ui-y': '30%',
+  })
+  assert.equal(mobileUiElementStyle({ customized: false, layout: DEFAULT_MOBILE_UI_LAYOUT }, 'pause'), undefined)
+})

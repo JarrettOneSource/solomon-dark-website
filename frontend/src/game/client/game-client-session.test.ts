@@ -1,0 +1,2777 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+
+import {
+  armGameSimulationCollegeIntro,
+  confirmGameSimulationLoadout,
+  createGameSimulation,
+  enterBoneyardWorld,
+  getPlayerEconomy,
+  getPlayerCharacter,
+  mergeGameSimulationPlayersIntoHub,
+  grantGameSimulationPlayerExperience,
+  stepGameSimulationTick,
+} from '../core-server/game-simulation.ts'
+import {
+  createPlayerCharacter,
+  type PlayerCharacterInput,
+} from '../core-kernels/player-character.ts'
+import { createHubCollegeIntroParticipantState } from '../core-kernels/hub-regions.ts'
+import { createNativeRng } from '../core-kernels/native-rng.ts'
+import { createHubSkorchaAtVariant } from '../core-server/hub-skorcha.ts'
+import { createGameSnapshot } from '../host/game-snapshot.ts'
+import { createHostFlamePresentationHistory } from '../host/flame-presentation-history.ts'
+import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
+import {
+  createGameSnapshotFrame,
+  createReplicatedEntityBaseline,
+} from '../protocol/entity-replication.ts'
+import {
+  EMPTY_CONTENT_MANIFEST_SHA256,
+  GAME_PROTOCOL_VERSION,
+} from '../protocol/game-protocol-contract.ts'
+import {
+  decodeClientGameMessage,
+  encodeGameMessage,
+} from '../protocol/game-protocol.ts'
+import type {
+  GameChatMessage,
+  GameChatRejection,
+} from '../protocol/game-chat.ts'
+import type {
+  LoadedBoneyard,
+} from '../core-kernels/boneyard.ts'
+import { PlayerCardRequests } from '../player-card-request.ts'
+import { connectGameClientSession } from './game-client-session.ts'
+import { connectGameObserverSession } from './game-observer-session.ts'
+import type { GameConnectionFailure } from './game-connection-failure.ts'
+import { createGameClientDiagnostics } from './game-diagnostics.ts'
+import { predictPlayerCharacterInHub } from './hub-prediction.ts'
+import type { GameTransport, GameTransportClose } from './game-transport.ts'
+import type { GameSaveCheckpoint } from '../save/game-save-contract.ts'
+import { GameSaveCheckpointSender, SAVE_CHECKPOINT_STREAM_THRESHOLD } from '../protocol/game-save-checkpoint-transfer.ts'
+import { GAME_STRING_CHUNK_CHARACTERS, GameStringSender, type GameStringChunk } from '../protocol/game-string-transfer.ts'
+import type { ServerSaveCheckpointChunkMessage, ServerSaveCheckpointMessage, ServerWelcomeMessage } from '../protocol/game-server-messages.ts'
+
+const CHARACTER = {
+  discipline: 'arcane',
+  displayName: 'Helvidius',
+  element: 'ether',
+} as const
+
+const NULL_PROFILE = {
+  accountUsername: null,
+  highestWave: null,
+  totalPlaytimeMs: null,
+}
+const PLAYER_REFERENCE_1 = `player-ref-${'a'.repeat(32)}`
+const PLAYER_REFERENCE_2 = `player-ref-${'b'.repeat(32)}`
+const PLAYER_REFERENCE_3 = `player-ref-${'c'.repeat(32)}`
+const AURELIA_CHAT_SENDER = {
+  displayName: 'Aurelia',
+  playerId: 'player-2',
+  playerReference: PLAYER_REFERENCE_2,
+} as const
+
+function gameplayInput(
+  movement: { x: number; y: number },
+  aim: { x: number; y: number } | null = null,
+  primary = false,
+  quickbar: number | null = null,
+): PlayerCharacterInput {
+  return {
+    aim,
+    cast: { primary, quickbar },
+    movement,
+    viewportHeight: 900,
+    viewportWidth: 1_600,
+  }
+}
+
+function loadedBoneyardFixture(runId: string): LoadedBoneyard {
+  return {
+    choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+    geometrySha256: '2'.repeat(64),
+    runId,
+    scene: {
+      bounds: { h: 1_200, w: 1_600, x: 0, y: 0 },
+      environmentMode: 2,
+      fences: [],
+      name: 'Lifecycle Arena',
+      objects: [],
+      roads: [],
+      solomonDig: null,
+      spawn: { facingDeg: 180, x: 200, y: 150 },
+      sprites: [],
+      terrain: [],
+    },
+    seed: '0123456789abcdef',
+    sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
+  }
+}
+
+test('client carries character config, publishes authority, and tears down', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    saveDocument: '{"schemaVersion":1}',
+    transport,
+  })
+  assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
+    type: 'client-hello',
+    enhancedEffects: true,
+    beginCollegeIntro: false,
+    onlinePreferences: {
+      activityMessages: true,
+      globalChat: true,
+      submitRuns: true,
+    },
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    credential: 'spawn-secret',
+    character: CHARACTER,
+    save: '{"schemaVersion":1}',
+    saveIntent: 'resume',
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    cheatsEnabled: false,
+    developerAccess: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    sessionKind: 'standalone',
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
+  }))
+  const session = await connecting
+  assert.equal(session.isHost, true)
+  assert.equal(session.sessionKind, 'standalone')
+  session.readyCollegeIntro()
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-ready-college-intro',
+  })
+  session.readyBoneyard('run-ready')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    runId: 'run-ready',
+    type: 'client-ready-boneyard',
+  })
+  session.setCheatsEnabled(true)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-cheat-mode',
+    enabled: true,
+  })
+  let leaderboardReceipt: string | null = null
+  session.onLeaderboardReceipt((receipt) => { leaderboardReceipt = receipt })
+  transport.receive(encodeGameMessage({
+    type: 'server-leaderboard-receipt',
+    receipt: 'payload.signature',
+  }))
+  assert.equal(leaderboardReceipt, 'payload.signature')
+  assert.equal(session.boneyards[0].id, 'default-random')
+  assert.equal(session.getSaveCheckpoint(), null)
+  assert.equal(session.getPartyState(), null)
+  let receivedPartyRevision = 0
+  session.onPartyState((party) => { receivedPartyRevision = party.revision })
+  transport.receive(encodeGameMessage({
+    type: 'server-party-state',
+    state: {
+      hubPlayers: [
+        { ...NULL_PROFILE, displayName: 'Helvidius', playerId: 'player-1' },
+        { ...NULL_PROFILE, displayName: 'Aurelia', playerId: 'player-2' },
+      ],
+      invitations: [{
+        id: 'invite-1',
+        inviter: { ...NULL_PROFILE, displayName: 'Aurelia', playerId: 'player-2' },
+        partyId: 'party-2',
+      }],
+      joinRequests: [],
+      party: {
+        enhancedEffects: true,
+        id: 'party-1',
+        joinCode: 'ABCD-2345',
+        leaderPlayerId: 'player-1',
+        listingId: 'listing-1',
+        memberPlayerIds: ['player-1'],
+        visibility: 'private',
+      },
+      partyRoster: [{
+        connected: true,
+        currentHealth: 50,
+        displayName: 'Helvidius',
+        element: 'ether',
+        lifeState: 'alive',
+        maximumHealth: 50,
+        playerId: 'player-1',
+      }],
+      revision: 3,
+    },
+  }))
+  assert.equal(receivedPartyRevision, 3)
+  assert.equal(session.getPartyState()?.party.id, 'party-1')
+  session.inviteToParty('player-2')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-invite',
+    targetPlayerId: 'player-2',
+  })
+  session.acceptPartyInvitation('invite-1')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-accept',
+    invitationId: 'invite-1',
+  })
+  session.denyPartyInvitation('invite-1')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-deny',
+    invitationId: 'invite-1',
+  })
+  session.setPartyVisibility('public')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-party-settings',
+    visibility: 'public',
+  })
+  session.rotatePartyCode()
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-party-rotate-code')
+  session.acceptPartyJoinRequest('request-1')
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-party-request-accept')
+  session.denyPartyJoinRequest('request-2')
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-party-request-deny')
+  let partyAction: string | null = null
+  session.onPartyAction(result => { partyAction = `${result.action}:${result.reason}` })
+  transport.receive(encodeGameMessage({
+    type: 'server-party-action',
+    action: 'kick',
+    ok: false,
+    reason: 'not-leader',
+  }))
+  assert.equal(partyAction, 'kick:not-leader')
+  assert.equal(session.cheatsEnabled, false)
+  let projectedCheats = false
+  session.onCheatMode(enabled => { projectedCheats = enabled })
+  transport.receive(encodeGameMessage({ type: 'server-cheat-mode', enabled: true }))
+  assert.equal(projectedCheats, true)
+  assert.equal(session.cheatsEnabled, true)
+  const collegeInvitation = {
+    expiresAtUnixMs: 1_800_000_000_000,
+    id: 'college-invite-a',
+    inviter: AURELIA_CHAT_SENDER,
+    joinCode: 'ABCD-EFGH',
+  } as const
+  let invitationCount = 0
+  session.onCollegeInvitations(invitations => { invitationCount = invitations.length })
+  transport.receive(encodeGameMessage({
+    type: 'server-college-invitations',
+    invitations: [collegeInvitation],
+  }))
+  assert.equal(invitationCount, 1)
+  assert.deepEqual(session.getCollegeInvitations(), [collegeInvitation])
+  session.dismissCollegeInvitation(collegeInvitation.id)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-college-invitation-dismiss',
+    invitationId: collegeInvitation.id,
+  })
+  session.inviteToCollege(PLAYER_REFERENCE_2)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-college-invite',
+    playerReference: PLAYER_REFERENCE_2,
+  })
+  const pendingCard = session.resolvePlayerCard(PLAYER_REFERENCE_2)
+  const cardRequest = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(cardRequest.type, 'client-player-card-request')
+  if (cardRequest.type !== 'client-player-card-request') throw new Error('expected card request')
+  const cardProfile = {
+    accountUsername: 'aurelia',
+    activity: 'hub',
+    discipline: 'mind',
+    displayName: 'Aurelia',
+    element: 'air',
+    gold: 900,
+    highestWave: 12,
+    playerReference: PLAYER_REFERENCE_2,
+    sessionKind: 'private-college',
+    totalPlaytimeMs: 120_000,
+  } as const
+  transport.receive(encodeGameMessage({
+    type: 'server-player-card',
+    profile: cardProfile,
+    requestId: cardRequest.requestId,
+  }))
+  assert.deepEqual(await pendingCard, cardProfile)
+  const receivedChat: GameChatMessage[] = []
+  const rejectedChat: GameChatRejection[] = []
+  session.onChatMessage(message => receivedChat.push(message))
+  session.onChatRejected(rejection => rejectedChat.push(rejection))
+  session.sendChatMessage('party', '  Meet by the fountain.  ')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-chat',
+    channel: 'party',
+    text: 'Meet by the fountain.',
+  })
+  assert.throws(() => session.sendChatMessage('party', ' \n '), /cannot be empty/)
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: AURELIA_CHAT_SENDER,
+    sequence: 12,
+    text: 'On my way.',
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: AURELIA_CHAT_SENDER,
+    sequence: 12,
+    text: 'Duplicate transport event.',
+  }))
+  assert.deepEqual(receivedChat, [{
+    channel: 'party',
+    sender: AURELIA_CHAT_SENDER,
+    sequence: 12,
+    text: 'On my way.',
+  }])
+  assert.deepEqual(session.getChatMessages(), receivedChat)
+  session.setOnlinePreferences({
+    activityMessages: false,
+    globalChat: false,
+    submitRuns: false,
+  })
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-online-preferences',
+    onlinePreferences: {
+      activityMessages: false,
+      globalChat: false,
+      submitRuns: false,
+    },
+  })
+  assert.throws(
+    () => session.sendChatMessage('global', 'This lane is disabled.'),
+    /Global chat is disabled/,
+  )
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'global',
+    sender: AURELIA_CHAT_SENDER,
+    sequence: 13,
+    text: 'Filtered Global text.',
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    activity: 'left-game',
+    channel: 'global',
+    sender: AURELIA_CHAT_SENDER,
+    sequence: 14,
+    text: 'Aurelia has left the game.',
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'boneyard',
+    sender: {
+      displayName: 'Basil',
+      playerId: 'player-3',
+      playerReference: PLAYER_REFERENCE_3,
+    },
+    sequence: 15,
+    text: 'Run lane remains live.',
+  }))
+  assert.deepEqual(receivedChat.map(({ channel, text }) => [channel, text]), [
+    ['party', 'On my way.'],
+    ['boneyard', 'Run lane remains live.'],
+  ])
+  let suppressedReceipt = false
+  session.onLeaderboardReceipt(() => { suppressedReceipt = true })
+  transport.receive(encodeGameMessage({
+    type: 'server-leaderboard-receipt',
+    receipt: 'suppressed.signature',
+  }))
+  assert.equal(suppressedReceipt, false)
+  transport.receive(encodeGameMessage({
+    type: 'server-chat-rejected',
+    channel: 'party',
+    reason: 'rate-limited',
+    retryAfterMs: 2_000,
+  }))
+  assert.deepEqual(rejectedChat, [{
+    channel: 'party',
+    reason: 'rate-limited',
+    retryAfterMs: 2_000,
+  }])
+  const receivedCheckpoints: GameSaveCheckpoint[] = []
+  const removeCheckpoint = session.onSaveCheckpoint((checkpoint) => {
+    receivedCheckpoints.push(checkpoint)
+  })
+  transport.receive(encodeGameMessage({
+    type: 'server-save-checkpoint',
+    save: '{"schemaVersion":1,"checkpoint":true}',
+    reason: 'progress',
+    sequence: 1,
+  }))
+  const receivedCheckpoint = receivedCheckpoints[0]!
+  assert.deepEqual(receivedCheckpoint, {
+    document: '{"schemaVersion":1,"checkpoint":true}',
+    reason: 'progress',
+    sequence: 1,
+    streamId: receivedCheckpoint.streamId,
+  })
+  assert.ok(receivedCheckpoint.streamId > 0)
+  assert.deepEqual(session.getSaveCheckpoint(), receivedCheckpoint)
+  removeCheckpoint()
+  const stockItemId = session.getSnapshot().players[session.playerId].economy.fomentiusStock[0]!.id
+  session.sendHubAction({ type: 'buy-fomentius', itemId: stockItemId })
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-hub-action',
+    action: { type: 'buy-fomentius', itemId: stockItemId },
+  })
+  session.bindSkillQuickbar(11, 7)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-skill-quickbar-bind',
+    skillId: 11,
+    slot: 7,
+  })
+  session.bindSkillQuickbar(null, 7)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-skill-quickbar-bind',
+    skillId: null,
+    slot: 7,
+  })
+  session.selectPrimarySkill(8)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-primary-skill',
+    skillId: 8,
+  })
+  assert.throws(() => session.bindSkillQuickbar(16, 1), /unavailable/)
+  assert.throws(() => session.selectConcentration(57), /unavailable/)
+  session.startMatch('default-random')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })
+  let receivedRunId: string | null = null
+  session.onBoneyard((boneyard) => { receivedRunId = boneyard.runId })
+  transport.receive(encodeGameMessage({
+    type: 'server-boneyard-loaded',
+    boneyard: {
+      choice: { id: 'default-random', name: 'Random Boneyard', source: 'default' },
+      runId: 'run-one',
+      seed: '0123456789abcdef',
+      sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
+      geometrySha256: '2'.repeat(64),
+      scene: {
+        name: 'Random Level',
+        environmentMode: 2,
+        bounds: { x: 0, y: 0, w: 1600, h: 1200 },
+        spawn: { x: 200, y: 150, facingDeg: 180 },
+        objects: [],
+        sprites: [],
+        roads: [],
+        fences: [],
+        terrain: [],
+        solomonDig: {
+          gravePosition: { x: 190, y: 277 },
+          lanternPosition: { x: 135, y: 350 },
+          position: { x: 200, y: 390 },
+          frameProgram: [0, 3, 17, 3],
+          ticksPerFrame: 5,
+        },
+      },
+    },
+  }))
+  assert.equal(session.getBoneyard()?.runId, 'run-one')
+  assert.equal(receivedRunId, 'run-one')
+  const origin = session.getSnapshot().players['player-1'].position
+  assert.deepEqual(session.getSnapshot().players['player-1'].config, CHARACTER)
+  let presented = session.getSnapshot()
+  session.onSnapshot((snapshot) => { presented = snapshot })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  const firstInput = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(firstInput.type, 'client-input')
+  session.sendInput(gameplayInput({ x: 0, y: 1 }))
+  const replacementInput = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(replacementInput.type, 'client-input')
+  assert.equal(
+    replacementInput.targetTick,
+    firstInput.type === 'client-input' ? firstInput.targetTick : -1,
+  )
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 0)
+  assert.deepEqual(presented.players['player-1'].position, origin)
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 2)
+  assert.deepEqual(presented.players['player-1'].position, origin)
+
+  const loadedBoneyard = session.getBoneyard()
+  assert.ok(loadedBoneyard)
+  receiveSnapshot(
+    transport,
+    createGameSnapshot(
+      enterBoneyardWorld(serverState, loadedBoneyard),
+      'player-1',
+    ),
+    2,
+  )
+  assert.equal(session.getSnapshot().world.kind, 'boneyard')
+  assert.equal(session.samplePresentation().world.kind, 'hub')
+  assert.equal(session.sampleBoneyardPresentation().world.kind, 'boneyard')
+
+  const chatCountBeforeDestroy = receivedChat.length
+  session.destroy()
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
+  assert.equal(transport.readyState, 'closed')
+  assert.deepEqual(session.getChatMessages(), [])
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: AURELIA_CHAT_SENDER,
+    sequence: 13,
+    text: 'After teardown.',
+  }))
+  assert.equal(receivedChat.length, chatCountBeforeDestroy)
+})
+
+test('client carries the fresh Tutorial-decline admission intent', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    credential: 'fresh-secret',
+    declineTutorial: true,
+    profile: NULL_PROFILE,
+    transport,
+  })
+  assert.deepEqual(decodeClientGameMessage(transport.sent[0]), {
+    type: 'client-hello',
+    enhancedEffects: true,
+    beginCollegeIntro: false,
+    character: CHARACTER,
+    cheatsEnabled: false,
+    credential: 'fresh-secret',
+    declineTutorial: true,
+    onlinePreferences: {
+      activityMessages: true,
+      globalChat: true,
+      submitRuns: true,
+    },
+    profile: NULL_PROFILE,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    cheatsEnabled: false,
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    developerAccess: false,
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    kernelParameters: kernelParameters(),
+    modAssets: [],
+    modCatalog: [],
+    playerId: 'player-1',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    sessionKind: 'standalone',
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotRate: 20,
+    snapshotSequence: 1,
+  }))
+  const session = await connecting
+  session.destroy()
+})
+
+test('client publishes Hub activity locally but reserves gameplay pause for Boneyard', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  context.after(() => session.destroy())
+  assert.equal(session.getGameplayPause(), null)
+
+  const messageCountBeforeHubPause = transport.sent.length
+  for (const source of [
+    'pause-menu',
+    'inventory',
+    'skill-book',
+    'skill-selector',
+  ] as const) session.requestGameplayPause(source)
+  assert.equal(transport.sent.length, messageCountBeforeHubPause)
+
+  session.setHubActivity('paused')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    activity: 'paused',
+    type: 'client-hub-activity',
+  })
+  const pausedActivityCount = transport.sent.length
+  session.setHubActivity('paused')
+  assert.equal(transport.sent.length, pausedActivityCount)
+  session.setHubActivity('occupied')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    activity: 'occupied',
+    type: 'client-hub-activity',
+  })
+  session.setHubActivity(null)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    activity: null,
+    type: 'client-hub-activity',
+  })
+
+  const boneyardSnapshot = createGameSnapshot(
+    enterBoneyardWorld(
+      createGameSimulation({ 'player-1': CHARACTER }),
+      loadedBoneyardFixture('pause-client'),
+    ),
+    'player-1',
+  )
+  receiveSnapshot(transport, boneyardSnapshot, 0)
+
+  session.requestGameplayPause('inventory')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-gameplay-pause',
+    paused: true,
+    source: 'inventory',
+  })
+  const received: Array<ReturnType<typeof session.getGameplayPause>> = []
+  const removePause = session.onGameplayPause((pause) => received.push(pause))
+  const pause = {
+    ownerDisplayName: CHARACTER.displayName,
+    ownerPlayerId: session.playerId,
+    source: 'inventory' as const,
+  }
+  transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause }))
+  assert.deepEqual(session.getGameplayPause(), pause)
+  assert.deepEqual(received, [pause])
+  await assert.rejects(session.executeLua('return 1'), /paused/)
+
+  const messageCount = transport.sent.length
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 100, y: 100 }, true, 2))
+  assert.equal(transport.sent.length, messageCount)
+
+  transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause: null }))
+  assert.equal(session.getGameplayPause(), null)
+  assert.deepEqual(received, [pause, null])
+
+  const receivedGrace: Array<ReturnType<typeof session.getGameplayResumeGrace>> = []
+  const removeGrace = session.onGameplayResumeGrace(grace => receivedGrace.push(grace))
+  const pendingGrace = {
+    reason: 'game-rejoined' as const,
+    remainingMs: null,
+    sequence: 7,
+  }
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: pendingGrace,
+  }))
+  assert.deepEqual(session.getGameplayResumeGrace(), pendingGrace)
+  session.readyResumeGrace()
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-resume-grace-ready',
+    sequence: 7,
+  })
+  const heldMessageCount = transport.sent.length
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  assert.equal(transport.sent.length, heldMessageCount)
+
+  const countingGrace = { ...pendingGrace, remainingMs: 2_000 }
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: countingGrace,
+  }))
+  session.readyResumeGrace()
+  assert.equal(transport.sent.length, heldMessageCount)
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: null,
+  }))
+  assert.deepEqual(receivedGrace, [pendingGrace, countingGrace, null])
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-input')
+
+  const beforeOutsideActivity = transport.sent.length
+  session.setHubActivity('occupied')
+  assert.equal(transport.sent.length, beforeOutsideActivity)
+
+  removePause()
+  removeGrace()
+})
+
+test('client replaces only its own modal pause source and emits a strict release', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  context.after(() => session.destroy())
+  receiveSnapshot(
+    transport,
+    createGameSnapshot(
+      enterBoneyardWorld(
+        createGameSimulation({ 'player-1': CHARACTER }),
+        loadedBoneyardFixture('pause-replacement'),
+      ),
+      'player-1',
+    ),
+    0,
+  )
+  const inventoryPause = {
+    ownerDisplayName: CHARACTER.displayName,
+    ownerPlayerId: session.playerId,
+    source: 'inventory' as const,
+  }
+  transport.receive(encodeGameMessage({ type: 'server-gameplay-pause', pause: inventoryPause }))
+
+  session.requestGameplayPause('skill-book')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    paused: true,
+    source: 'skill-book',
+    type: 'client-gameplay-pause',
+  })
+  session.requestGameplayPause('skill-selector')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    paused: true,
+    source: 'skill-selector',
+    type: 'client-gameplay-pause',
+  })
+  // A peer joining an already-paused Boneyard can start readiness while the
+  // original owner still needs to release the pause through RESUME GAME.
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-resume-grace',
+    grace: { reason: 'game-rejoined', remainingMs: null, sequence: 9 },
+  }))
+  const duringGrace = transport.sent.length
+  session.requestGameplayPause('pause-menu')
+  assert.equal(transport.sent.length, duringGrace)
+  session.requestGameplayPause(null)
+  assert.equal(transport.sent.length, duringGrace + 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    paused: false,
+    type: 'client-gameplay-pause',
+  })
+
+  transport.receive(encodeGameMessage({
+    type: 'server-gameplay-pause',
+    pause: { ...inventoryPause, ownerPlayerId: 'player-2' },
+  }))
+  const messageCount = transport.sent.length
+  session.requestGameplayPause('skill-book')
+  session.requestGameplayPause(null)
+  assert.equal(transport.sent.length, messageCount)
+})
+
+test('client correlates bounded host Lua results and rejects guest or retired execution', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  const execution = session.executeLua('print("hello"); return 42')
+  const request = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(request.type, 'client-lua-execute')
+  if (request.type !== 'client-lua-execute') assert.fail('expected Lua request')
+  transport.receive(encodeGameMessage({
+    type: 'server-lua-result',
+    error: null,
+    ok: true,
+    output: ['hello'],
+    requestId: request.requestId,
+    values: [42],
+  }))
+  assert.deepEqual(await execution, {
+    error: null,
+    ok: true,
+    output: ['hello'],
+    values: [42],
+  })
+
+  const pending = session.executeLua('return 1')
+  session.destroy()
+  await assert.rejects(pending, /destroyed/)
+
+  const guestTransport = new MemoryTransport()
+  const guestConnecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport: guestTransport,
+  })
+  const guestState = createGameSimulation({
+    'player-1': CHARACTER,
+    'player-2': { ...CHARACTER, displayName: 'Authority' },
+  })
+  guestTransport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    cheatsEnabled: false,
+    developerAccess: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    sessionKind: 'standalone',
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    snapshot: createGameSnapshot(guestState, 'player-2'),
+    snapshotSequence: 1,
+  }))
+  const guest = await guestConnecting
+  await assert.rejects(guest.executeLua('return 1'), /session host/)
+  guest.destroy()
+})
+
+test('client logs and explains an unexpected transport disconnect', async () => {
+  const diagnostics = createGameClientDiagnostics({ writeToConsole: false })
+  const transport = new MemoryTransport()
+  let fatal: GameConnectionFailure | undefined
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    diagnostics,
+    onFatal: (failure) => { fatal = failure },
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  await connecting
+
+  transport.disconnect({ code: 1006, reason: '', wasClean: false })
+
+  assert.equal(fatal?.code, 'connection-lost')
+  assert.match(fatal?.message ?? '', /network connection.*server/i)
+  const report = diagnostics.createReport(fatal ?? null, {
+    online: true,
+    pageUrl: 'https://solomondarker.com/game',
+    sessionId: null,
+    userAgent: 'Contract Browser',
+  })
+  const logged = report.entries.find((entry) => entry.event === 'connection.failed')
+  assert.equal(logged?.level, 'error')
+  assert.match(logged?.detail ?? '', /1006/)
+})
+
+test('client samples only its current Boneyard delivered position history', async (context) => {
+  let nowMs = 0
+  let failure: GameConnectionFailure | null = null
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport, now: () => nowMs, onFatal: (value) => { failure = value } })
+  const hubState = createGameSimulation({ 'player-1': CHARACTER })
+  receiveWelcome(transport, createGameSnapshot(hubState, 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const samplePosition = session.sampleBoneyardPlayerPositionAtTick
+  const sampleActors = session.sampleBoneyardSceneryActorPosesAtTick
+  assert.equal(samplePosition(100, session.playerId), null)
+  assert.equal(sampleActors(100), null)
+
+  const activeState = enterBoneyardWorld(hubState, loadedBoneyardFixture('position-history-1'))
+  const first = createGameSnapshot({ ...activeState, tick: 100 }, session.playerId)
+  first.players[session.playerId].position = { x: 10, y: -20 }
+  receiveSnapshot(transport, first, 0)
+  assert.deepEqual(samplePosition(100, session.playerId), { x: 10, y: -20 })
+  assert.deepEqual(sampleActors(100)?.players, [{ id: session.playerId, position: { x: 10, y: -20 } }])
+  assert.equal(samplePosition(101, session.playerId), null)
+  assert.equal(samplePosition(100, 'missing-player'), null)
+
+  nowMs = 50
+  const second = { ...first, tick: 105, players: { ...first.players,
+    [session.playerId]: { ...first.players[session.playerId], position: { x: 30, y: 40 } } } }
+  receiveSnapshot(transport, second, 0)
+  const beforeSampling = session.sampleBoneyardPresentation(75)
+  assert.deepEqual(samplePosition(102.5, session.playerId), { x: 20, y: 10 })
+  assert.deepEqual(sampleActors(102.5)?.players[0]?.position, { x: 20, y: 10 })
+  assert.deepEqual(samplePosition(105, session.playerId), { x: 30, y: 40 })
+  assert.equal(samplePosition(99, session.playerId), null)
+  assert.deepEqual(session.sampleBoneyardPresentation(75), beforeSampling)
+
+  nowMs = 100
+  const terminal = { ...second, tick: 110, players: { ...second.players,
+    [session.playerId]: { ...second.players[session.playerId], position: { x: 50, y: 100 } } },
+    run: { ...second.run, phase: 'game-over' as const, gameOverEventId: 1,
+      nextGameOverEventId: 2, gameOverTicks: 5 } }
+  receiveSnapshot(transport, terminal, 0)
+  assert.equal(failure, null)
+  assert.equal(session.getSnapshot().tick, 110)
+  assert.deepEqual(samplePosition(107.5, session.playerId), { x: 40, y: 70 })
+  assert.deepEqual(sampleActors(107.5)?.players[0]?.position, { x: 40, y: 70 })
+
+  nowMs = 150
+  const nextRun = createGameSnapshot({ ...enterBoneyardWorld(hubState,
+    loadedBoneyardFixture('position-history-2')), tick: 115 }, session.playerId)
+  receiveSnapshot(transport, nextRun, 0)
+  assert.equal(samplePosition(110, session.playerId), null)
+  assert.equal(sampleActors(110), null)
+  assert.deepEqual(samplePosition(115, session.playerId), nextRun.players[session.playerId].position)
+
+  nowMs = 200
+  receiveSnapshot(transport, createGameSnapshot({ ...hubState, tick: 120 }, session.playerId), 0)
+  assert.equal(samplePosition(115, session.playerId), null)
+  assert.equal(sampleActors(115), null)
+
+  nowMs = 250
+  receiveSnapshot(transport, { ...nextRun, tick: 125 }, 0)
+  assert.equal(samplePosition(115, session.playerId), null)
+  assert.deepEqual(samplePosition(125, session.playerId), nextRun.players[session.playerId].position)
+  session.destroy()
+  assert.equal(samplePosition(125, session.playerId), null)
+  assert.equal(sampleActors(125), null)
+})
+
+test('retained mixed Create confirmation waits for authoritative readiness and rejects duplicate dispatch', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const created = createGameSimulation({ 'player-1': CHARACTER, 'player-2': CHARACTER })
+  const loadout = { ...created, run: { ...created.run, phase: 'loadout' as const,
+    eligiblePlayerIds: ['player-1', 'player-2'], lastCompletedRunId: 'completed' } }
+  receiveWelcome(transport, createGameSnapshot(loadout, 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const config = { displayName: 'Mixed', element: 'fire', discipline: 'water' } as const
+  const pending = session.confirmLoadout(config.element, config.discipline, config.displayName)
+  assert.ok(pending instanceof Promise, 'dispatch is not authoritative acceptance')
+  const sent = transport.sent.length
+  assert.equal(await session.confirmLoadout('ether', 'body', 'Duplicate'), false)
+  assert.equal(transport.sent.length, sent)
+  let accepted = false
+  void pending.then(value => { accepted = value })
+  receiveSnapshot(transport, createGameSnapshot({ ...loadout, tick: 1 }, 'player-1'), 0)
+  await Promise.resolve()
+  assert.equal(accepted, false)
+  const confirmed = confirmGameSimulationLoadout(loadout, 'player-1', config)
+  assert.ok(confirmed)
+  receiveSnapshot(transport, createGameSnapshot({ ...confirmed, tick: 2 }, 'player-1'), 0)
+  assert.equal(await pending, true)
+  assert.equal(session.getSnapshot().run.phase, 'loadout', 'waiting peer keeps the Create session')
+  const beforeReadyRepeat = transport.sent.length
+  assert.equal(await session.confirmLoadout('air', 'mind', 'AlreadyReady'), false)
+  assert.equal(transport.sent.length, beforeReadyRepeat)
+})
+
+test('retained Create send failure and timeout release confirmation ownership for retry', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const created = createGameSimulation({ 'player-1': CHARACTER })
+  const loadout = { ...created, run: { ...created.run, phase: 'loadout' as const,
+    eligiblePlayerIds: ['player-1'], lastCompletedRunId: 'completed' } }
+  receiveWelcome(transport, createGameSnapshot(loadout, 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const send = transport.send.bind(transport)
+  transport.send = () => { throw new Error('fixture send failure') }
+  await assert.rejects(async () => session.confirmLoadout('fire', 'water', 'Retry'), /send failure/)
+  transport.send = send
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const timedOut = session.confirmLoadout('fire', 'water', 'Retry')
+  const rejected = assert.rejects(timedOut, /confirmation timed out/)
+  context.mock.timers.tick(10_000)
+  await rejected
+  const retry = session.confirmLoadout('fire', 'water', 'Retry')
+  const config = { displayName: 'Retry', element: 'fire', discipline: 'water' } as const
+  const confirmed = confirmGameSimulationLoadout(loadout, 'player-1', config)
+  assert.ok(confirmed)
+  receiveSnapshot(transport, createGameSnapshot({ ...confirmed, tick: 1 }, 'player-1'), 0)
+  assert.equal(await retry, true)
+})
+
+test('destroying retained Create rejects and clears its pending confirmation', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const created = createGameSimulation({ 'player-1': CHARACTER })
+  const loadout = { ...created, run: { ...created.run, phase: 'loadout' as const,
+    eligiblePlayerIds: ['player-1'], lastCompletedRunId: 'completed' } }
+  receiveWelcome(transport, createGameSnapshot(loadout, 'player-1'))
+  const session = await connecting
+  const pending = session.confirmLoadout('earth', 'ether', 'Closing')
+  const rejected = assert.rejects(pending, /destroyed/)
+  session.destroy()
+  await rejected
+  assert.equal(await session.confirmLoadout('earth', 'ether', 'Closed'), false)
+})
+
+test('host client keeps one session through Game Over, loadout, and Hub confirmation', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const hubState = createGameSimulation({ 'player-1': CHARACTER })
+  receiveWelcome(transport, createGameSnapshot(hubState, 'player-1'))
+  const session = await connecting
+  const playerId = session.playerId
+  const runId = 'run-lifecycle'
+  const loaded = loadedBoneyardFixture(runId)
+  const activeState = enterBoneyardWorld(hubState, loaded)
+
+  transport.receive(encodeGameMessage({
+    type: 'server-boneyard-loaded',
+    boneyard: loaded,
+  }))
+  receiveSnapshot(transport, createGameSnapshot(activeState, playerId), 0)
+  assert.equal(session.getSnapshot().run.phase, 'active')
+  assert.equal(session.getSnapshot().run.runId, runId)
+
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 500, y: 300 }, true))
+  const activeInput = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(activeInput.type, 'client-input')
+
+  const gameOverState = {
+    ...activeState,
+    tick: activeState.tick + 500,
+    run: {
+      ...activeState.run,
+      gameOverEventId: 1,
+      gameOverTicks: 500,
+      nextGameOverEventId: 2,
+      phase: 'game-over' as const,
+    },
+    world: activeState.world.kind === 'boneyard'
+      ? {
+          ...activeState.world,
+          hallOfFameRuns: Object.fromEntries(Object.entries(
+            activeState.world.hallOfFameRuns,
+          ).map(([id, hallRun]) => [id, {
+            ...hallRun,
+            elapsedTicks: 0,
+            portraitHeadingIndex: 12,
+            portraitScale: 0.925,
+          }])),
+        }
+      : activeState.world,
+  }
+  receiveSnapshot(transport, createGameSnapshot(gameOverState, playerId), 0)
+  assert.equal(session.getSnapshot().run.phase, 'game-over')
+
+  session.continueGameOver(runId, 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-continue-game-over',
+    eventId: 1,
+    runId,
+  })
+
+  const beforeStoppedInput = transport.sent.length
+  session.sendInput(gameplayInput({ x: 0, y: 1 }, { x: 600, y: 400 }, true, 0))
+  assert.equal(transport.sent.length, beforeStoppedInput + 1)
+  const stoppedInput = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(stoppedInput.type, 'client-input')
+  if (stoppedInput.type !== 'client-input') assert.fail('expected stopped client input')
+  assert.deepEqual(stoppedInput.input, gameplayInput({ x: 0, y: 0 }))
+
+  const exitingState = {
+    ...gameOverState,
+    run: {
+      ...gameOverState.run,
+      gameOverExitKind: 'input' as const,
+      gameOverExitTicks: 1,
+    },
+  }
+  receiveSnapshot(transport, createGameSnapshot(exitingState, playerId), 0)
+  assert.equal(session.getSnapshot().run.phase, 'game-over')
+  assert.equal(session.getSnapshot().run.gameOverExitTicks, 1)
+  const loadoutState = {
+    ...gameOverState,
+    run: {
+      ...gameOverState.run,
+      eligiblePlayerIds: [playerId],
+      gameOverExitKind: null,
+      gameOverExitTicks: null,
+      gameOverTicks: 0,
+      lastCompletedRunId: runId,
+      loadoutReadyPlayerIds: [],
+      phase: 'loadout' as const,
+      runId: null,
+    },
+    world: createGameSimulation({ [playerId]: CHARACTER }).world,
+  }
+  receiveSnapshot(transport, createGameSnapshot(loadoutState, playerId), 0)
+  assert.equal(session.playerId, playerId)
+  assert.equal(session.getSnapshot().run.phase, 'loadout')
+  assert.equal(session.getSnapshot().world.kind, 'hub')
+
+  session.confirmLoadout('air', 'body', 'Reborn')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-confirm-loadout',
+    discipline: 'body',
+    displayName: 'Reborn',
+    element: 'air',
+  })
+
+  const confirmedState = confirmGameSimulationLoadout(loadoutState, playerId, {
+    discipline: 'body',
+    displayName: 'Reborn',
+    element: 'air',
+  })
+  assert.ok(confirmedState)
+  receiveSnapshot(transport, createGameSnapshot(confirmedState, playerId), 0)
+  assert.equal(session.playerId, playerId)
+  assert.equal(session.getSnapshot().run.phase, 'hub')
+  assert.equal(session.getSnapshot().run.lastCompletedRunId, runId)
+
+  const beforeInvalidConfirmation = transport.sent.length
+  session.confirmLoadout('air', 'body', 'Reborn')
+  assert.equal(transport.sent.length, beforeInvalidConfirmation)
+  session.startMatch('default-random')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-start-match',
+    boneyardId: 'default-random',
+  })
+  session.destroy()
+})
+
+for (const sourcePhase of ['loadout', 'hub'] as const) {
+  for (const sharedHubTick of [25, 2_000]) {
+    test(`Hub actor-manager reattachment from ${sourcePhase} presents independent tick ${sharedHubTick}`, async (context) => {
+      const playerId = 'player-1'
+      const created = createGameSimulation({ [playerId]: CHARACTER })
+      const loadout = {
+        ...created,
+        tick: 1_000,
+        run: {
+          ...created.run,
+          eligiblePlayerIds: [playerId],
+          gameOverEventId: 1,
+          lastCompletedRunId: 'completed-run',
+          nextGameOverEventId: 2,
+          phase: 'loadout' as const,
+        },
+      }
+      const confirmed = confirmGameSimulationLoadout(loadout, playerId, {
+        discipline: 'mind',
+        displayName: 'Reborn',
+        element: 'water',
+      })
+      assert.ok(confirmed)
+      const transport = new MemoryTransport()
+      const connecting = connectGameClientSession({
+        character: CHARACTER,
+        credential: 'spawn-secret',
+        now: () => 0,
+        profile: NULL_PROFILE,
+        transport,
+      })
+      receiveWelcome(transport, createGameSnapshot(
+        sourcePhase === 'loadout' ? loadout : confirmed,
+        playerId,
+      ))
+      const session = await connecting
+      context.after(() => session.destroy())
+
+      const sharedHub = mergeGameSimulationPlayersIntoHub({
+        ...createGameSimulation({}),
+        tick: sharedHubTick,
+      }, confirmed)
+      const expected = createGameSnapshot(sharedHub, playerId)
+      if (expected.world.kind !== 'hub') assert.fail('expected the resident Hub')
+      receiveSnapshot(transport, expected, 0)
+
+      const presentation = session.samplePresentation()
+      assert.equal(presentation.tick, sharedHubTick)
+      assert.equal(presentation.run.phase, 'hub')
+      assert.deepEqual(presentation.players[playerId]!.config, expected.players[playerId]!.config)
+      assert.equal(presentation.world.traderAnimationSeed, expected.world.traderAnimationSeed)
+      assert.deepEqual(presentation.world.students.map(student => ({
+        id: student.id,
+        registration: student.painterRegistration,
+      })), expected.world.students.map(student => ({
+        id: student.id,
+        registration: student.painterRegistration,
+      })))
+      const ordinals = [
+        presentation.players[playerId]!.lighting.lightRegistration.registrationOrdinal,
+        ...presentation.world.students.map(student => student.painterRegistration.registrationOrdinal),
+      ]
+      assert.equal(new Set(ordinals).size, ordinals.length,
+        'the returned player and students must belong to one native actor manager')
+    })
+  }
+}
+
+test('client consumes each run-scoped Boneyard enemy event exactly once', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const hubState = createGameSimulation({ 'player-1': CHARACTER })
+  const firstRunId = 'enemy-events-one'
+  const firstSnapshot = createGameSnapshot(
+    enterBoneyardWorld(hubState, loadedBoneyardFixture(firstRunId)),
+    'player-1',
+  )
+  if (firstSnapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  firstSnapshot.world.enemyEvents = [{
+    actorId: 4,
+    eventId: 7,
+    runId: firstRunId,
+    targetPlayerId: 'player-1',
+    tick: 0,
+    type: 'attack-marker',
+  }]
+  receiveWelcome(transport, firstSnapshot)
+  const session = await connecting
+  const received: Parameters<Parameters<typeof session.onEnemyEvent>[0]>[0][] = []
+  session.onEnemyEvent((event) => received.push(event))
+
+  receiveSnapshot(transport, { ...firstSnapshot, tick: 5 }, 0)
+  assert.deepEqual(received, [])
+
+  const projectile = {
+    actorId: 4,
+    eventId: 8,
+    projectileId: 12,
+    runId: firstRunId,
+    targetPlayerId: 'player-1',
+    tick: 6,
+    type: 'projectile-spawned' as const,
+  }
+  const deathSound = {
+    actorId: 4,
+    eventId: 9,
+    gainScale: 1,
+    pitch: 0.91,
+    runId: firstRunId,
+    sound: 'skeleton-die' as const,
+    sourcePosition: { x: 110, y: 205 },
+    tick: 6,
+    type: 'enemy-death-sound' as const,
+  }
+  const withImpact = {
+    ...firstSnapshot,
+    tick: 10,
+    world: {
+      ...firstSnapshot.world,
+      enemyEvents: [...firstSnapshot.world.enemyEvents, projectile, deathSound],
+    },
+  }
+  receiveSnapshot(transport, withImpact, 0)
+  receiveSnapshot(transport, { ...withImpact, tick: 15 }, 0)
+  assert.deepEqual(received, [projectile, deathSound])
+
+  const secondRunId = 'enemy-events-two'
+  const secondSnapshot = createGameSnapshot(
+    enterBoneyardWorld(hubState, loadedBoneyardFixture(secondRunId)),
+    'player-1',
+  )
+  if (secondSnapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  secondSnapshot.world.enemyEvents = [{
+    actorId: 1,
+    eventId: 1,
+    runId: secondRunId,
+    targetPlayerId: 'player-1',
+    tick: 0,
+    type: 'enemy-spawned',
+  }]
+  receiveSnapshot(transport, secondSnapshot, 0)
+  assert.deepEqual(received.at(-1), secondSnapshot.world.enemyEvents[0])
+  assert.equal(received.length, 3)
+  session.destroy()
+})
+
+test('charm loss is silent on initial load and reconnect, and delivered once for a fresh event', async () => {
+  const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }),
+    loadedBoneyardFixture('charm-reconnect'))
+  const initial = createGameSnapshot(state, 'player-1')
+  if (initial.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const loss = {
+    actorId: 0, eventId: 7, runId: initial.world.runId,
+    sourcePosition: { x: 100, y: 200 }, targetPlayerId: 'player-1', tick: 0,
+    type: 'player-charm-lost' as const,
+  }
+  initial.world.enemyEvents = [loss]
+  for (const attempt of ['initial', 'reconnect']) {
+    const transport = new MemoryTransport()
+    const connecting = connectGameClientSession({
+      character: CHARACTER, profile: NULL_PROFILE, credential: 'spawn-secret', transport,
+    })
+    receiveWelcome(transport, initial)
+    const session = await connecting
+    const received: number[] = []
+    session.onEnemyEvent(event => received.push(event.eventId))
+    receiveSnapshot(transport, { ...initial, tick: 5 }, 0)
+    assert.deepEqual(received, [], `${attempt} must seed its cursor without replaying loss`)
+    const next = { ...initial, tick: 10, world: { ...initial.world,
+      enemyEvents: [loss, { ...loss, eventId: 8, tick: 6 }],
+    } }
+    receiveSnapshot(transport, next, 0)
+    receiveSnapshot(transport, { ...next, tick: 15 }, 0)
+    assert.deepEqual(received, [8])
+    session.destroy()
+  }
+})
+
+test('client suppresses gameplay input while a skill offer is pending and submits the exact choice', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation(
+    { 'player-1': CHARACTER },
+    { initialPlayerExperience: 100 },
+  )
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+  const initial = session.getSnapshot().players['player-1']
+  const offer = initial.progression.pendingOffer
+  assert.ok(offer)
+  assert.deepEqual(session.getSnapshot().levelUpBarrier?.pendingPlayerIds, ['player-1'])
+
+  const sentBeforeInput = transport.sent.length
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 900, y: 450 }, true))
+  assert.equal(transport.sent.length, sentBeforeInput)
+  nowMs += 100
+  assert.deepEqual(
+    session.samplePresentation().players['player-1'].position,
+    initial.position,
+  )
+
+  const option = offer.options[0]!
+  assert.throws(
+    () => session.selectSkill(0, offer.sequence + 1, option.skillId),
+    /not in the current offer/,
+  )
+  session.selectSkill(0, offer.sequence, option.skillId)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-skill',
+    choiceIndex: 0,
+    offerSequence: offer.sequence,
+    skillId: option.skillId,
+  })
+  session.destroy()
+})
+
+test('client holds local Hub presentation at authoritative state during a level-up barrier', async (t) => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const initialBase = createGameSnapshot(serverState, 'player-1')
+  const initialPlayer = initialBase.players['player-1']!
+  const initial = {
+    ...initialBase,
+    flamePresentation: { kind: 'reset' as const, epoch: 1, worldKey: 'hub', throughTick: 100, births: [] as const },
+    players: {
+      ...initialBase.players,
+      'player-1': {
+        ...initialPlayer,
+        position: { x: 100, y: initialPlayer.position.y },
+        velocity: { x: 100, y: 0 },
+      },
+    },
+    tick: 100,
+  }
+  receiveWelcome(transport, initial)
+  const session = await connecting
+  t.after(() => session.destroy())
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+
+  nowMs += 50
+  const frozenBase = createGameSnapshot(
+    grantGameSimulationPlayerExperience(serverState, 'player-1', 100),
+    'player-1',
+  )
+  const frozenPlayer = frozenBase.players['player-1']!
+  const frozen = {
+    ...frozenBase,
+    players: {
+      ...frozenBase.players,
+      'player-1': {
+        ...frozenPlayer,
+        position: { x: 110, y: frozenPlayer.position.y },
+        velocity: { x: 100, y: 0 },
+      },
+    },
+    tick: 105,
+  }
+  assert.ok(frozen.levelUpBarrier)
+  receiveSnapshot(transport, frozen, 0)
+
+  assert.equal(session.samplePresentation().players['player-1'].position.x, 110)
+  nowMs += 40
+  assert.equal(session.samplePresentation().players['player-1'].position.x, 110)
+  nowMs += 10
+  receiveSnapshot(transport, frozen, 0)
+  nowMs += 40
+  assert.equal(session.samplePresentation().players['player-1'].position.x, 110)
+})
+
+test('client submits native quickbar bindings and primary selection against learned rows', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+  const player = snapshot.players['player-1']!
+  receiveWelcome(transport, {
+    ...snapshot,
+    players: {
+      ...snapshot.players,
+      'player-1': {
+        ...player,
+        progression: {
+          ...player.progression,
+          learnedSkills: [...player.progression.learnedSkills, [57, 1, 1]],
+          learnedSkillOrder: [...player.progression.learnedSkillOrder, 57],
+        },
+      },
+    },
+  })
+  const session = await connecting
+  session.bindSkillQuickbar(8, 7)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-skill-quickbar-bind',
+    skillId: 8,
+    slot: 7,
+  })
+  session.selectPrimarySkill(8)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-primary-skill',
+    skillId: 8,
+  })
+  session.selectConcentration(57)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-concentration',
+    skillId: 57,
+  })
+  session.selectConcentrationSlot(57, 0)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-select-concentration-slot',
+    skillId: 57,
+    slot: 0,
+  })
+  assert.throws(() => session.selectConcentrationSlot(57, 1), /unavailable/)
+  session.bindSkillQuickbar(57, 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-skill-quickbar-bind',
+    skillId: 57,
+    slot: 1,
+  })
+  assert.throws(() => session.selectPrimarySkill(16), /unavailable/)
+  session.destroy()
+})
+
+for (const action of ['binding', 'casting'] as const) {
+  test(`client admits ${action} across all three hotbars and rejects invalid absolute slots`, async () => {
+    const transport = new MemoryTransport()
+    const connecting = connectGameClientSession({
+      character: CHARACTER,
+      profile: NULL_PROFILE,
+      credential: 'spawn-secret',
+      transport,
+    })
+    receiveWelcome(transport, createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'))
+    const session = await connecting
+    try {
+      for (let slot = 0; slot < 24; slot += 1) {
+        if (action === 'binding') {
+          for (const skillId of [11, null]) {
+            session.bindSkillQuickbar(skillId, slot)
+            assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+              type: 'client-skill-quickbar-bind', skillId, slot,
+            })
+          }
+        } else {
+          session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 100, y: 100 }, false, slot))
+          const message = decodeClientGameMessage(transport.sent.at(-1)!)
+          assert.equal(message.type, 'client-input')
+          assert.ok(message.type === 'client-input')
+          assert.equal(message.input.cast.quickbar, slot)
+        }
+      }
+      for (const slot of [-1, 24, 1.5, Number.NaN]) {
+        const sentCount = transport.sent.length
+        assert.throws(() => action === 'binding'
+          ? session.bindSkillQuickbar(11, slot)
+          : session.sendInput(gameplayInput({ x: 0, y: 0 }, null, false, slot)))
+        assert.equal(transport.sent.length, sentCount)
+      }
+    } finally {
+      session.destroy()
+    }
+  })
+}
+
+test('client submits the exact Sorceror action for the current offer only', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  let serverState = createGameSimulation({ 'player-1': CHARACTER })
+  serverState = {
+    ...serverState,
+    playerEntities: replacePlayerEconomy(serverState.playerEntities, 'player-1', {
+      ...getPlayerEconomy(serverState, 'player-1'),
+      ownedPerkSelectors: [17],
+    }),
+  }
+  serverState = grantGameSimulationPlayerExperience(serverState, 'player-1', 100)
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+  const offer = session.getSnapshot().players['player-1']!.progression.pendingOffer!
+
+  assert.throws(() => session.rerollSkill(offer.sequence + 1), /not available/)
+  session.rerollSkill(offer.sequence)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-level-up-action',
+    action: 'reroll',
+    offerSequence: offer.sequence,
+  })
+  session.saveSkill(offer.sequence)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-level-up-action',
+    action: 'save',
+    offerSequence: offer.sequence,
+  })
+  session.destroy()
+})
+
+test('client coalesces held aim updates but schedules every cast-level transition separately', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    cheatsEnabled: false,
+    developerAccess: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    sessionKind: 'standalone',
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
+  }))
+  const session = await connecting
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 100, y: 200 }, true))
+  const pressed = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(pressed.type, 'client-input')
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 110, y: 210 }, true))
+  const retargeted = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(retargeted.type, 'client-input')
+  if (pressed.type !== 'client-input' || retargeted.type !== 'client-input') {
+    assert.fail('expected held client input messages')
+  }
+  assert.equal(retargeted.targetTick, pressed.targetTick)
+  assert.deepEqual(
+    retargeted.input,
+    gameplayInput({ x: 0, y: 0 }, { x: 110, y: 210 }, true),
+  )
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 120, y: 220 }))
+  const released = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(released.type, 'client-input')
+  if (pressed.type !== 'client-input' || released.type !== 'client-input') {
+    assert.fail('expected client input messages')
+  }
+  assert.equal(released.targetTick, pressed.targetTick + 1)
+
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 130, y: 230 }))
+  const moved = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(moved.type, 'client-input')
+  if (moved.type !== 'client-input') assert.fail('expected client input message')
+  assert.equal(moved.targetTick, released.targetTick)
+  assert.deepEqual(moved.input, gameplayInput({ x: 0, y: 0 }, { x: 130, y: 230 }))
+
+  const messageCount = transport.sent.length
+  session.sendInput(gameplayInput({ x: 0, y: 0 }, { x: 130, y: 230 }))
+  assert.equal(transport.sent.length, messageCount)
+  session.destroy()
+})
+
+test('client measures authenticated WebSocket round trips with its monotonic clock', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  const ping = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.deepEqual(ping, { type: 'client-ping', nonce: 1 })
+  assert.equal(session.getPingMs(), null)
+
+  const samples: number[] = []
+  const removePing = session.onPing((pingMs) => samples.push(pingMs))
+  nowMs += 38
+  transport.receive(encodeGameMessage({ type: 'server-pong', nonce: 2 }))
+  assert.equal(session.getPingMs(), null)
+  assert.deepEqual(samples, [])
+
+  transport.receive(encodeGameMessage({ type: 'server-pong', nonce: 1 }))
+  assert.equal(session.getPingMs(), 38)
+  assert.deepEqual(samples, [38])
+
+  removePing()
+  session.destroy()
+  nowMs += 10
+  transport.receive(encodeGameMessage({ type: 'server-pong', nonce: 1 }))
+  assert.deepEqual(samples, [38])
+})
+
+test('client disables prediction when the shared character parameters do not match', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    cheatsEnabled: false,
+    developerAccess: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    sessionKind: 'standalone',
+    kernelParameters: {
+      ...kernelParameters(),
+      movementAcceleration: kernelParameters().movementAcceleration + 1,
+    },
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
+  }))
+  const session = await connecting
+  const origin = session.getSnapshot().players['player-1'].position.x
+  let presented = session.getSnapshot()
+  session.onSnapshot((snapshot) => { presented = snapshot })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 0)
+  assert.equal(presented.players['player-1'].position.x, origin)
+  session.destroy()
+})
+
+test('client presents bounded display-rate movement without resending unchanged input', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    cheatsEnabled: false,
+    developerAccess: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    sessionKind: 'standalone',
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    snapshot: createGameSnapshot(serverState, 'player-1'),
+    snapshotSequence: 1,
+  }))
+  const session = await connecting
+  const origin = session.getSnapshot().players['player-1'].position.x
+
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  const messagesAfterChange = transport.sent.length
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  assert.equal(transport.sent.length, messagesAfterChange)
+
+  nowMs += 20
+  const early = session.samplePresentation()
+  nowMs += 30
+  const atSnapshotBoundary = session.samplePresentation()
+  nowMs += 500
+  const bounded = session.samplePresentation()
+  assert.ok(early.players['player-1'].position.x > origin)
+  assert.ok(atSnapshotBoundary.players['player-1'].position.x > early.players['player-1'].position.x)
+  assert.equal(
+    bounded.players['player-1'].position.x,
+    atSnapshotBoundary.players['player-1'].position.x,
+  )
+  session.destroy()
+})
+
+test('client applies direction changes only to future presentation ticks', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+
+  session.sendInput(gameplayInput({ x: 1, y: 0 }))
+  nowMs += 40
+  const beforeTurn = session.samplePresentation()
+  session.sendInput(gameplayInput({ x: 0, y: 1 }))
+  const atTurn = session.samplePresentation()
+
+  assert.deepEqual(
+    atTurn.players['player-1'].position,
+    beforeTurn.players['player-1'].position,
+  )
+  assert.equal(
+    atTurn.players['player-1'].headingIndex,
+    beforeTurn.players['player-1'].headingIndex,
+  )
+  session.destroy()
+})
+
+test('client follows the authority-owned College spline heading instead of preserving idle input facing', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  let serverState = armGameSimulationCollegeIntro(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  receiveWelcome(transport, createGameSnapshot(serverState, 'player-1'))
+  const session = await connecting
+  assert.equal(session.samplePresentation().players['player-1'].headingIndex, 2)
+  assert.equal(
+    session.samplePresentation().players['player-1'].primaryCast.selectedPrimaryId,
+    -1,
+  )
+
+  for (let tick = 0; tick < 2_000; tick += 1) {
+    serverState = stepGameSimulationTick(serverState, {}, {
+      collegeIntroReadyPlayerIds: new Set(['player-1']),
+    })
+    if (getPlayerCharacter(serverState, 'player-1').headingIndex === 18) break
+  }
+  const authoritative = getPlayerCharacter(serverState, 'player-1')
+  assert.equal(authoritative.headingIndex, 18)
+  assert.equal(authoritative.primaryCast.selectedPrimaryId, -1)
+  nowMs += 50
+  receiveSnapshot(transport, createGameSnapshot(serverState, 'player-1'), 0)
+
+  assert.equal(session.samplePresentation().players['player-1'].headingIndex, 18)
+  assert.equal(
+    session.samplePresentation().players['player-1'].primaryCast.selectedPrimaryId,
+    -1,
+  )
+  session.destroy()
+})
+
+test('client prediction gives forced College movement facing priority over a stale cast pose', () => {
+  const initial = createPlayerCharacter(CHARACTER, { x: 972, y: 1_044 })
+  const player = {
+    ...initial,
+    headingIndex: 12,
+    primaryCast: { ...initial.primaryCast, actionTick: 0 },
+  }
+  const predicted = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: 0, y: 0 }),
+    0,
+    1,
+    createHubCollegeIntroParticipantState(),
+  ).player
+  assert.equal(predicted.headingIndex, 2)
+  assert.ok(predicted.position.y < player.position.y)
+})
+
+test('client prediction tracks Skorcha presence when Hub snapshots add and remove its body', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER, profile: NULL_PROFILE, credential: 'spawn-secret',
+    now: () => nowMs, transport,
+  })
+  const state = createGameSimulation({ 'player-1': CHARACTER })
+  const source = createGameSnapshot(state, 'player-1')
+  if (source.world.kind !== 'hub') throw new Error('expected a Hub snapshot')
+  const native = createHubSkorchaAtVariant(createNativeRng(123), 0)
+  const skorcha = {
+    dismissalIndex: native.dismissalIndex,
+    gesture: native.gesture,
+    gestureTicksRemaining: native.gestureTicksRemaining,
+    hatFrame: 0 as const,
+    position: { ...native.position },
+    variant: native.variant,
+  }
+  const player = { ...source.players['player-1'],
+    position: { x: native.position.x + 35.5, y: native.position.y },
+    velocity: { x: -90, y: 0 } }
+  const present = { ...source, players: { ...source.players, 'player-1': player },
+    world: { ...source.world, skorcha } }
+  receiveWelcome(transport, present)
+  const session = await connecting
+  session.sendInput(gameplayInput({ x: -1, y: 0 }))
+  nowMs += 10
+  const blocked = session.samplePresentation().players['player-1'].position
+  assert.ok(blocked.x - native.position.x >= 35)
+
+  nowMs += 50
+  receiveSnapshot(transport, { ...present,
+    players: { ...present.players, 'player-1': { ...player, position: blocked } },
+    tick: present.tick + 5, world: { ...present.world, skorcha: null },
+  }, 0)
+  nowMs += 10
+  const absent = session.samplePresentation().players['player-1'].position
+  assert.ok(absent.x < blocked.x, 'removal must let movement through the former body')
+
+  nowMs += 50
+  receiveSnapshot(transport, { ...present, tick: present.tick + 10 }, 0)
+  nowMs += 50
+  const returned = session.samplePresentation().players['player-1'].position
+  assert.ok(returned.x - native.position.x >= 35, 'the new presence must be used after reconciliation')
+  session.destroy()
+})
+
+test('client does not rewind a locally presented turn while acknowledgement is delayed', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const source = createGameSnapshot(serverState, 'player-1')
+  const sourcePlayer = source.players['player-1']
+  const eastboundPlayer = {
+    ...sourcePlayer,
+    headingDegrees: 90,
+    headingIndex: 6,
+    velocity: { x: 90, y: 0 },
+  }
+  const initialSnapshot = {
+    ...source,
+    flamePresentation: { kind: 'reset' as const, epoch: 1, worldKey: 'hub', throughTick: 100, births: [] as const },
+    players: { ...source.players, 'player-1': eastboundPlayer },
+    tick: 100,
+  }
+  receiveWelcome(transport, initialSnapshot)
+  const session = await connecting
+  session.samplePresentation()
+
+  session.sendInput(gameplayInput({ x: 0, y: 1 }))
+  nowMs += 50
+  const beforeSnapshot = session.samplePresentation()
+  assert.ok(beforeSnapshot.players['player-1'].headingIndex > eastboundPlayer.headingIndex)
+
+  let authoritativePlayer = eastboundPlayer
+  let collisionRngState = initialSnapshot.world.kind === 'hub'
+    ? initialSnapshot.world.collisionRngState
+    : 0
+  for (let tick = 0; tick < 5; tick += 1) {
+    const predicted = predictPlayerCharacterInHub(
+      authoritativePlayer,
+      gameplayInput({ x: 1, y: 0 }),
+      collisionRngState,
+      authoritativePlayer.movementScale,
+      initialSnapshot.world.kind === 'hub'
+        ? initialSnapshot.world.participants['player-1']
+        : undefined,
+    )
+    authoritativePlayer = {
+      ...predicted.player,
+      belt: authoritativePlayer.belt,
+      economy: authoritativePlayer.economy,
+      lighting: authoritativePlayer.lighting,
+      movementScale: authoritativePlayer.movementScale,
+      progression: authoritativePlayer.progression,
+    }
+    collisionRngState = predicted.collisionRngState
+  }
+  receiveSnapshot(transport, {
+      ...initialSnapshot,
+      players: { ...initialSnapshot.players, 'player-1': authoritativePlayer },
+      tick: 105,
+      world: initialSnapshot.world.kind === 'hub'
+        ? { ...initialSnapshot.world, collisionRngState }
+        : initialSnapshot.world,
+  }, 0)
+  const afterSnapshot = session.samplePresentation()
+
+  assert.equal(
+    afterSnapshot.players['player-1'].headingIndex,
+    beforeSnapshot.players['player-1'].headingIndex,
+  )
+  assert.deepEqual(
+    afterSnapshot.players['player-1'].position,
+    beforeSnapshot.players['player-1'].position,
+  )
+  session.destroy()
+})
+
+test('client accepts cast-owned heading and prevents movement prediction from replacing it', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const initialSnapshot = createGameSnapshot(serverState, 'player-1')
+  receiveWelcome(transport, initialSnapshot)
+  const session = await connecting
+
+  session.sendInput(gameplayInput(
+    { x: -1, y: 0 },
+    { x: 900, y: 450 },
+  ))
+  const castHeadingIndex = 8
+  const castRadians = castHeadingIndex * 15 * Math.PI / 180
+  nowMs += 50
+  receiveSnapshot(transport, {
+    ...initialSnapshot,
+    players: {
+      ...initialSnapshot.players,
+      'player-1': {
+        ...initialSnapshot.players['player-1'],
+        headingDegrees: castHeadingIndex * 15,
+        headingIndex: castHeadingIndex,
+        progression: {
+          ...initialSnapshot.players['player-1'].progression,
+          learnedSkills: [
+            ...initialSnapshot.players['player-1'].progression.learnedSkills,
+            [16, 1, 1],
+          ],
+          learnedSkillOrder: [
+            ...initialSnapshot.players['player-1'].progression.learnedSkillOrder,
+            16,
+          ],
+          selectedPrimarySkillId: 16,
+        },
+        lighting: {
+          ...initialSnapshot.players['player-1'].lighting,
+          driveActive: true,
+        },
+        primaryCast: {
+          actionTick: 20,
+          aimDirection: {
+            x: Math.sin(castRadians),
+            y: -Math.cos(castRadians),
+          },
+          castSequence: 1,
+          channelActive: false,
+          emissionSequence: 1,
+          etherBlastCharge: 0,
+          etherBlastChargeCueSequence: 0,
+          fizzleSequence: 0,
+          held: false,
+          lastWeldPlaybackRate: null,
+          lastWeldSoundVariant: null,
+          oneShotAttackPoseHeld: false,
+          selectedPrimaryAgeTicks: 1,
+          selectedPrimaryId: 16,
+          targetId: null,
+          underpowered: false,
+          weaponPulse: 0,
+        },
+      },
+    },
+    tick: initialSnapshot.tick + 5,
+  }, 0)
+
+  assert.equal(
+    session.samplePresentation().players['player-1'].headingIndex,
+    castHeadingIndex,
+  )
+  nowMs += 20
+  assert.equal(
+    session.samplePresentation().players['player-1'].headingIndex,
+    castHeadingIndex,
+  )
+  session.destroy()
+})
+
+test('client visually absorbs an unpredicted push over one snapshot interval', async () => {
+  let nowMs = 1_000
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    now: () => nowMs,
+    transport,
+  })
+  const serverState = createGameSimulation({ 'player-1': CHARACTER })
+  const initialSnapshot = createGameSnapshot(serverState, 'player-1')
+  receiveWelcome(transport, initialSnapshot)
+  const session = await connecting
+  const beforePush = session.samplePresentation()
+  const origin = beforePush.players['player-1'].position
+  const pushedX = origin.x + 10
+
+  nowMs += 50
+  receiveSnapshot(transport, {
+      ...initialSnapshot,
+      players: {
+        ...initialSnapshot.players,
+        'player-1': {
+          ...initialSnapshot.players['player-1'],
+          position: { x: pushedX, y: origin.y },
+        },
+      },
+      tick: initialSnapshot.tick + 5,
+  }, 0)
+  const atArrival = session.samplePresentation()
+  nowMs += 25
+  const halfway = session.samplePresentation()
+  nowMs += 25
+  const settled = session.samplePresentation()
+
+  assert.deepEqual(atArrival.players['player-1'].position, origin)
+  assert.ok(Math.abs(halfway.players['player-1'].position.x - (origin.x + 5)) < 0.0001)
+  assert.equal(settled.players['player-1'].position.x, pushedX)
+  assert.equal(settled.players['player-1'].position.y, origin.y)
+  session.destroy()
+})
+
+test('client predicts the authoritative scripted transition walk without accepting input', () => {
+  const player = createPlayerCharacter(CHARACTER, { x: 100, y: 100 })
+  const participant = {
+    collegeIntro: null,
+    region: 'courtyard' as const,
+    transition: {
+      alpha: 0.4,
+      destination: 'storeroom' as const,
+      phase: 'outgoing' as const,
+      scriptedSpeed: 0.45,
+      scriptedTarget: { x: 100, y: -1000 },
+      sourceRegion: 'courtyard' as const,
+    },
+  }
+  const predicted = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: -1, y: 0 }),
+    123,
+    2.8125,
+    participant,
+  )
+  const ordinaryScale = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: -1, y: 0 }),
+    123,
+    1,
+    participant,
+  )
+
+  assert.equal(predicted.player.position.x, 100)
+  assert.ok(predicted.player.position.y < 100)
+  assert.deepEqual(predicted.player.position, ordinaryScale.player.position)
+  assert.equal(predicted.collisionRngState, 123)
+})
+
+test('ordinary Hub region re-registration bootstraps a fresh timeline from continuous Flame history', async (context) => {
+  const transport = new MemoryTransport()
+  let fatal: GameConnectionFailure | null = null
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport, onFatal: value => { fatal = value } })
+  let initial = createGameSimulation({ 'player-1': CHARACTER })
+  if (initial.world.kind !== 'hub') throw new Error('fixture')
+  initial = { ...initial, world: { ...initial.world, participants: {
+    ...initial.world.participants, 'player-1': { ...initial.world.participants['player-1']!,
+      transition: { alpha: 1, destination: 'storeroom', phase: 'outgoing',
+        scriptedSpeed: .45, scriptedTarget: { x: 100, y: -1_000 }, sourceRegion: 'courtyard' } },
+  } } }
+  const history = createHostFlamePresentationHistory()
+  const welcome = { ...createGameSnapshot(initial, 'player-1'), flamePresentation: history.resetFrame(initial) }
+  receiveWelcome(transport, welcome)
+  const session = await connecting
+  context.after(() => session.destroy())
+  const transitioned = stepGameSimulationTick(initial, {})
+  history.advance(initial, transitioned)
+  const snapshot = { ...createGameSnapshot(transitioned, 'player-1'), flamePresentation: history.resetFrame(transitioned) }
+  assert.notDeepEqual(snapshot.players['player-1']!.lighting.lightRegistration,
+    welcome.players['player-1']!.lighting.lightRegistration)
+  const baseline = createReplicatedEntityBaseline(welcome)
+  const frame = { ...createGameSnapshotFrame(snapshot, 1, baseline),
+    flamePresentation: history.frame(transitioned, baseline.flamePresentation!) }
+  assert.equal(frame.flamePresentation.kind, 'continuous')
+  transport.receive(encodeGameMessage({ type: 'server-snapshot', acknowledgedInputSequence: 0, frame, sequence: 2 }))
+  assert.equal(fatal, null)
+  assert.equal(transport.readyState, 'open')
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack', requireKeyframe: false, sequence: 2,
+  })
+  const presentation = session.samplePresentation()
+  assert.equal(presentation.world.kind, 'hub')
+  if (presentation.world.kind !== 'hub') throw new Error('fixture')
+  assert.equal(presentation.world.participants['player-1']!.region, 'storeroom')
+})
+
+test('client prediction consumes the replicated native movement multiplier', () => {
+  const player = createPlayerCharacter(CHARACTER, { x: 500, y: 700 })
+  const ordinary = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: 1, y: 0 }),
+    123,
+    1,
+  )
+  const boosted = predictPlayerCharacterInHub(
+    player,
+    gameplayInput({ x: 1, y: 0 }),
+    123,
+    2.8125,
+  )
+
+  assert.equal(ordinary.player.velocity.x, 9)
+  assert.equal(boosted.player.velocity.x, 25.3125)
+  assert.equal(boosted.player.position.x - player.position.x, 0.28125)
+})
+
+test('client rejects a welcome that omits its assigned player', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    cheatsEnabled: false,
+    developerAccess: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'missing-player',
+    resumeToken: 'reserved-missing-player',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    sessionKind: 'standalone',
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    snapshot: createGameSnapshot(createGameSimulation({}), null),
+    snapshotSequence: 1,
+  }))
+  await assert.rejects(connecting, /does not contain the assigned player/)
+})
+
+test('client requests a keyframe after a replication gap and resumes cleanly', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  const snapshot = createGameSnapshot(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    'player-1',
+  )
+  receiveWelcome(transport, snapshot)
+  const session = await connecting
+  const beforeGap = transport.sent.length
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(
+      snapshot,
+      99,
+      createReplicatedEntityBaseline(snapshot),
+    ),
+    sequence: 10,
+  }))
+  assert.equal(transport.sent.length, beforeGap + 1)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack',
+    requireKeyframe: true,
+    sequence: 1,
+  })
+
+  const recovered = {
+    ...snapshot,
+    tick: snapshot.tick + 5,
+  }
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(recovered, 0, undefined, true),
+    sequence: 11,
+  }))
+  assert.equal(session.getSnapshot().tick, recovered.tick)
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: 11,
+  })
+  session.destroy()
+})
+
+test('client keeps gameplay and its last complete save live throughout a background transfer', async (context) => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+  receiveWelcome(transport, snapshot)
+  const session = await connecting
+  context.after(() => session.destroy())
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint',
+    save: '{"previous":true}', reason: 'progress', sequence: 1 }))
+  const checkpoints: GameSaveCheckpoint[] = []
+  session.onSaveCheckpoint(checkpoint => checkpoints.push(checkpoint))
+  const initialCount = checkpoints.length
+  const wire: Array<ServerSaveCheckpointMessage | ServerSaveCheckpointChunkMessage> = []
+  const sender = new GameSaveCheckpointSender(message => wire.push(message))
+  const save = JSON.stringify({ continuation: '😀'.repeat(SAVE_CHECKPOINT_STREAM_THRESHOLD) })
+  sender.publish({ type: 'server-save-checkpoint', save, reason: 'progress', sequence: 2 }, 'background')
+  const receiveChunk = () => {
+    transport.receive(encodeGameMessage(wire.shift()!))
+    const ack = decodeClientGameMessage(transport.sent.at(-1)!)
+    assert.equal(ack.type, 'client-save-checkpoint-chunk-ack')
+    if (ack.type === 'client-save-checkpoint-chunk-ack') sender.acknowledge(ack)
+  }
+  receiveChunk()
+  assert.equal(session.getSaveCheckpoint()?.sequence, 1)
+  assert.equal(checkpoints.length, initialCount)
+  transport.receive(encodeGameMessage({ type: 'server-snapshot', acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame({ ...snapshot, tick: snapshot.tick + 5 }, 0, undefined, true),
+    sequence: 2 }))
+  assert.equal(session.getSnapshot().tick, snapshot.tick + 5)
+  while (wire.length) receiveChunk()
+  assert.equal(checkpoints.length, initialCount + 1)
+  assert.equal(session.getSaveCheckpoint()?.document, save)
+  sender.publish({ type: 'server-save-checkpoint', save, reason: 'progress', sequence: 3 }, 'background')
+  receiveChunk()
+  session.destroy()
+  assert.equal(session.getSaveCheckpoint()?.sequence, 2)
+  assert.equal(checkpoints.length, initialCount + 1)
+})
+
+test('client rejects a discontinuous save transfer without publishing a partial document', async () => {
+  const transport = new MemoryTransport()
+  let fatal: GameConnectionFailure | null = null
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport, onFatal: failure => { fatal = failure } })
+  receiveWelcome(transport, createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'))
+  const session = await connecting
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint-chunk', data: 'abc',
+    offset: 1, totalLength: 6, sequence: 1, reason: 'progress' }))
+  assert.ok(fatal)
+  assert.equal(transport.readyState, 'closed')
+  assert.equal(session.getSaveCheckpoint(), null)
+})
+
+test('client acknowledges deployment only after the final save and keeps update close nonfatal', async () => {
+  const transport = new MemoryTransport()
+  const targetRevision = 'a'.repeat(40)
+  let releaseSave!: () => void
+  const saveFinished = new Promise<void>((resolve) => { releaseSave = resolve })
+  let restartRequest: { checkpointSequence: number; targetRevision: string } | null = null
+  let fatal: GameConnectionFailure | null = null
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+    onDeploymentRestart: async (request) => {
+      restartRequest = {
+        checkpointSequence: request.checkpoint?.sequence ?? 0,
+        targetRevision: request.targetRevision,
+      }
+      await saveFinished
+    },
+    onFatal: failure => { fatal = failure },
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  await connecting
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint-chunk', data: 'abc',
+    offset: 0, totalLength: 6, reason: 'progress', sequence: 8 }))
+  transport.receive(encodeGameMessage({
+    type: 'server-save-checkpoint',
+    save: '{"checkpoint":"deployment"}',
+    reason: 'progress',
+    sequence: 9,
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-deployment-restart',
+    checkpointSequence: 9,
+    targetRevision,
+  }))
+  await new Promise(resolve => setImmediate(resolve))
+
+  assert.deepEqual(restartRequest, { checkpointSequence: 9, targetRevision })
+  assert.equal(
+    transport.sent.some(payload => decodeClientGameMessage(payload).type === 'client-deployment-ready'),
+    false,
+  )
+
+  releaseSave()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-deployment-ready',
+    checkpointSequence: 9,
+    targetRevision,
+  })
+  transport.disconnect({ code: 1012, reason: 'game updating', wasClean: true })
+  assert.equal(fatal, null)
+})
+
+test('client correlates a forced leave checkpoint and stays connected until storage completes', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+
+  const saving = session.saveBeforeLeave()
+  const request = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.deepEqual(request, {
+    type: 'client-save-before-leave',
+    requestId: 1,
+  })
+  transport.receive(encodeGameMessage({ type: 'server-save-checkpoint-chunk', data: 'abc',
+    offset: 0, totalLength: 6, reason: 'progress', sequence: 8 }))
+  transport.receive(encodeGameMessage({
+    type: 'server-save-checkpoint',
+    save: '{"checkpoint":"leave"}',
+    reason: 'progress',
+    sequence: 9,
+  }))
+  transport.receive(encodeGameMessage({
+    type: 'server-save-before-leave',
+    checkpointSequence: 9,
+    requestId: 1,
+  }))
+
+  assert.deepEqual(await saving, {
+    document: '{"checkpoint":"leave"}',
+    reason: 'progress',
+    sequence: 9,
+    streamId: session.getSaveCheckpoint()!.streamId,
+  })
+  assert.equal(transport.readyState, 'open')
+  session.destroy()
+  assert.equal(decodeClientGameMessage(transport.sent.at(-1)!).type, 'client-disconnect')
+})
+
+test('destroying a client rejects an unfinished leave save', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({
+    character: CHARACTER,
+    profile: NULL_PROFILE,
+    credential: 'spawn-secret',
+    transport,
+  })
+  receiveWelcome(
+    transport,
+    createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'),
+  )
+  const session = await connecting
+  const saving = session.saveBeforeLeave()
+  session.destroy()
+  await assert.rejects(saving, /destroyed/)
+})
+
+
+test('client admits a complete welcome that keeps progressing beyond five seconds', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+  const payload = encodeGameMessage(welcomeMessage(snapshot))
+  const chunks: GameStringChunk[] = []
+  const sender = new GameStringSender(payload, chunk => chunks.push(chunk))
+  sender.start()
+  assert.ok(payload.length > GAME_STRING_CHUNK_CHARACTERS)
+  let elapsedMs = 0
+  for (let index = 0; index < chunks.length; index += 1) {
+    if (index > 0) { context.mock.timers.tick(4000); elapsedMs += 4000 }
+    const chunk = chunks[index]!
+    transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', ...chunk }))
+    const acknowledgement = transport.sent.map(decodeClientGameMessage).findLast(message => (
+      message.type === 'client-welcome-chunk-ack'
+      && message.nextOffset === chunk.offset + chunk.data.length
+    ))
+    assert.ok(acknowledgement)
+    sender.acknowledge(chunk.offset + chunk.data.length)
+  }
+  const session = await connecting
+  context.after(() => session.destroy())
+  assert.ok(elapsedMs > 5000)
+  assert.equal(session.getSnapshot().tick, snapshot.tick)
+  assert.deepEqual(session.getSnapshot().players['player-1'], snapshot.players['player-1'])
+})
+
+test('client rejects an interrupted welcome before publishing state and ignores cancelled late chunks', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const rejected = assert.rejects(connecting, /pending transfer/)
+  transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: '{', offset: 0, totalLength: 100 }))
+  transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: 'bad', offset: 2, totalLength: 100 }))
+  await rejected
+  assert.equal(transport.readyState, 'closed')
+  assert.doesNotThrow(() => transport.receive(encodeGameMessage({
+    type: 'server-welcome-chunk', data: 'late', offset: 1, totalLength: 100,
+  })))
+  const cancelled = new MemoryTransport()
+  const pending = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport: cancelled })
+  const cancellation = assert.rejects(pending)
+  cancelled.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: '{', offset: 0, totalLength: 100 }))
+  cancelled.disconnect({ code: 1000, reason: 'cancelled', wasClean: true })
+  await cancellation
+  context.mock.timers.tick(10_000)
+  assert.doesNotThrow(() => cancelled.receive(encodeGameMessage({
+    type: 'server-welcome-chunk', data: 'late', offset: 1, totalLength: 100,
+  })))
+})
+
+test('client still fails a welcome that stops delivering valid chunks for five seconds', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  const rejected = assert.rejects(connecting, /handshake timed out/)
+  transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data: '{', offset: 0, totalLength: 100 }))
+  context.mock.timers.tick(5000)
+  await rejected
+  assert.equal(transport.readyState, 'closed')
+})
+
+test('observer admits a progressing chunked welcome before its matching Boneyard', async (context) => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  const connecting = connectGameObserverSession({ credential: 'observer-secret', transport })
+  const boneyard = loadedBoneyardFixture('observer-progress')
+  const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }), boneyard)
+  const snapshot = createGameSnapshot(state, 'player-1')
+  const payload = encodeGameMessage({ ...welcomeMessage(snapshot), observer: true,
+    sessionKind: 'global-hub' })
+  for (let offset = 0; offset < payload.length; offset += GAME_STRING_CHUNK_CHARACTERS) {
+    if (offset > 0) context.mock.timers.tick(4000)
+    const data = payload.slice(offset, offset + GAME_STRING_CHUNK_CHARACTERS)
+    transport.receive(encodeGameMessage({ type: 'server-welcome-chunk', data, offset,
+      totalLength: payload.length }))
+    assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+      type: 'client-welcome-chunk-ack', nextOffset: offset + data.length,
+    })
+  }
+  transport.receive(encodeGameMessage({ type: 'server-boneyard-loaded', boneyard }))
+  const session = await connecting
+  context.after(() => session.close())
+  assert.equal(session.current().snapshot.tick, snapshot.tick)
+  assert.equal(session.current().boneyard.runId, boneyard.runId)
+  assert.deepEqual(session.current().snapshot.players['player-1'], snapshot.players['player-1'])
+})
+
+function kernelParameters() {
+  return {
+    fixedTickSeconds: 0.01,
+    movementAcceleration: 10,
+    movementLaneCap: 118.75,
+    movementRetention: 0.9,
+    movementThresholdSquared: Math.fround(0.01),
+    playerRadius: 25,
+  }
+}
+
+
+test('Player Card feedback handles real null-profile responses and synchronous destroy rejection', async context => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'spawn-secret', transport })
+  receiveWelcome(transport, createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1'))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const requests = new PlayerCardRequests(session)
+  context.after(() => requests.dismiss())
+  const unavailable = requests.open(PLAYER_REFERENCE_2)
+  const wireRequest = decodeClientGameMessage(transport.sent.at(-1)!)
+  assert.equal(wireRequest.type, 'client-player-card-request')
+  if (wireRequest.type !== 'client-player-card-request') throw new Error('expected card request')
+  transport.receive(encodeGameMessage({ type: 'server-player-card', profile: null, requestId: wireRequest.requestId }))
+  await unavailable
+  assert.equal(requests.getSnapshot().error, 'That wizard is no longer available.')
+  const interrupted = requests.open(PLAYER_REFERENCE_2)
+  session.destroy()
+  requests.dismiss()
+  await interrupted
+  assert.deepEqual(requests.getSnapshot(), { profile: null, pending: false, error: null })
+})
+
+function welcomeMessage(
+  snapshot: ReturnType<typeof createGameSnapshot>,
+): ServerWelcomeMessage {
+  return {
+    type: 'server-welcome',
+    cheatsEnabled: false,
+    developerAccess: false,
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    playerId: 'player-1',
+    resumeToken: 'reserved-player-1',
+    serverTickRate: 100,
+    snapshotRate: 20,
+    sessionKind: 'standalone',
+    kernelParameters: kernelParameters(),
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    modAssets: [],
+    modCatalog: [],
+    boneyards: [{ id: 'default-random', name: 'Random Boneyard', source: 'default' }],
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    snapshot,
+    snapshotSequence: 1,
+  }
+}
+
+function receiveWelcome(
+  transport: MemoryTransport,
+  snapshot: ReturnType<typeof createGameSnapshot>,
+): void {
+  transport.receive(encodeGameMessage(welcomeMessage(snapshot)))
+}
+
+let nextSnapshotSequence = 10
+
+function receiveSnapshot(
+  transport: MemoryTransport,
+  snapshot: ReturnType<typeof createGameSnapshot>,
+  acknowledgedInputSequence: number,
+): void {
+  const sequence = nextSnapshotSequence
+  nextSnapshotSequence += 1
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence,
+    frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+    sequence,
+  }))
+}
+
+test('observer session exposes only read-only match state, chat, and replication', async () => {
+  const transport = new MemoryTransport()
+  const connecting = connectGameObserverSession({
+    credential: 'observer-secret',
+    transport,
+  })
+  assert.deepEqual(decodeClientGameMessage(transport.sent[0]!), {
+    type: 'client-observer-hello',
+    credential: 'observer-secret',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+  })
+  const loaded = loadedBoneyardFixture('observer-run')
+  const active = enterBoneyardWorld(
+    createGameSimulation({ 'player-1': CHARACTER }),
+    loaded,
+  )
+  const snapshot = createGameSnapshot(active, 'player-1')
+  transport.receive(encodeGameMessage({
+    type: 'server-welcome',
+    boneyards: [loaded.choice],
+    cheatsEnabled: false,
+    content: { manifestSha256: EMPTY_CONTENT_MANIFEST_SHA256, mods: [] },
+    developerAccess: false,
+    gameplayPause: null,
+    gameplayResumeGrace: null,
+    kernelParameters: kernelParameters(),
+    modAssets: [],
+    modCatalog: [],
+    observer: true,
+    playerId: 'player-1',
+    protocolVersion: GAME_PROTOCOL_VERSION,
+    resumeToken: 'observer-1',
+    serverTickRate: 100,
+    sessionKind: 'global-hub',
+    snapshot,
+    snapshotRate: 20,
+    snapshotSequence: 1,
+  }))
+  transport.receive(encodeGameMessage({ type: 'server-boneyard-loaded', boneyard: loaded }))
+  const session = await connecting
+  assert.equal('sendInput' in session, false)
+  assert.equal('sendChatMessage' in session, false)
+  assert.equal('selectSkill' in session, false)
+  assert.equal(session.current().snapshot.world.kind, 'boneyard')
+
+  transport.receive(encodeGameMessage({
+    type: 'server-chat',
+    channel: 'party',
+    sender: {
+      displayName: 'Helvidius',
+      playerId: 'player-1',
+      playerReference: PLAYER_REFERENCE_1,
+    },
+    sequence: 1,
+    text: 'Observer copy',
+  }))
+  assert.deepEqual(session.current().chatMessages, [{
+    channel: 'party',
+    sender: {
+      displayName: 'Helvidius',
+      playerId: 'player-1',
+      playerReference: PLAYER_REFERENCE_1,
+    },
+    sequence: 1,
+    text: 'Observer copy',
+  }])
+
+  transport.receive(encodeGameMessage({
+    type: 'server-snapshot',
+    acknowledgedInputSequence: 0,
+    frame: createGameSnapshotFrame(snapshot, 1, createReplicatedEntityBaseline(snapshot), false),
+    sequence: 2,
+  }))
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-snapshot-ack',
+    requireKeyframe: false,
+    sequence: 2,
+  })
+  session.close()
+  assert.deepEqual(decodeClientGameMessage(transport.sent.at(-1)!), {
+    type: 'client-disconnect',
+  })
+})
+
+class MemoryTransport implements GameTransport {
+  readyState: GameTransport['readyState'] = 'open'
+  readonly sent: string[] = []
+  private readonly closeListeners = new Set<(event: GameTransportClose) => void>()
+  private readonly messageListeners = new Set<(payload: string) => void>()
+
+  close(): void {
+    this.readyState = 'closed'
+  }
+
+  onClose(listener: (event: GameTransportClose) => void): () => void {
+    this.closeListeners.add(listener)
+    return () => this.closeListeners.delete(listener)
+  }
+
+  onMessage(listener: (payload: string) => void): () => void {
+    this.messageListeners.add(listener)
+    return () => this.messageListeners.delete(listener)
+  }
+
+  receive(payload: string): void {
+    for (const listener of this.messageListeners) listener(payload)
+  }
+
+  disconnect(event: GameTransportClose): void {
+    this.readyState = 'closed'
+    for (const listener of this.closeListeners) listener(event)
+  }
+
+  send(payload: string): void {
+    this.sent.push(payload)
+  }
+}

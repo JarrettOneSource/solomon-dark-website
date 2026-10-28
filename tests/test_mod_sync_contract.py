@@ -425,13 +425,14 @@ class WebsiteModSyncContractTests(unittest.TestCase):
         json_body: object | None = None,
         body: bytes | None = None,
         headers: dict[str, str] | None = None,
+        origin: str | None = None,
     ) -> tuple[int, object]:
         request_headers = dict(headers or {})
         if json_body is not None:
             body = json.dumps(json_body).encode()
             request_headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
-            cls.origin + path,
+            (origin or cls.origin) + path,
             data=body,
             headers=request_headers,
             method=method,
@@ -767,6 +768,26 @@ console.log(JSON.stringify({
             cls.editor_test_status = 201
             cls.stop_server()
             cls.start_server()
+
+    def test_pending_publication_keeps_admission_closed_and_publication_readable(self) -> None:
+        path = self.web_root / 'deployment.json'
+        previous = path.read_bytes() if path.exists() else None
+        try:
+            for ready, expected in ((False, 503), (True, 400)):
+                publication = {'revision': 'a' * 40, 'gameRevision': 'a' * 40, 'ready': ready}
+                path.write_text(json.dumps(publication))
+                status, response = self.request('POST', '/api/game/hub')
+                self.assertEqual(status, expected, response)
+                if not ready:
+                    self.assertEqual(response, {'error': 'The game is updating. Please try again shortly.'})
+                status, response = self.request('GET', '/api/game/deployment')
+                self.assertEqual(status, 200)
+                self.assertEqual(response, publication)
+        finally:
+            if previous is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(previous)
 
     def test_game_session_provisioning_fails_closed_when_supervisor_rejects(self) -> None:
         status, response = self.request("POST", "/api/game/sessions")
@@ -1334,6 +1355,101 @@ console.log(JSON.stringify({
                 self.assertEqual(status, 201, sibling_receipt)
                 uuid.UUID(sibling_receipt["logId"])
 
+
+    def test_parallel_clients_share_accounts_but_isolate_continuation_saves(self) -> None:
+        rust_origin = f"http://127.0.0.1:{free_port()}"
+        environment = {
+            **self.environment,
+            "ASPNETCORE_URLS": rust_origin,
+            "GameSaves__Namespace": "rust",
+        }
+        with tempfile.TemporaryFile(mode="w+") as log:
+            server = subprocess.Popen(
+                [self.dotnet, str(ROOT / "backend/bin/Debug/net10.0/Server.dll")],
+                cwd=ROOT, env=environment, stdout=log, stderr=subprocess.STDOUT,
+            )
+            try:
+                deadline = time.monotonic() + 30
+                while time.monotonic() < deadline:
+                    if server.poll() is not None:
+                        log.seek(0)
+                        self.fail(f"parallel API exited during startup:\n{log.read()}")
+                    try:
+                        if self.request("GET", "/api/stats", origin=rust_origin)[0] == 200:
+                            break
+                    except OSError:
+                        pass
+                    time.sleep(0.1)
+                else:
+                    self.fail("parallel API did not start")
+
+                credentials = {
+                    "username": "parallelplayer", "email": "parallel@example.invalid",
+                    "password": "correct-horse-battery-staple",
+                }
+                status, registered = self.request(
+                    "POST", "/api/auth/register", json_body=credentials, origin=rust_origin,
+                )
+                self.assertEqual(status, 201, registered)
+                auth = {"Authorization": f"Bearer {registered['token']}"}
+                status, account = self.request("GET", "/api/auth/me", headers=auth)
+                self.assertEqual(status, 200, account)
+                self.assertEqual(account["user"]["username"], credentials["username"])
+
+                document = json.dumps({
+                    "schemaVersion": 51, "integrity": "global-clean", "mods": [],
+                    "modState": {}, "nativeSource": None, "continuation": None,
+                    "profile": {"economy": {}, "hagathaRuntime": {}, "advancedUnlocks": [False] * 8},
+                })
+                status, root_save = self.request(
+                    "PUT", "/api/game/saves/0", headers=auth,
+                    json_body={"document": document, "expectedRevision": 0},
+                )
+                self.assertEqual(status, 200, root_save)
+                self.assertEqual(root_save["slot"], 0)
+                status, rust_empty = self.request(
+                    "GET", "/api/game/saves/0", headers=auth, origin=rust_origin,
+                )
+                self.assertEqual((status, rust_empty), (200, {"save": None}))
+
+                rust_document = json.dumps({**json.loads(document), "modState": {"client": "rust"}})
+                status, rust_save = self.request(
+                    "PUT", "/api/game/saves/0", headers=auth, origin=rust_origin,
+                    json_body={"document": rust_document, "expectedRevision": 0},
+                )
+                self.assertEqual(status, 200, rust_save)
+                self.assertEqual(rust_save, {"slot": 0, "revision": 1, "document": rust_document})
+                for method, path, body in (
+                    ("PUT", "/api/game/saves/0", {"document": document, "expectedRevision": 0}),
+                    ("DELETE", "/api/game/saves/0?expectedRevision=0", None),
+                ):
+                    status, conflict = self.request(
+                        method, path, json_body=body, headers=auth, origin=rust_origin,
+                    )
+                    self.assertEqual(status, 409, conflict)
+                    self.assertEqual(conflict["currentRevision"], 1)
+                self.assertEqual(self.request(
+                    "GET", "/api/game/saves/0", headers=auth,
+                ), (200, {"save": root_save}))
+                self.assertEqual(self.request(
+                    "DELETE", "/api/game/saves/0?expectedRevision=1", headers=auth, origin=rust_origin,
+                ), (204, None))
+                self.assertEqual(self.request(
+                    "GET", "/api/game/saves/0", headers=auth, origin=rust_origin,
+                ), (200, {"save": None}))
+                self.assertEqual(self.request(
+                    "GET", "/api/game/saves/0", headers=auth,
+                ), (200, {"save": root_save}))
+                self.assertEqual(self.request(
+                    "GET", "/api/game/saves/1", headers=auth, origin=rust_origin,
+                )[0], 400)
+            finally:
+                server.terminate()
+                try:
+                    server.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait(timeout=5)
 
     def test_browser_game_save_accepts_compatible_versions(self) -> None:
         auth = {"Authorization": f"Bearer {self.token}"}

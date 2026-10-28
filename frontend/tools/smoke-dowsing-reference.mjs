@@ -1,0 +1,539 @@
+import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { chromium } from 'playwright-core'
+import { createServer, preview } from 'vite'
+import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
+import { applyGameSimulationHubAction, createGameSimulation, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
+import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
+import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
+import { startGameHost } from '../src/game/host/game-host.ts'
+import { closeDowsingOffers, createEquipmentInventoryItem, DOWSING_EQUIPMENT_RECIPES, findInventoryItem } from '../src/game/core-kernels/hub-economy.ts'
+
+const root = fileURLToPath(new URL('../', import.meta.url))
+const output = process.env.SDR_DOWSING_SCREENSHOT_ROOT || await mkdtemp(join(tmpdir(), 'solomon-dowsing-'))
+await mkdir(output, { recursive: true })
+const mobile = process.env.SDR_DOWSING_MOBILE === '1'
+const built = process.env.SDR_DOWSING_BUILT === '1'
+const checkReducedFlashes = process.env.SDR_DOWSING_REDUCED_FLASHES === '1'
+let reducedScreenFlashes = false
+const flashChecks = []
+const gestures = []
+const sentHubActions = []
+let phase = 'setup'
+let servedDeployment = null
+const servedAssetUrls = new Set()
+const credential = randomBytes(32).toString('base64url')
+const owner = 'report39-owner'
+const itemId = 90039
+const staffId = 90040
+const ringId = 90041
+const potionId = 90042
+const sackId = 90050
+const character = { discipline: 'arcane', displayName: 'Dowsing', element: 'water' }
+const initial = createGameSimulation({ [owner]: character })
+const economy = getPlayerEconomy(initial, owner)
+const recipe = DOWSING_EQUIPMENT_RECIPES.find(row => row.name === 'Cloudcover Hood')
+assert.ok(recipe)
+const hood = { ...createEquipmentInventoryItem(recipe, itemId), inventorySlot: 24 }
+const staff = { ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[33], staffId), inventorySlot: 28 }
+const ring = { ...createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[35], ringId), inventorySlot: 0 }
+const potion = { ...economy.backpack.find(item => item.kind === 'health-potion'), id: potionId, inventorySlot: 32 }
+const sack = { ...economy.fomentiusStock.find(item => item.kind === 'sack'),
+  id: sackId, inventorySlot: 36, quantity: 1, contents: [ring] }
+delete sack.price
+const fixtureState = {
+    ...initial,
+    world: {
+      ...initial.world,
+      participants: Object.fromEntries(Object.entries(initial.world.participants).map(([id, value]) => [id, {
+        ...value, collegeIntro: null, region: 'courtyard', transition: null,
+      }])),
+    },
+    playerEntities: replacePlayerEconomy(initial.playerEntities, owner, {
+      ...economy, backpack: [hood, staff, potion, sack], collegeIntroPending: false, tutorialPending: false,
+      gold: 20000, nextItemId: 90100,
+    }),
+}
+if (process.argv.includes('--preflight-reduced')) {
+  console.log(JSON.stringify(preflightReducedSequence(), null, 2))
+  process.exit(0)
+}
+const document = createGameSaveDocument({
+  integrity: 'local-only', loadedBoneyard: null, mods: [], modState: {}, playerId: owner,
+  state: fixtureState,
+})
+const vite = built
+  ? await preview({ root, logLevel: 'error', preview: { host: '127.0.0.1', port: 0 } })
+  : await createServer({ root, logLevel: 'error', server: { host: '127.0.0.1', port: 0 } })
+if (!built) await vite.listen()
+const baseUrl = `http://127.0.0.1:${vite.httpServer.address().port}`
+const host = await startGameHost({ allowedOrigins: [baseUrl], authentication: { kind: 'shared', credential }, snapshotRate: 20 })
+const browser = await chromium.launch({ executablePath: process.env.SDR_CHROME_PATH || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome'), headless: true, args: ['--autoplay-policy=no-user-gesture-required', '--disable-audio-output', '--mute-audio'] })
+const page = await browser.newPage(mobile
+  ? { viewport: { width: 896, height: 414 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true }
+  : { viewport: { width: 1600, height: 900 } })
+const touch = mobile ? await page.context().newCDPSession(page) : null
+const receipts = []
+await page.addInitScript(installGameAudioSmokeProbe)
+if (checkReducedFlashes) await page.addInitScript(() => {
+  window.__dowsingFlashSamples = []
+  new MutationObserver(records => {
+    for (const record of records) {
+      const canvas = record.target
+      if (!(canvas instanceof HTMLCanvasElement)
+        || !canvas.classList.contains('hub-inventory-native-canvas')) continue
+      window.__dowsingFlashSamples.push({ at: performance.now(),
+        alpha: Number(canvas.dataset.dowsingFlashAlpha), trigger: canvas.dataset.dowsingFlashTrigger,
+        connected: canvas.isConnected })
+    }
+  }).observe(document, { subtree: true, attributes: true,
+    attributeFilter: ['data-dowsing-flash-alpha'] })
+})
+const errors = { page: [], console: [], responses: [] }
+page.on('websocket', socket => socket.on('framesent', ({ payload }) => {
+  try {
+    const message = JSON.parse(String(payload))
+    if (message.type === 'client-hub-action') sentHubActions.push({
+      at: Date.now(), phase, action: message.action,
+    })
+  } catch { /* Binary replication and unrelated frames are not diagnostics. */ }
+}))
+page.on('pageerror', error => errors.page.push(error.message))
+page.on('console', message => { if (message.type() === 'error') errors.console.push(message.text()) })
+page.on('response', response => {
+  if (response.status() >= 400) errors.responses.push(`${response.status()} ${response.url()}`)
+  const url = new URL(response.url())
+  if (url.origin === baseUrl && url.pathname.startsWith('/assets/')) servedAssetUrls.add(url.pathname)
+})
+try {
+  await page.route('**/__report39_seed', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Report39 fixture</title>' }))
+  if (!built) await page.route('**/deployment.json?*', route => route.fulfill({ json: { revision: new URL(route.request().url()).searchParams.get('current') } }))
+  if (checkReducedFlashes) {
+    assert.ok(built, 'Reduced-flash acceptance requires the production build')
+    assert.match(process.env.SDR_BUILD_REVISION ?? '', /^[0-9a-f]{40}$/)
+    const response = await page.request.get(`${baseUrl}/deployment.json`)
+    assert.ok(response.ok())
+    servedDeployment = await response.json()
+    assert.equal(servedDeployment.revision, process.env.SDR_BUILD_REVISION)
+  }
+  await page.addInitScript(runtime => { window.solomonDarkRuntime = runtime }, {
+    gameEndpoint: { kind: 'localhost', credential, url: host.address.url },
+  })
+  await page.goto(`${baseUrl}/__report39_seed`)
+  await page.evaluate(record => new Promise((resolve, reject) => {
+    const open = indexedDB.open('solomon-dark-game-saves', 1)
+    open.onupgradeneeded = () => open.result.createObjectStore('slots', { keyPath: 'slot' })
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const transaction = open.result.transaction('slots', 'readwrite')
+      transaction.objectStore('slots').put(record)
+      transaction.oncomplete = () => { open.result.close(); resolve() }
+      transaction.onerror = () => reject(transaction.error)
+    }
+  }), { document, revision: 1, slot: WEB_GAME_SAVE_SLOT })
+  await page.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  if (checkReducedFlashes) await setReducedFlashes(false, 'title')
+  await page.getByRole('button', { name: 'Play', exact: true }).click({ timeout: 180000 })
+  await page.getByRole('button', { name: 'Last game', exact: true }).click()
+  await page.locator('.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 90000 })
+  for (const [trader, title] of [
+    ['Hagatha', "HAGATHA'S CHARMS AND CURSES"],
+    ['Fomentius', "FOMENTIUS' USEFUL THYNGS"],
+    ['Luthacus', "LUTHACUS' SCAVENGED GOODS"],
+    ['Shlorio', "SHLORIO'S DISCOUNT DOWSING"],
+  ]) {
+    const service = await openService(trader, title)
+    const item = backpackItem(service, itemId)
+    await activate(item)
+    receipts.push({ trader, tooltip: await assertTooltipPaint(service) })
+    await screenshot(`${trader.toLowerCase()}-tooltip.png`)
+    await closeService(service)
+  }
+
+  phase = 'off-reference-and-roll'
+  let service = await openDowsing()
+  const unchanged = structuredClone(ownerEconomy())
+  await dropReference(service, unchanged.equipment.hat.id, 'equipment')
+  await dropReference(service, itemId)
+  assert.deepEqual(ownerEconomy().backpack, unchanged.backpack)
+  assert.deepEqual(ownerEconomy().equipment, unchanged.equipment)
+  assert.equal(ownerEconomy().gold, unchanged.gold)
+  assert.deepEqual(ownerEconomy().rng, unchanged.rng)
+  await screenshot('reference.png')
+  const targeted = await roll(service)
+  assert.ok(targeted.dowsingOffers.length >= 5 && targeted.dowsingOffers.length <= 6)
+  assert.ok(targeted.dowsingOffers.slice(0, 2).every(offer => [17, 18, 19].includes(offer.recipeIndex)))
+  assert.ok(targeted.dowsingOffers.slice(2).every(offer => [5, 6, 11, 20, 40].includes(offer.recipeIndex)))
+  assert.ok(findInventoryItem(targeted.backpack, itemId))
+  await screenshot('targeted-results.png')
+  // Reference changes are disabled in the rolled state.
+  await dragToReference(service, staffId)
+  assert.equal(await service.getAttribute('data-native-dowsing-reference'), `${itemId}`)
+  assert.deepEqual(ownerEconomy().dowsingOffers, targeted.dowsingOffers)
+  const firstOffer = service.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first()
+  const purchasedRecipe = targeted.dowsingOffers[0].recipeIndex
+  await activate(firstOffer)
+  await firstOffer.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await withFlash('buy-dowsing', async () => {
+    await activate(firstOffer)
+    await firstOffer.waitFor({ state: 'detached' })
+  })
+  assert.equal(ownerEconomy().dowsingRolled, true)
+  assert.deepEqual(ownerEconomy().dowsingOffers, [])
+  assert.ok(ownerEconomy().backpack.some(item => item.recipeIndex === purchasedRecipe))
+  assert.equal(await service.getByRole('button', { name: /^DOWSE/ }).count(), 0)
+  await closeService(service)
+
+  phase = 'on-settings-and-reopen'
+  if (checkReducedFlashes) await setReducedFlashes(true, 'hub')
+  service = await withoutFlash('close/reopen after accepted purchase', () => openDowsing())
+  assert.equal(await service.getAttribute('data-native-dowsing-reference'), '')
+  await dropReference(service, itemId)
+  // Reference replacement is separate report39 coverage. The reduced-flash
+  // journey retains this valid hood for its genuine On roll and purchase.
+  if (!checkReducedFlashes) await dropReference(service, staffId)
+  phase = 'second-reference-roll-and-purchase'
+  const setless = await roll(service)
+  assert.ok(setless.dowsingOffers.length > 0)
+  if (checkReducedFlashes) {
+    assert.ok(setless.dowsingOffers.every(offer => [17, 18, 19, 5, 6, 11, 20, 40].includes(offer.recipeIndex)))
+    assert.ok(findInventoryItem(setless.backpack, itemId))
+  } else assert.ok(setless.dowsingOffers.every(offer => [8, 18, 34].includes(offer.recipeIndex)))
+  if (checkReducedFlashes) {
+    const offer = service.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first()
+    await activate(offer)
+    await offer.locator('xpath=self::*[@data-selected="true"]').waitFor()
+    await withFlash('buy-dowsing', async () => {
+      await activate(offer)
+      await offer.waitFor({ state: 'detached' })
+    })
+    assert.deepEqual(ownerEconomy().dowsingOffers, [])
+  }
+  await closeService(service)
+
+  phase = 'nested-ring-reference'
+  service = await openDowsing()
+  const sackControl = backpackItem(service, sackId)
+  if (mobile) {
+    const box = await sackControl.boundingBox()
+    assert.ok(box)
+    // Enqueue one ordered gesture; separate round trips can exceed the native
+    // 500-ms window while a headless renderer is busy painting the first tap.
+    const acknowledgements = []
+    for (const type of ['touchStart', 'touchEnd', 'touchStart', 'touchEnd']) {
+      acknowledgements.push(touch.send('Input.dispatchTouchEvent', {
+        type, touchPoints: type === 'touchEnd' ? [] : [{
+          x: box.x + box.width / 2, y: box.y + box.height / 2, id: 1,
+        }],
+      }))
+    }
+    await Promise.all(acknowledgements)
+  } else await sackControl.dblclick()
+  await service.locator(`xpath=self::*[@data-native-sack-path="${sackId}"][@data-native-sack-transition=""]`).waitFor()
+  await dropReference(service, ringId)
+  const nested = await roll(service)
+  assert.ok(nested.dowsingOffers.length > 0)
+  assert.ok(nested.dowsingOffers.every(offer => DOWSING_EQUIPMENT_RECIPES[offer.recipeIndex].type === 'ring'))
+  assert.ok(findInventoryItem(nested.backpack, ringId))
+  await closeService(service)
+
+  phase = 'empty-potion-result'
+  service = await openDowsing()
+  await dropReference(service, potionId)
+  const emptyBefore = structuredClone(ownerEconomy())
+  const empty = await roll(service, true)
+  assert.deepEqual(empty.dowsingOffers, [])
+  assert.equal(empty.gold, emptyBefore.gold - emptyBefore.dowsingFee)
+  assert.deepEqual(empty.backpack, emptyBefore.backpack)
+  assert.equal(await service.getByRole('button', { name: /^DOWSE/ }).count(), 0)
+  await screenshot('empty-result.png')
+  await closeService(service)
+  service = await openDowsing()
+  assert.equal(await service.getAttribute('data-native-dowsing-reference'), '')
+
+  phase = 'insufficient-gold-rejection'
+  const state = host.state()
+  state.playerEntities = replacePlayerEconomy(state.playerEntities, host.hostPlayerId(), {
+    ...ownerEconomy(), gold: 0, revision: ownerEconomy().revision + 1,
+  })
+  await service.locator('[data-player-gold="0"]').waitFor({ state: 'attached' })
+  const beforeRejection = structuredClone(ownerEconomy())
+  await withoutFlash('insufficient gold rejection', async () => {
+    await activate(service.getByRole('button', { name: /^DOWSE/ }))
+    await service.getByRole('alert').waitFor()
+  })
+  assert.deepEqual(ownerEconomy(), beforeRejection)
+  await activate(service.getByRole('button', { name: 'OKAY', exact: true }))
+  await closeService(service)
+  let pausedSettingsCapture = null
+  if (checkReducedFlashes) {
+    await page.keyboard.press('Escape')
+    await page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]').waitFor()
+    await page.waitForFunction(() => Number(document.querySelector('.gameplay-pause-overlay')?.getAttribute('data-gameplay-pause-reveal')) === 1)
+    const tick = host.state().tick
+    await page.waitForTimeout(200)
+    assert.equal(host.state().tick, tick, 'The real owner pause must freeze authority before capture')
+    await page.getByRole('button', { name: 'GAME SETTINGS', exact: true }).click()
+    const dialog = page.locator('.game-settings-dialog')
+    await dialog.getByRole('button', { name: 'TWEAK GAME', exact: true }).click()
+    assert.equal(await dialog.getByRole('button', { name: 'REDUCED SCREEN FLASHES', exact: true }).getAttribute('aria-pressed'), 'true')
+    const file = 'reduced-flashes-settings-paused.png'
+    await page.screenshot({ path: join(output, file) })
+    assert.equal(host.state().tick, tick, 'Authority remained frozen throughout the Settings capture')
+    pausedSettingsCapture = { file, tick }
+  }
+  assert.deepEqual(errors, { page: [], console: [], responses: [] })
+  const receipt = { status: 'ok', browser: browser.version(), mobile, built, tooltips: receipts,
+    targetedOffers: targeted.dowsingOffers, secondReference: checkReducedFlashes ? 'retained-hood' : 'staff-replacement',
+    secondOffers: setless.dowsingOffers,
+    nestedOffers: nested.dowsingOffers, emptyResultChargedOnce: true,
+    referenceItemPreserved: true, purchaseRequiresReopen: true, insufficientGoldUnchanged: true,
+    servedDeployment, servedAssetUrls: [...servedAssetUrls].sort(), pausedSettingsCapture,
+    flashChecks, sentHubActions, flashCheckScope: checkReducedFlashes
+      ? 'Real Settings Off/On and genuine accepted dowse/purchase, empty result, rejection and reopen. Retained renderer alpha diagnostics mirror the assigned Pixi alpha. Mid-flash preference transitions are separately unit-tested; no browser timing freeze.'
+      : null, errors }
+  await writeFile(join(output, 'receipt.json'), JSON.stringify(receipt, null, 2))
+  console.log(JSON.stringify(receipt))
+} catch (error) {
+  const failure = { phase, gestures, sentHubActions, hostTick: host.state().tick,
+    ownerEconomy: structuredClone(ownerEconomy()),
+    ui: await page.evaluate(() => [...document.querySelectorAll('.hub-native-ui-overlay, .hub-native-ui-stage, .hub-inventory-native-canvas, [data-player-gold], [data-inventory-item-id]')].map(element => ({
+      tag: element.tagName, attributes: Object.fromEntries([...element.attributes].map(({ name, value }) => [name, value])),
+      rect: element.getBoundingClientRect().toJSON(),
+    }))).catch(error => ({ diagnosticError: String(error) })), errors }
+  await writeFile(join(output, 'failure-state.json'), JSON.stringify(failure, null, 2))
+  console.error(JSON.stringify({ dowsingFailureState: failure }))
+  await screenshot('failure.png')
+  console.error(JSON.stringify({ body: (await page.locator('body').innerText()).slice(0, 1500), errors }))
+  throw error
+} finally {
+  await browser.close()
+  await host.close()
+  await vite.close()
+}
+
+function preflightReducedSequence() {
+  let state = structuredClone(fixtureState)
+  const proof = []
+  const current = () => getPlayerEconomy(state, owner)
+  const act = action => {
+    const before = structuredClone(current())
+    const result = applyGameSimulationHubAction(state, owner, action)
+    assert.equal(result.accepted, true, `${action.type}: ${result.reason}`)
+    state = result.state
+    const after = current()
+    assert.equal(after.actionFeedback.action, action.type)
+    assert.equal(after.actionFeedback.accepted, true)
+    assert.equal(after.actionFeedback.sequence, (before.actionFeedback?.sequence ?? 0) + 1)
+    proof.push({ action, goldBefore: before.gold, goldAfter: after.gold,
+      fee: after.dowsingFee, feedback: after.actionFeedback, offers: after.dowsingOffers })
+    return after
+  }
+  const close = () => {
+    state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, owner, closeDowsingOffers(current())) }
+  }
+  for (const preference of ['Off', 'On']) {
+    const rolled = act({ type: 'dowse', referenceItemId: itemId })
+    assert.ok(rolled.dowsingOffers.length > 0, `${preference} hood roll has offers`)
+    assert.ok(rolled.dowsingOffers.every(offer => [17, 18, 19, 5, 6, 11, 20, 40].includes(offer.recipeIndex)))
+    const purchasedRecipe = rolled.dowsingOffers[0].recipeIndex
+    const bought = act({ type: 'buy-dowsing', offerId: rolled.dowsingOffers[0].id })
+    assert.deepEqual(bought.dowsingOffers, [])
+    assert.ok(bought.backpack.some(item => item.recipeIndex === purchasedRecipe))
+    assert.ok(findInventoryItem(bought.backpack, itemId))
+    close()
+  }
+  const nested = act({ type: 'dowse', referenceItemId: ringId })
+  assert.ok(nested.dowsingOffers.length > 0)
+  assert.ok(nested.dowsingOffers.every(offer => DOWSING_EQUIPMENT_RECIPES[offer.recipeIndex].type === 'ring'))
+  close()
+  const beforeEmpty = structuredClone(current())
+  const empty = act({ type: 'dowse', referenceItemId: potionId })
+  assert.deepEqual(empty.dowsingOffers, [])
+  assert.equal(empty.gold, beforeEmpty.gold - beforeEmpty.dowsingFee)
+  assert.deepEqual(empty.backpack, beforeEmpty.backpack)
+  close()
+  state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, owner, { ...current(), gold: 0 }) }
+  const beforeReject = structuredClone(current())
+  const rejection = applyGameSimulationHubAction(state, owner, { type: 'dowse' })
+  assert.equal(rejection.accepted, false)
+  assert.equal(rejection.reason, 'insufficient-gold')
+  const rejected = getPlayerEconomy(rejection.state, owner)
+  assert.equal(rejected.gold, beforeReject.gold)
+  assert.deepEqual(rejected.backpack, beforeReject.backpack)
+  assert.deepEqual(rejected.rng, beforeReject.rng)
+  return { status: 'pass', scope: 'Actual fixture and production transaction sequence; browser must still prove real UI admission and alpha.', proof, rejection: rejected.actionFeedback }
+}
+function ownerEconomy() { return getPlayerEconomy(host.state(), host.hostPlayerId()) }
+async function screenshot(name) {
+  // The reduced-flash journey observes the unmodified native presentation clock.
+  // It does not take screenshots of an actively painting unpaused renderer.
+  if (!checkReducedFlashes) await page.screenshot({ path: join(output, name) })
+}
+function backpackItem(service, id) {
+  return service.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${id}"]`)
+}
+async function activate(locator) { if (mobile) await locator.tap(); else await locator.click() }
+async function openService(trader, title) {
+  await activate(page.getByRole('button', { name: `Open ${trader} interaction`, exact: true }))
+  const service = page.getByRole('dialog', { name: title, exact: true })
+  await service.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  return service
+}
+async function openDowsing() {
+  const service = await openService('Shlorio', "SHLORIO'S DISCOUNT DOWSING")
+  await service.getByRole('button', { name: /^DOWSE/ }).waitFor()
+  return service
+}
+async function closeService(service) {
+  await activate(service.getByRole('button', { name: 'Done', exact: true }))
+  await service.waitFor({ state: 'detached' })
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+}
+async function dragToReference(service, id, owner = 'backpack') {
+  const canvas = service.locator('.hub-inventory-native-canvas')
+  const canvasBox = await canvas.boundingBox()
+  const sourceBox = await service.locator(
+    `[data-inventory-owner="${owner}"][data-inventory-item-id="${id}"]`,
+  ).first().boundingBox()
+  assert.ok(canvasBox && sourceBox)
+  const from = { x: sourceBox.x + sourceBox.width / 2, y: sourceBox.y + sourceBox.height / 2 }
+  const to = { x: canvasBox.x + canvasBox.width / 2, y: canvasBox.y + 175.5 / 900 * canvasBox.height }
+  const gesture = { phase, id, owner, from, to, canvasBox, sourceBox,
+    referenceBefore: await service.getAttribute('data-native-dowsing-reference'),
+    actionBefore: structuredClone(ownerEconomy().actionFeedback), status: 'started' }
+  gestures.push(gesture)
+  console.log(JSON.stringify({ dowsingReferenceGesture: gesture }))
+  if (touch) {
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...from, id: 1 }] })
+    for (let step = 1; step <= 12; step += 1) {
+      await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{
+        x: from.x + (to.x - from.x) * step / 12, y: from.y + (to.y - from.y) * step / 12, id: 1,
+      }] })
+    }
+    await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  } else {
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    await page.mouse.move(to.x, to.y, { steps: 12 })
+    await page.mouse.up()
+  }
+  await service.locator('xpath=self::*[@data-native-inventory-dragging=""]').waitFor()
+  gesture.status = 'released'
+  gesture.referenceAfter = await service.getAttribute('data-native-dowsing-reference')
+  gesture.actionAfter = structuredClone(ownerEconomy().actionFeedback)
+}
+async function dropReference(service, id, owner = 'backpack') {
+  const eventStart = await page.evaluate(() => window.__sdrAudioEvents.length)
+  await dragToReference(service, id, owner)
+  await service.locator(`xpath=self::*[@data-native-dowsing-reference="${id}"]`).waitFor()
+  const cues = await page.evaluate(start => window.__sdrAudioEvents.slice(start)
+    .filter(event => event.type === 'buffer-start')
+    .flatMap(event => ['backpack-open.wav', 'backpack-close.wav'].filter(source => (
+      window.__sdrAudioSourceMatches(event.src, source)
+    ))), eventStart)
+  assert.deepEqual(cues, ['backpack-open.wav', 'backpack-close.wav'])
+}
+async function roll(service, empty = false) {
+  const button = service.getByRole('button', { name: /^DOWSE/ })
+  await withFlash('dowse', async () => {
+    await activate(button)
+    await button.waitFor({ state: 'detached' })
+    if (!empty) await service.getByRole('button', { name: /^Buy .* for \d+ gold$/ }).first().waitFor()
+  })
+  assert.equal(ownerEconomy().dowsingRolled, true)
+  return structuredClone(ownerEconomy())
+}
+
+async function setReducedFlashes(value, context) {
+  if (context === 'title') {
+    await page.getByRole('button', { name: 'Settings', exact: true }).click({ timeout: 180000 })
+  } else {
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: 'GAME SETTINGS', exact: true }).click()
+  }
+  const dialog = page.locator('.game-settings-dialog')
+  await dialog.getByRole('button', { name: 'TWEAK GAME', exact: true }).click()
+  const toggle = dialog.getByRole('button', { name: 'REDUCED SCREEN FLASHES', exact: true })
+  if (await toggle.getAttribute('aria-pressed') !== String(value)) await toggle.click()
+  assert.equal(await toggle.getAttribute('aria-pressed'), String(value))
+  await dialog.getByRole('button', { name: 'BACK', exact: true }).click()
+  await dialog.getByRole('button', { name: 'DONE', exact: true }).click()
+  await dialog.waitFor({ state: 'detached' })
+  if (context === 'hub') {
+    await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor()
+    await page.locator(`.hub-world-canvas[data-reduced-screen-flashes="${value}"]`).waitFor()
+  }
+  reducedScreenFlashes = value
+}
+
+async function withFlash(trigger, action) {
+  if (!checkReducedFlashes) return action()
+  const start = await page.evaluate(() => window.__dowsingFlashSamples.length)
+  const before = structuredClone(ownerEconomy().actionFeedback)
+  const result = await action()
+  await page.waitForFunction(({ start, trigger }) => {
+    const samples = window.__dowsingFlashSamples.slice(start)
+    const first = samples.findIndex(x => x.alpha > 0 && x.trigger === trigger)
+    return first >= 0 && samples.slice(first + 1).some(x => x.alpha === 0)
+  }, { start, trigger }, { timeout: 5000 })
+  const samples = await page.evaluate(start => window.__dowsingFlashSamples.slice(start), start)
+  const positive = samples.filter(x => x.alpha > 0)
+  const after = structuredClone(ownerEconomy().actionFeedback)
+  assert.equal(after.action, trigger)
+  assert.equal(after.accepted, true)
+  assert.ok(after.sequence > (before?.sequence ?? 0))
+  assert.ok(positive.every(x => x.connected && x.trigger === trigger))
+  const maximum = Math.max(...positive.map(x => x.alpha))
+  assert.ok(maximum <= (reducedScreenFlashes ? 0.2 : 1))
+  assert.ok(maximum > (reducedScreenFlashes ? 0 : 0.2), 'the real flash was observed within its native lifetime')
+  const proof = { trigger, reducedScreenFlashes, before, after, maximum, samples }
+  flashChecks.push(proof)
+  console.log(JSON.stringify({ dowsingFlashProof: proof }))
+  return result
+}
+
+async function withoutFlash(label, action) {
+  if (!checkReducedFlashes) return action()
+  const start = await page.evaluate(() => window.__dowsingFlashSamples.length)
+  const result = await action()
+  const samples = await page.evaluate(start => window.__dowsingFlashSamples.slice(start), start)
+  assert.ok(samples.length > 0, `${label} did not observe the retained renderer`)
+  assert.ok(samples.every(x => x.alpha === 0), `${label} replayed an old or rejected flash`)
+  flashChecks.push({ label, reducedScreenFlashes, samples, noReplay: true })
+  return result
+}
+async function assertTooltipPaint(service) {
+  const canvas = service.locator('.hub-inventory-native-canvas[data-native-item-info="visible"]')
+  await canvas.waitFor()
+  const box = await canvas.boundingBox()
+  assert.ok(box)
+  // Cloudcover Hood in slot24 puts this opaque padding above the service field.
+  // In the reported failure the field overpainted this strip and the item name.
+  if (checkReducedFlashes) return { scope: 'Tooltip pixel check retained only in the original dedicated smoke; active-renderer screenshot skipped here.' }
+  const image = await page.screenshot({ clip: {
+    x: box.x + 548 / 1600 * box.width, y: box.y + 350 / 900 * box.height,
+    width: 8 / 1600 * box.width, height: 52 / 900 * box.height,
+  } })
+  const receipt = await page.evaluate(async encoded => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${encoded}`)).blob())
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width; canvas.height = bitmap.height
+    const context = canvas.getContext('2d')
+    context.drawImage(bitmap, 0, 0); bitmap.close()
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data
+    let opaqueBlack = 0
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (Math.max(pixels[index], pixels[index + 1], pixels[index + 2]) <= 8) opaqueBlack += 1
+    }
+    return { opaqueBlack, pixels: pixels.length / 4 }
+  }, image.toString('base64'))
+  assert.ok(receipt.opaqueBlack / receipt.pixels > 0.98, 'service panel obscured the selected item tooltip')
+  return receipt
+}

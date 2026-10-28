@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SolomonDarkRevived.Data;
@@ -12,31 +13,57 @@ public static class GameSessionEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/game/deployment", GetDeploymentPublication);
-        app.MapGet("/api/game/parties", ListPublicPartiesAsync);
-        app.MapGet("/api/game/players", ListConnectedPlayersAsync);
-        app.MapGet("/api/game/matches", ListActiveMatchesAsync);
-        app.MapPost("/api/game/observe", ObserveMatchAsync)
+        var sessions = app.MapGroup("/api/game").AddEndpointFilter(RequireReadyPublicationAsync);
+        sessions.MapGet("/parties", ListPublicPartiesAsync);
+        sessions.MapGet("/players", ListConnectedPlayersAsync);
+        sessions.MapGet("/matches", ListActiveMatchesAsync);
+        sessions.MapPost("/observe", ObserveMatchAsync)
             .RequireRateLimiting("game-observers");
-        app.MapPost("/api/game/editor-test", TestEditorBoneyardAsync)
+        sessions.MapPost("/editor-test", TestEditorBoneyardAsync)
             .RequireRateLimiting("game-sessions")
             .WithMetadata(new RequestSizeLimitAttribute(12 * 1024 * 1024));
-        app.MapPost("/api/game/sessions", ProvisionAsync)
+        sessions.MapPost("/sessions", ProvisionAsync)
             .RequireRateLimiting("game-sessions");
-        app.MapPost("/api/game/hub", EnterHubAsync)
+        sessions.MapPost("/hub", EnterHubAsync)
             .RequireRateLimiting("game-sessions");
-        app.MapPost("/api/game/join/resolve", ResolvePartyCodeAsync)
+        sessions.MapPost("/join/resolve", ResolvePartyCodeAsync)
             .RequireRateLimiting("party-joins");
-        app.MapPost("/api/game/join/public", ResolvePublicPartyAsync)
+        sessions.MapPost("/join/public", ResolvePublicPartyAsync)
             .RequireRateLimiting("party-joins");
-        app.MapPost("/api/game/join/requests", RequestPartyJoinAsync)
+        sessions.MapPost("/join/requests", RequestPartyJoinAsync)
             .RequireRateLimiting("party-joins");
-        app.MapGet("/api/game/join/requests/{requestToken}", GetPartyJoinRequestAsync)
+        sessions.MapGet("/join/requests/{requestToken}", GetPartyJoinRequestAsync)
             .RequireRateLimiting("party-join-status");
-        app.MapPost("/api/game/join/admit", AdmitPartyJoinAsync)
+        sessions.MapPost("/join/admit", AdmitPartyJoinAsync)
             .RequireRateLimiting("party-joins");
-        app.MapPost("/api/game/rejoin", RejoinPartyAsync)
+        sessions.MapPost("/rejoin", RejoinPartyAsync)
             .RequireRateLimiting("party-joins")
             .WithMetadata(new RequestSizeLimitAttribute(WebGameSaveInspector.MaxRequestBytes));
+    }
+
+    private static async ValueTask<object?> RequireReadyPublicationAsync(
+        EndpointFilterInvocationContext invocation, EndpointFilterDelegate next)
+    {
+        var context = invocation.HttpContext;
+        if (HttpMethods.IsPost(context.Request.Method))
+        {
+            var environment = context.RequestServices.GetRequiredService<IWebHostEnvironment>();
+            var path = Path.Combine(environment.WebRootPath, "deployment.json");
+            if (File.Exists(path))
+            {
+                await using var stream = File.OpenRead(path);
+                using var publication = await JsonDocument.ParseAsync(stream, cancellationToken: context.RequestAborted);
+                if (publication.RootElement.TryGetProperty("ready", out var ready)
+                    && ready.ValueKind == JsonValueKind.False)
+                {
+                    context.Response.Headers.CacheControl = "no-store";
+                    context.Response.Headers.RetryAfter = "5";
+                    return Results.Json(new { error = "The game is updating. Please try again shortly." },
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+            }
+        }
+        return await next(invocation);
     }
 
     private static IResult GetDeploymentPublication(HttpContext context, IWebHostEnvironment environment)

@@ -1,0 +1,43 @@
+[Unit]
+Description=Solomon Dark Rust companion account and content API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=solomon-dark
+Group=solomon-dark
+WorkingDirectory=/opt/solomon-dark-revived
+ExecStart=/usr/bin/dotnet /opt/solomon-dark-revived/Server.dll
+EnvironmentFile=/etc/solomon-dark-revived.env
+EnvironmentFile=/opt/solomon-dark-revived/GameHost/rust-api.env
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5231
+Environment=ASPNETCORE_WEBROOT=/opt/solomon-dark-revived/RustSite
+Environment=Storage__Root=/var/lib/solomon-dark-revived
+Environment=DOTNET_CLI_TELEMETRY_OPTOUT=1
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+UMask=0027
+StateDirectory=solomon-dark-revived
+StateDirectoryMode=0750
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

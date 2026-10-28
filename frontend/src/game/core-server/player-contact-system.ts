@@ -1,0 +1,458 @@
+import type { WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
+import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
+import { failBoast } from '../core-kernels/boast.ts'
+import { nativeCrowBlindness } from '../core-kernels/native-crow-blindness.ts'
+import { nativeRescueDamage } from '../core-kernels/native-player-rescue.ts'
+import { spawnNativePlayerRescueShockwave } from '../core-kernels/native-secondary-abilities.ts'
+import { resolveNativeBoast } from '../core-kernels/native-hub-npc.ts'
+import type { NativeSecondarySimulationState } from '../core-kernels/native-secondary-abilities.ts'
+import { applyNativeSecondaryGolemDamage, applyNativeSecondaryPlayerDamage, materializeNativePlayerFlashResponse } from '../core-kernels/native-secondary-abilities.ts'
+import { NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED } from '../core-kernels/native-secondary-golem.ts'
+import { applyNativeWebbed } from '../core-kernels/native-webbed.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
+import type { PlayerCharacterState } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_RADIUS, playerCharacterFacing } from '../core-kernels/player-character.ts'
+import { playerPoisonHealthDamage } from '../core-kernels/player-combat.ts'
+import { NATIVE_FLASH_RESPONSE_RADIUS, playerDeflectReflectionSourceInRange, resolvePlayerFlashResponse, resolvePlayerHarmfulContact } from '../core-kernels/player-harmful-contact.ts'
+import { playerPoisonDurationSeconds } from '../core-kernels/player-skill-runtime.ts'
+import type { Vector2 } from '../core-kernels/vector.ts'
+import { emitPlayerCharmLossFeedback, emitPlayerCheatDeathFeedback, emitPlayerStatusBurst } from './boneyard-player-status.ts'
+import type { BoneyardWorldState } from './boneyard-world-state.ts'
+import { addNativeCocoon } from './enemies/construction.ts'
+import { emitBoneyardPlayerDamageSound, nativeWizardOuchCooldownReady } from './enemies/events.ts'
+import type { BoneyardEnemyPlayerDamage, BoneyardEnemySemanticEvent } from './enemies/model.ts'
+import { boneyardEnemyCollisionRadius } from './enemies/model.ts'
+import type { GameSimulationExtensions, GameSimulationState, GameWorldState, PlayerId } from './game-simulation.ts'
+import { boneyardNativeSecondaryTargets } from './native-secondary-world.ts'
+import type { PlayerEntityStore } from './player-entity-store.ts'
+import { damagePlayerEntityWithResult, playerEntityIndex, playerSkillDerivedStatsAt, replacePlayerEconomy, setPlayerEntityMana, tryDebitPlayerEntityMana } from './player-entity-store.ts'
+import type { PendingPlayerHardenChip } from './player-harden-effects.ts'
+export interface PlayerContactStep {
+  readonly hardenChips: readonly PendingPlayerHardenChip[]
+  readonly world: GameWorldState
+  readonly playerEntities: PlayerEntityStore
+  readonly secondaryAbilities: NativeSecondarySimulationState
+  readonly resolvedPlayers: Readonly<Record<PlayerId, PlayerCharacterState>>
+  readonly appliedPlayerDamage: readonly BoneyardEnemyPlayerDamage[]
+  readonly reflectedEnemyDamage: readonly Readonly<{ actorId: number; amount: number; playerId: string }>[]
+  readonly deflectPitchesByEventId: ReadonlyMap<number, number>
+  readonly playerDamageSoundEvents: readonly BoneyardEnemySemanticEvent[]
+}
+
+export function applyPlayerContacts(
+  source: Pick<GameSimulationState, 'world' | 'playerEntities' | 'secondaryAbilities'>
+    & Partial<Pick<GameSimulationState, 'enhancedEffects'>>,
+  players: Readonly<Record<PlayerId, PlayerCharacterState>>,
+  playerDamage: readonly BoneyardEnemyPlayerDamage[],
+  tick: number,
+  extensions: GameSimulationExtensions | undefined,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+  writeScreenFlash?: WriteNativeScreenFlash,
+): PlayerContactStep {
+  const initialWorld = source.world
+  let playerEntities = source.playerEntities
+  let secondaryAbilities = source.secondaryAbilities
+  let resolvedPlayers = players
+  const hardenChips: PendingPlayerHardenChip[] = []
+  const playerDamageSoundEvents: BoneyardEnemySemanticEvent[] = []
+  const appliedPlayerDamage: (typeof playerDamage)[number][] = []
+  const admittedStatusKinds = new Map<string, Set<'cold' | 'poison'>>()
+  const reflectedEnemyDamage: Array<Readonly<{
+    actorId: number
+    amount: number
+    playerId: string
+  }>> = []
+  const deflectPitchesByEventId = new Map<number, number>()
+  if (initialWorld.kind === 'hub') return { world: initialWorld, hardenChips, playerEntities, secondaryAbilities, resolvedPlayers,
+    appliedPlayerDamage, reflectedEnemyDamage, deflectPitchesByEventId, playerDamageSoundEvents }
+  let world = initialWorld
+  for (const damage of playerDamage) {
+    if (world.tutorial?.damageProtection) continue
+    const golemId = damage.playerId.startsWith('golem:') ? Number(damage.playerId.slice(6)) : null
+    if (golemId !== null) applyGolemContact(damage, golemId)
+    else applyPlayerContact(damage)
+  }
+  return { world, hardenChips, playerEntities, secondaryAbilities, resolvedPlayers,
+    appliedPlayerDamage, reflectedEnemyDamage, deflectPitchesByEventId, playerDamageSoundEvents }
+
+  function applyGolemContact(damage: BoneyardEnemyPlayerDamage, golemId: number): void {
+    const golem = secondaryAbilities.actors.find(({ id, kind }) => (
+      id === golemId && kind === 'golem'
+    ))
+    if (!golem) return
+    if (damage.tragicCircle && golem.golem !== null) {
+      secondaryAbilities = { ...secondaryAbilities, actors: secondaryAbilities.actors.map(actor => (
+        actor.id === golemId ? { ...golem, golem: { ...golem.golem!, circleSlowTicks: 20 } } : actor
+      )) }
+      return
+    }
+    const damageSource = playerContactSource(world, damage)
+    const sourceInReflectRange = damageSource !== undefined
+      && squaredVectorDistance(damageSource.position, golem.position)
+        < NATIVE_GOLEM_REFLECT_DISTANCE_SQUARED
+    const received = applyNativeSecondaryGolemDamage(
+      secondaryAbilities,
+      golemId,
+      {
+        primaryDamage: damage.physicalDamage,
+        reflectablePhysicalSourceInRange: damage.physicalDamage > 0
+          && sourceInReflectRange,
+        secondaryDamage: damage.magicDamage,
+      },
+      tick,
+      source.enhancedEffects ?? true,
+      registerWorldPainter,
+    )
+    secondaryAbilities = received.state
+    if (received.reflectedDamage > 0 && received.ownerId !== null && damageSource?.reflectableActorId != null) {
+      reflectedEnemyDamage.push(Object.freeze({
+        actorId: damageSource.reflectableActorId,
+        amount: received.reflectedDamage,
+        playerId: received.ownerId,
+      }))
+    }
+  }
+
+  function applyPlayerContact(damage: BoneyardEnemyPlayerDamage): void {
+    const character = resolvedPlayers[damage.playerId]
+    const playerIndex = playerEntityIndex(playerEntities, damage.playerId)
+    if (character === undefined || playerIndex < 0) return
+    const damageSource = playerContactSource(world, damage)
+    const runtime = playerEntities.skillRuntimes[playerIndex]!
+    const derived = playerSkillDerivedStatsAt(playerEntities, damage.playerId)!
+    const progression = playerEntities.progressions[playerIndex]!
+    // Silk uses 25 raw physical damage against an active Shield (0x005F8EF6).
+    if (damage.webbedStrength !== undefined
+      && (secondaryAbilities.players[damage.playerId]?.magicShieldAbsorb ?? 0) > 0) {
+      damage = { ...damage, physicalDamage: 25 }
+    }
+    if (damage.tragicCircle) {
+      if (progression.lifeState !== 'alive') return
+      drainMana(Math.fround(derived.manaRecoveryPerTick * 18))
+      const progressions = [...playerEntities.progressions]
+      progressions[playerIndex] = { ...progressions[playerIndex]!, circleSlowTicksRemaining: 20 }
+      playerEntities = { ...playerEntities, progressions }
+      return
+    }
+    const contact = resolvePlayerHarmfulContact(
+      runtime,
+      derived,
+      progression,
+      damage,
+      damageSource !== undefined
+        && playerDeflectReflectionSourceInRange(
+          character.position,
+          PLAYER_CHARACTER_RADIUS,
+          damageSource.position,
+          damageSource.collisionRadius,
+        ),
+      secondaryAbilities.rng,
+      character.position,
+      source.enhancedEffects ?? true,
+    )
+    secondaryAbilities = { ...secondaryAbilities, rng: contact.rng }
+    if (contact.hardenChip !== null) hardenChips.push({
+      chip: contact.hardenChip, ownerId: damage.playerId,
+      position: character.position, worldKey: gameWorldKey(world, damage.playerId),
+    })
+    if (contact.deflected) {
+      deflectPitchesByEventId.set(damage.eventId, contact.deflectPitch)
+      if (damageSource !== undefined) {
+        resolvedPlayers = {
+          ...resolvedPlayers,
+          [damage.playerId]: {
+            ...character,
+            ...playerCharacterFacing(actorHeadingFromVector(
+              damageSource.position.x - character.position.x,
+              damageSource.position.y - character.position.y,
+            )),
+          },
+        }
+      }
+      if (contact.reflectedDamage > 0 && damageSource?.reflectableActorId != null) {
+        reflectedEnemyDamage.push(Object.freeze({
+          actorId: damageSource.reflectableActorId,
+          amount: contact.reflectedDamage,
+          playerId: damage.playerId,
+        }))
+      }
+      applyCrowBlindness()
+      return
+    }
+    const shieldActive = (secondaryAbilities.players[damage.playerId]?.magicShieldAbsorb ?? 0) > 0
+    const intercepted = applyNativeSecondaryPlayerDamage(
+      secondaryAbilities,
+      damage.playerId,
+      contact.shieldDamage,
+      tick,
+      character.position,
+      gameWorldKey(world, damage.playerId),
+      { writeScreenFlash, physical: damage.physicalDamage > 0 && damage.magicDamage <= 0, enhancedEffects: source.enhancedEffects ?? true },
+    )
+    secondaryAbilities = intercepted.state
+    const physicalDamage = intercepted.absorbedDamage > 0 ? 0 : contact.physicalDamage
+    const magicDamage = intercepted.absorbedDamage > 0 ? 0 : contact.magicDamage
+    const { healthDamage, rejectedContact, cappedPoisonDamage, filteredHealthDamage, poisonContactDamage } =
+      filterHealthDamage()
+    const stoneskin = (secondaryAbilities.players[damage.playerId]?.stoneskinTicksRemaining ?? 0) > 0
+    if (!rejectedContact && intercepted.absorbedDamage === 0 && !stoneskin
+      && damage.manaDamageMaximumFraction !== undefined) {
+      drainMana(Math.fround(progression.maximumMana * damage.manaDamageMaximumFraction))
+    }
+    applyStatusModifiers()
+    const before = progression
+    const acceptedDamage = damagePlayerEntityWithResult(
+      playerEntities,
+      damage.playerId,
+      healthDamage,
+      tick,
+      true,
+      !damage.suppressHitResponse,
+      damage.hitStrength,
+    )
+    playerEntities = acceptedDamage.store
+    if (acceptedDamage.hagathaCharmsLost) {
+      const feedback = emitPlayerCharmLossFeedback(world.enemies, {
+        playerId: damage.playerId, position: character.position, tick,
+      })
+      world = { ...world, enemies: feedback.store }
+      playerDamageSoundEvents.push(feedback.event)
+    }
+    if (acceptedDamage.cheatDeathTriggered) {
+      const feedback = emitPlayerCheatDeathFeedback(world.enemies, {
+        playerId: damage.playerId, position: character.position, tick,
+        worldKey: `boneyard:${world.runId}`,
+      }, writeScreenFlash)
+      world = { ...world, enemies: feedback.store }
+      playerDamageSoundEvents.push(feedback.event)
+      secondaryAbilities = spawnNativePlayerRescueShockwave(secondaryAbilities, {
+        lightRegistration: playerEntities.lightings[playerIndex]!.lightRegistration,
+        ownerId: damage.playerId, position: character.position, worldKey: `boneyard:${world.runId}`,
+      }, registerWorldPainter)
+    }
+    const after = playerEntities.progressions[playerIndex]!
+    playHurtResponse()
+    applyFlashResponse()
+    applyCrowBlindness()
+
+    function drainMana(amount: number): void {
+      const delta = extensions ? finiteModMutation(extensions.filterMana({
+        currentMana: progression.currentMana, delta: -amount, maximumMana: progression.maximumMana,
+        playerId: damage.playerId, source: 'enemy-contact', tick,
+      }), 'filtered enemy mana damage') : -amount
+      if (delta >= 0) {
+        playerEntities = setPlayerEntityMana(playerEntities, damage.playerId,
+          Math.min(progression.maximumMana, Math.fround(progression.currentMana + delta)))
+        return
+      }
+      if (-delta > progression.currentMana) {
+        const economy = playerEntities.economies[playerIndex]!
+        const boast = failBoast(economy.npc.boast, 'mana-underflow',
+          (selection) => resolveNativeBoast(selection) ?? extensions?.resolveBoast?.(selection) ?? null)
+        if (boast !== economy.npc.boast) playerEntities = replacePlayerEconomy(playerEntities, damage.playerId, {
+          ...economy, npc: { ...economy.npc, boast }, revision: economy.revision + 1,
+        })
+      }
+      const debit = tryDebitPlayerEntityMana(playerEntities, damage.playerId, -delta)
+      playerEntities = debit.accepted ? debit.store : setPlayerEntityMana(debit.store, damage.playerId, 0)
+    }
+
+    function applyCrowBlindness(): void {
+      if (damage.crowBlindChancePercent === undefined) return
+      const afterContact = playerEntities.progressions[playerIndex]!
+      const blind = nativeCrowBlindness(afterContact.currentHealth,
+        secondaryAbilities.players[damage.playerId]?.magicShieldAbsorb ?? 0,
+        damage.crowBlindChancePercent, secondaryAbilities.rng)
+      secondaryAbilities = { ...secondaryAbilities, rng: blind.rng }
+      if (blind.durationTicks === 0) return
+      const lightings = [...playerEntities.lightings]
+      lightings[playerIndex] = { ...lightings[playerIndex]!, blindnessTicksRemaining: blind.durationTicks }
+      playerEntities = { ...playerEntities, lightings }
+      playerDamageSoundEvents.push({ actorId: damage.actorId, eventId: world.enemies.nextEventId,
+        gainScale: 1, pitch: 1, sound: 'blind', sourcePosition: character.position,
+        targetPlayerId: damage.playerId, tick, type: 'player-status-sound' })
+      world = { ...world, enemies: { ...world.enemies, nextEventId: world.enemies.nextEventId + 1 } }
+    }
+
+    function filterHealthDamage() {
+      const resistedDamage = physicalDamage + magicDamage
+      let filteredHealthDamage = 0
+      for (const [amount, damageKind] of [[physicalDamage, 'physical'], [magicDamage, 'magic']] as const) {
+        if (amount === 0) continue
+        filteredHealthDamage += extensions ? Math.max(0, finiteModMutation(extensions.filterDamage({
+          amount, damageKind, sourceActorId: damage.actorId, targetPlayerId: damage.playerId, tick,
+        }), 'filtered enemy damage')) : amount
+      }
+      const poisonContactDamage = progression.poisonImmunityTicksRemaining > 0
+        ? 0
+        : nativeRescueDamage(Math.fround((damage.poisonContactDamage ?? 0)
+            * derived.poisonDamageFactor
+            * derived.incomingDamageFactor), progression.rescueProtection)
+      const filteredPoisonDamage = extensions && poisonContactDamage > 0
+        ? extensions.filterDamage({
+            amount: poisonContactDamage,
+            damageKind: 'poison',
+            sourceActorId: damage.actorId,
+            targetPlayerId: damage.playerId,
+            tick,
+          })
+        : poisonContactDamage
+      const filteredPoisonContactDamage = Math.max(0,
+        finiteModMutation(filteredPoisonDamage, 'filtered enemy poison damage'))
+      const cappedPoisonDamage = playerPoisonHealthDamage(
+        progression.currentHealth, filteredPoisonContactDamage,
+      )
+      const healthDamage = Math.max(0, finiteModMutation(filteredHealthDamage, 'filtered enemy damage'))
+        + cappedPoisonDamage
+      const rejectedContact = resistedDamage + poisonContactDamage > 0
+        && filteredHealthDamage <= 0 && filteredPoisonContactDamage === 0
+      return { healthDamage, rejectedContact, cappedPoisonDamage, filteredHealthDamage, poisonContactDamage }
+    }
+
+    function applyStatusModifiers() {
+      if (!rejectedContact && (shieldActive || !stoneskin || poisonContactDamage > 0)) {
+        const poisonDamage = progression.poisonImmunityTicksRemaining > 0 ? 0 : damage.poisonDamage
+        appliedPlayerDamage.push({
+          ...damage,
+          poisonDamage,
+          poisonDuration: playerPoisonDurationSeconds(derived, damage.poisonDuration),
+        })
+        applyWebContact()
+        let active = admittedStatusKinds.get(damage.playerId)
+        if (active === undefined) {
+          active = new Set<'cold' | 'poison'>()
+          if (progression.coldSlowTicksRemaining > 0) active.add('cold')
+          if (progression.poisonTicksRemaining > 0) active.add('poison')
+          admittedStatusKinds.set(damage.playerId, active)
+        }
+        for (const status of ['cold', 'poison'] as const) {
+          if (active.has(status) || (status === 'cold' ? damage.coldSlowTicks <= 0 : poisonDamage <= 0)) continue
+          active.add(status)
+          const burst = emitPlayerStatusBurst(world.enemies, {
+            actorId: damage.actorId,
+            playerId: damage.playerId,
+            position: character.position,
+            status,
+            tick,
+          }, secondaryAbilities.rng)
+          world = { ...world, enemies: burst.store }
+          secondaryAbilities = { ...secondaryAbilities, rng: burst.rng }
+          playerDamageSoundEvents.push(burst.event)
+        }
+      }
+    }
+
+    function applyWebContact(): void {
+      // Native Shield removes incoming Webbed even when this hit breaks it.
+      if (damage.webbedStrength === undefined || shieldActive) return
+      const prior = world.enemies.webbedPlayers[damage.playerId] ?? null
+      const web = applyNativeWebbed(prior, damage.webbedStrength)
+      let enemies = {
+        ...world.enemies,
+        webbedPlayers: { ...world.enemies.webbedPlayers, [damage.playerId]: web },
+      }
+      if (web.severity === 3 && (prior?.severity ?? 0) < 3) {
+        const admitted = addNativeCocoon(enemies, damage.playerId, character.position, {
+          [damage.playerId]: {
+            alive: true, connected: true, eligible: true, collisionRadius: PLAYER_CHARACTER_RADIUS,
+            headingDeg: character.headingDegrees, position: character.position,
+            velocityPerTick: { x: 0, y: 0 },
+          },
+        }, tick, registerWorldPainter)
+        enemies = admitted.store
+      }
+      world = { ...world, enemies }
+    }
+
+    function playHurtResponse() {
+      const narration = world.tutorial?.narration
+      const dialogueIdle = world.enemies.bossNarration.current === null && world.enemies.bossNarration.pending.length === 0
+        && world.encounter?.phase !== 'speaking'
+        && (narration === undefined || (narration.current === null && narration.pending.length === 0))
+      if (
+        after.currentHealth < before.currentHealth
+        && after.lifeState === 'alive'
+        && cappedPoisonDamage === 0
+        && filteredHealthDamage > 0
+        && dialogueIdle
+        && nativeWizardOuchCooldownReady(tick, world.playerOuchDeadlineTick)
+      ) {
+        const emitted = emitBoneyardPlayerDamageSound(world.enemies, {
+          actorId: damage.actorId,
+          currentHealth: after.currentHealth,
+          playerId: damage.playerId,
+          position: character.position,
+          tick,
+        }, secondaryAbilities.rng)
+        secondaryAbilities = { ...secondaryAbilities, rng: emitted.rng }
+        playerDamageSoundEvents.push(emitted.event)
+        world = {
+          ...world,
+          enemies: emitted.store,
+          playerOuchDeadlineTick: emitted.deadlineTick,
+        }
+      }
+    }
+
+    function applyFlashResponse() {
+      if (
+        !rejectedContact
+        && after.lifeState === 'alive'
+        && cappedPoisonDamage === 0
+        && !damage.suppressFlash
+        && (intercepted.absorbedDamage === 0 || poisonContactDamage > 0)
+        && (!stoneskin || poisonContactDamage > 0)
+      ) {
+        const flashResponse = resolvePlayerFlashResponse(derived, secondaryAbilities.rng)
+        secondaryAbilities = { ...secondaryAbilities, rng: flashResponse.rng }
+        if (flashResponse.flash !== null) {
+          const worldKey = gameWorldKey(world, damage.playerId)
+          const targetIds = boneyardNativeSecondaryTargets(
+                world.enemies,
+                character.position,
+                NATIVE_FLASH_RESPONSE_RADIUS,
+              ).map(({ id }) => id)
+          secondaryAbilities = materializeNativePlayerFlashResponse(
+            secondaryAbilities,
+            {
+              ownerId: damage.playerId,
+              position: character.position,
+              response: flashResponse.flash,
+              targetIds,
+              tick,
+              worldKey,
+            },
+            writeScreenFlash,
+          )
+        }
+      }
+    }
+  }
+}
+
+export function gameWorldKey(world: GameWorldState, playerId: string): string {
+  return world.kind === 'hub'
+    ? `hub:${world.participants[playerId]!.region}`
+    : `boneyard:${world.runId}`
+}
+
+export function finiteModMutation(value: number, field: string): number {
+  if (!Number.isFinite(value) || Math.abs(value) > 1_000_000) {
+    throw new RangeError(`${field} must be finite and within +/-1000000`)
+  }
+  return value
+}
+
+function squaredVectorDistance(left: Readonly<Vector2>, right: Readonly<Vector2>): number {
+  const dx = left.x - right.x
+  const dy = left.y - right.y
+  return dx * dx + dy * dy
+}
+
+function playerContactSource(world: BoneyardWorldState, damage: BoneyardEnemyPlayerDamage) {
+  if (damage.source !== undefined) return damage.source ?? undefined
+  const actor = world.enemies.actors.find(actor => actor.id === damage.actorId)
+    ?? world.enemies.maggots.find(actor => actor.id === damage.actorId)
+  return actor === undefined ? undefined : { position: actor.position, reflectableActorId: actor.id,
+    collisionRadius: 'config' in actor ? boneyardEnemyCollisionRadius(actor) : actor.collisionRadius }
+}

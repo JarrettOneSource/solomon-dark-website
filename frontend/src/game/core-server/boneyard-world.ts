@@ -1,0 +1,731 @@
+import type { WriteNativeScreenFlash } from '../core-kernels/native-screen-flash.ts'
+import { boneyardMouthWorldTargets } from './boneyard-world-targets.ts'
+import { resolveActorMotion, resolveUnpushedMoverMotion } from '../core-kernels/actor-physics.ts'
+import { DynamicActorGrid } from '../core-kernels/dynamic-actor-grid.ts'
+import { boneyardActiveBounds, boneyardArenaTransitionSafetyClear, startBoneyardArenaTransition, stepBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
+import { isSolomonPlayerLocked, stepSolomonEncounter } from '../core-kernels/boneyard-encounter.ts'
+import { applyBoneyardGateContact, stepBoneyardGateLeaf } from '../core-kernels/boneyard-gate.ts'
+import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
+import { startBoneyardWaveDirector, stepBoneyardSlumpgutTrigger, stepBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
+import type { BoneyardWaveEnemyToken } from '../core-kernels/boneyard-wave-schema.ts'
+import type { BoneyardPoint } from '../core-kernels/boneyard.ts'
+import type { HubInventoryItem } from '../core-kernels/hub-economy.ts'
+import { applyNativeEnemyWorldFeedback, NATIVE_ENEMY_WORLD_FEEDBACK, nativeEnemyWorldFeedbackImpulses, stepNativeEnemyWorldFeedback } from '../core-kernels/native-enemy-world-feedback.ts'
+import { NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS, NATIVE_LOOT_DEFAULT_MODIFIERS } from '../core-kernels/native-loot.ts'
+import type { NativeSecondaryTargetEffectState } from '../core-kernels/native-secondary-abilities.ts'
+import { NATIVE_TUTORIAL_CAMERA_TARGET, nativeTutorialAmuletItem, nativeTutorialCameraBounds, nativeTutorialEnemyCameraPositionIsAllowed, nativeTutorialEnemySpawnPositionIsAllowed, nativeTutorialHealthPotionItem, nativeTutorialHostileScenePaused } from '../core-kernels/native-tutorial.ts'
+import { nativeWebbedMovementScale } from '../core-kernels/native-webbed.ts'
+import type { RegisterNativeWorldPainter } from '../core-kernels/native-world-manager-order.ts'
+import type { PlayerCharacterInput, PlayerCharacterState } from '../core-kernels/player-character.ts'
+import { commitPlayerCharacterTick, createIdlePlayerCharacterInput, planPlayerCharacterTick, PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, PLAYER_CHARACTER_PHYSICS, PLAYER_CHARACTER_RADIUS } from '../core-kernels/player-character.ts'
+import { boneyardBodyCollides, boneyardSpawnPositionIsOffscreen, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, resolveBoneyardSpawnPosition, resolveNativeBoneyardSpawnPosition, touchingBoneyardGateLeaves, withBoneyardGateCollision } from './boneyard-collision.ts'
+import { rollBoneyardLootSeed } from './boneyard-enemy-loot-seed.ts'
+import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
+import { stepBoneyardEnemyStore } from './boneyard-enemy-store.ts'
+import { createBoneyardEnemyVisibility } from './boneyard-enemy-visibility.ts'
+import { boneyardLootParticipantRecipeIndexes, materializeBoneyardEnemyLoot, retireBoneyardGoodiesOutsideBounds, spawnBoneyardCustomLootItems, stepBoneyardLootStore } from './boneyard-loot-store.ts'
+import { direBossItemRecipePool } from '../core-kernels/dire-boss-loot.ts'
+import { boneyardProjectilePointGain, createBoneyardProjectileWorld } from './boneyard-projectile-world.ts'
+import type { BoneyardLightEnvironment } from './boneyard-world-light.ts'
+import { boneyardWorldLightQuery } from './boneyard-world-light.ts'
+import { applyBoneyardPlayerKnockbacks, boneyardCombatBodies, boneyardEnemyBodies, boneyardLanternBodies, commitBoneyardEnemyCollisionPositions, createNativeLootPlacement, enemyCollisionBody, NATIVE_LANTERN_BODY_ID, nearbyNativeMaskTwoCount, prepareSolomonEscapeNavigation, resolveSolomonEscapeMovement, retainInsideBounds } from './boneyard-world-placement.ts'
+import type { BoneyardPlayerCombatStatus, BoneyardPlayerMovementContact, BoneyardSummonTarget, BoneyardWorldState, BoneyardWorldTickResult } from './boneyard-world-state.ts'
+import { boneyardEnemyActorFlags, boneyardEnemyCollisionRadius } from './enemies/model.ts'
+export function stepBoneyardWorldTick(
+  world: BoneyardWorldState,
+  players: Readonly<Record<string, PlayerCharacterState>>,
+  inputs: Readonly<Record<string, PlayerCharacterInput>>,
+  playerCombat: Readonly<Record<string, BoneyardPlayerCombatStatus>>,
+  tick: number,
+  registerWorldPainter?: RegisterNativeWorldPainter,
+  registerProjectileWorldPainter?: RegisterNativeWorldPainter,
+  abilityEffects: Readonly<Record<number, NativeSecondaryTargetEffectState>> = {},
+  summons: readonly BoneyardSummonTarget[] = [],
+  externalSpawnIntents: readonly BoneyardEnemySpawnIntent[] = [],
+  customLoot?: (input: Readonly<{
+    actorSeed: number
+    enemyToken: BoneyardWaveEnemyToken
+  }>) => readonly HubInventoryItem[],
+  hostileScenePaused = false,
+  lightEnvironment: BoneyardLightEnvironment = {},
+  enhancedEffects = true,
+  writeScreenFlash?: WriteNativeScreenFlash,
+): BoneyardWorldTickResult {
+  let arenaTransition = world.arenaTransition === null
+    ? null
+    : stepBoneyardArenaTransition(world.arenaTransition)
+  let activeBounds = arenaTransition === null
+    ? world.bounds
+    : boneyardActiveBounds(arenaTransition)
+  const tutorialMovementPaused = world.tutorial !== null
+    && nativeTutorialHostileScenePaused(world.tutorial)
+  const plans = Object.entries(players).map(([playerId, player]) => {
+    const locked = tutorialMovementPaused || (
+      world.encounter !== null
+      && isSolomonPlayerLocked(world.encounter, playerId)
+    )
+    const plan = planPlayerCharacterTick(
+      locked ? { velocity: { x: 0, y: 0 } } : player,
+      locked
+        ? createIdlePlayerCharacterInput()
+        : inputs[playerId] ?? createIdlePlayerCharacterInput(),
+      locked ? 0 : (playerCombat[playerId]?.movementScale ?? 1),
+    )
+    // PlayerWizard +0x218 scales the collision delta while the raw lane owns input and gait.
+    const webMovementScale = nativeWebbedMovementScale(world.enemies.webbedPlayers[playerId])
+    const delta = {
+      x: Math.fround(plan.delta.x * webMovementScale),
+      y: Math.fround(plan.delta.y * webMovementScale),
+    }
+    const requested = {
+      x: player.position.x + delta.x,
+      y: player.position.y + delta.y,
+    }
+    return {
+      collisionEnabled: playerCombat[playerId]?.collisionEnabled ?? true,
+      delta,
+      plan,
+      player,
+      playerId,
+      requested,
+    }
+  })
+  const collisionPlans = plans.filter(({ collisionEnabled }) => collisionEnabled)
+
+  let gateLeaves = world.gateLeaves
+  for (const { delta, requested } of collisionPlans) {
+    const contacts = touchingBoneyardGateLeaves(
+      requested,
+      gateLeaves,
+      PLAYER_CHARACTER_RADIUS,
+    )
+    if (contacts.length === 0) continue
+    const nextLeaves = [...gateLeaves]
+    for (const index of contacts) {
+      nextLeaves[index] = applyBoneyardGateContact(nextLeaves[index], delta)
+    }
+    gateLeaves = nextLeaves
+  }
+  gateLeaves = gateLeaves.map(stepBoneyardGateLeaf)
+  const collision = withBoneyardGateCollision(world.collision, gateLeaves)
+  const movementContactPlayerIds = new Map<string, string>(
+    collisionPlans.flatMap(({ plan, playerId }) => (
+      plan.movementActive ? [[`player-${playerId}`, playerId] as const] : []
+    )),
+  )
+  const staffHostileBodyIds = new Set([
+    ...world.enemies.actors.flatMap((actor) => (
+      (boneyardEnemyActorFlags(actor) & 0x2) !== 0
+        ? [`enemy-${actor.id}`]
+        : []
+    )),
+    ...world.enemies.maggots.flatMap((maggot) => (
+      maggot.lifeState === 'alive' && maggot.combatActive
+        ? [`enemy-${maggot.id}`]
+        : []
+    )),
+  ])
+  const movementContactsByPlayerId: Record<string, BoneyardPlayerMovementContact[]> =
+    Object.fromEntries(plans.map(({ playerId }) => [playerId, []]))
+  const resolvedBodies = resolveActorMotion(
+    [
+      ...collisionPlans.map(({ delta, player, playerId }) => ({
+        delta,
+        id: `player-${playerId}`,
+        position: player.position,
+        ...PLAYER_CHARACTER_PHYSICS,
+      })),
+      ...boneyardEnemyBodies(world.enemies),
+      ...boneyardLanternBodies(world.lanternPosition),
+    ],
+    {
+      canPlace: (_bodyId, position, radius) => (
+        canPlaceBoneyardBody(position, activeBounds, collision, radius)
+      ),
+      move: (_bodyId, position, delta, radius) => resolveBoneyardMovement(
+        position,
+        { x: position.x + delta.x, y: position.y + delta.y },
+        activeBounds,
+        collision,
+        radius,
+      ),
+    },
+    () => true,
+    new DynamicActorGrid(64),
+    (moverId, otherId) => {
+      const playerId = movementContactPlayerIds.get(moverId)
+      if (playerId !== undefined) {
+        movementContactsByPlayerId[playerId]!.push(Object.freeze({
+          bodyId: otherId,
+          staffHostile: staffHostileBodyIds.has(otherId),
+        }))
+      }
+    },
+  )
+  const resolvedPositions = new Map(
+    resolvedBodies.map((body) => [body.id, body.position]),
+  )
+  const lanternPosition = resolvedPositions.get(NATIVE_LANTERN_BODY_ID) ?? world.lanternPosition
+
+  const nextPlayers = Object.fromEntries(plans.map(({
+    collisionEnabled,
+    plan,
+    player,
+    playerId,
+  }) => {
+    const position = collisionEnabled
+      ? resolvedPositions.get(`player-${playerId}`)
+      : player.position
+    if (!position) throw new Error(`Boneyard world lost player character ${playerId}`)
+    return [
+      playerId,
+      commitPlayerCharacterTick(player, plan, position),
+    ]
+  }))
+  for (const [playerId, player] of Object.entries(nextPlayers)) {
+    if (playerCombat[playerId]?.alive !== true
+      || playerCombat[playerId]?.collisionEnabled === false
+      || !boneyardBodyCollides(player.position, collision, PLAYER_CHARACTER_RADIUS)) continue
+    nextPlayers[playerId] = {
+      ...player,
+      position: resolveBoneyardSpawnPosition(
+        player.position, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      ),
+    }
+  }
+  const collisionResolvedEnemies = hostileScenePaused
+    ? world.enemies
+    : commitBoneyardEnemyCollisionPositions(world.enemies, resolvedPositions)
+  const livingPlayers = Object.fromEntries(Object.entries(nextPlayers).filter(([playerId]) => {
+    const combat = playerCombat[playerId]
+    return combat?.alive === true && combat.eligible
+  }))
+  const lootParticipants = Object.entries(nextPlayers).map(([playerId, player]) => {
+    const combat = playerCombat[playerId]
+    return {
+      advancedUnlocks: combat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
+      alive: combat?.alive ?? false,
+      connected: true,
+      headingIndex: player.headingIndex,
+      level: combat?.level ?? 1,
+      modifiers: combat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
+      ownedRecipeIndexes: combat?.ownedRecipeIndexes ?? [],
+      ownedRecipeIndexesAfterPickups: combat?.ownedRecipeIndexesAfterPickups,
+      reserveLootItem: combat?.reserveLootItem,
+      playerId,
+      position: player.position,
+    }
+  })
+  const lootPlacement = createNativeLootPlacement(
+    activeBounds,
+    collision,
+  )
+  const lootStep = stepBoneyardLootStore(world.loot, {
+    enhancedEffects,
+    participants: lootParticipants,
+    placement: lootPlacement,
+    registerWorldPainter,
+    tick,
+  })
+  let loot = lootStep.store
+  const encounterSource = world.encounter?.phase === 'escaping'
+    ? prepareSolomonEscapeNavigation(
+        world.encounter,
+        world.bounds,
+        collision,
+        world.collision,
+      )
+    : world.encounter
+  let encounter = encounterSource === null
+    ? null
+    : stepSolomonEncounter(encounterSource, livingPlayers, tick)
+  if (encounterSource?.phase === 'escaping' && encounter !== null) {
+    encounter = resolveSolomonEscapeMovement(
+      encounterSource,
+      encounter,
+      world.bounds,
+      collision,
+    )
+  }
+  let waves = world.waves
+  let tutorial = world.tutorial
+  let wavesStarted = false
+  let pendingExternalSpawnIntents = externalSpawnIntents
+  let enemyWorldFeedback = stepNativeEnemyWorldFeedback(world.enemyWorldFeedback)
+  if (waves !== null && encounter !== null) {
+    if (encounter.runEventId > (world.encounter?.runEventId ?? 0)) {
+      waves = startBoneyardWaveDirector(waves)
+      wavesStarted = true
+    }
+  }
+  if (
+    arenaTransition?.phase === 'open'
+    && waves !== null
+    && waves.phase !== 'dormant'
+    && boneyardArenaTransitionSafetyClear(arenaTransition.combatBounds, [
+      ...Object.entries(nextPlayers).flatMap(([playerId, player]) => {
+        const combat = playerCombat[playerId]
+        return combat?.alive === true && combat.eligible
+          ? [{ position: player.position, radius: PLAYER_CHARACTER_RADIUS }]
+          : []
+      }),
+      ...collisionResolvedEnemies.actors
+        .filter((actor) => boneyardEnemyActorFlags(actor) !== 0)
+        .map((actor) => ({
+          position: actor.position,
+          radius: boneyardEnemyCollisionRadius(actor),
+        })),
+      ...collisionResolvedEnemies.maggots.map((maggot) => ({
+        position: maggot.position,
+        radius: maggot.collisionRadius,
+      })),
+      ...loot.actors.filter(({ kind }) => kind === 'sack').map((actor) => ({
+        position: actor.position,
+        radius: NATIVE_LOOT_CARRIER_PLACEMENT_RADIUS,
+      })),
+    ])
+  ) {
+    arenaTransition = startBoneyardArenaTransition(arenaTransition)
+    activeBounds = boneyardActiveBounds(arenaTransition)
+  }
+  const spawnBounds = arenaTransition !== null
+    && waves !== null
+    && waves.phase !== 'dormant'
+    ? arenaTransition.combatBounds
+    : activeBounds
+  const dynamicBodies = [...boneyardCombatBodies(
+    nextPlayers,
+    collisionResolvedEnemies,
+    playerCombat,
+    lanternPosition,
+  ).values()]
+  const dynamicBodyIndices = new Map(dynamicBodies.map((body, index) => [body.id, index]))
+  const enemyMotionGrid = new DynamicActorGrid(128)
+  enemyMotionGrid.rebuild(dynamicBodies)
+  const enemyMotionCandidates = (position: Readonly<BoneyardPoint>, radius: number) => (
+    enemyMotionGrid.candidateIndicesAt(position, radius)
+  )
+  const enemyPhysicsWorld = {
+    canPlace: (_bodyId: string, candidate: BoneyardPoint, candidateRadius: number) => (
+      canPlaceBoneyardBody(candidate, activeBounds, collision, candidateRadius)
+    ),
+    move: (
+      _bodyId: string,
+      current: BoneyardPoint,
+      movement: BoneyardPoint,
+      movementRadius: number,
+    ) => resolveBoneyardMovement(
+      current,
+      { x: current.x + movement.x, y: current.y + movement.y },
+      activeBounds,
+      collision,
+      movementRadius,
+    ),
+  }
+  const worldLight = boneyardWorldLightQuery(
+    { ...world, lanternPosition },
+    nextPlayers,
+    collisionResolvedEnemies,
+    tick,
+    { ...lightEnvironment, inputs },
+  )
+  const spawnPolicyFocuses = Object.values(livingPlayers)
+    .map(({ position }) => position)
+    .filter((position) => (
+      position.x >= spawnBounds.x
+      && position.y >= spawnBounds.y
+      && position.x <= spawnBounds.x + spawnBounds.w
+      && position.y <= spawnBounds.y + spawnBounds.h
+    ))
+  if (spawnPolicyFocuses.length === 0) {
+    spawnPolicyFocuses.push({
+      x: spawnBounds.x + spawnBounds.w / 2,
+      y: spawnBounds.y + spawnBounds.h / 2,
+    })
+  }
+  const spawnCameraBounds = tutorial === null
+    ? activeBounds
+    : nativeTutorialCameraBounds(tutorial) ?? activeBounds
+  const tutorialAtEnemyStep = tutorial
+  const tutorialSpawnDomain = tutorialAtEnemyStep === null
+    ? null
+    : (candidate: Readonly<BoneyardPoint>, radius: number) => (
+        nativeTutorialEnemySpawnPositionIsAllowed(candidate, radius)
+        && (
+          !tutorialAtEnemyStep.cameraLockTriggered
+          || nativeTutorialEnemyCameraPositionIsAllowed(candidate, radius)
+        )
+      )
+  const projectileViewports = Object.entries(nextPlayers).map(([playerId, player]) => {
+    const input = inputs[playerId] ?? createIdlePlayerCharacterInput()
+    return {
+      alternatePlayer: playerCombat[playerId]?.alive !== true,
+      position: player.position,
+      viewportHeight: input.viewportHeight,
+      viewportWidth: input.viewportWidth,
+    }
+  })
+  const enemyStep = stepBoneyardEnemyStore(collisionResolvedEnemies, {
+    enhancedEffects,
+    puppetTargets: boneyardMouthWorldTargets({ ...world, loot }, lightEnvironment),
+    dialogueBusy: (encounter?.voiceTicksRemaining ?? 0) > 0
+      || world.tutorial?.narration.current != null || (world.tutorial?.narration.pending.length ?? 0) > 0,
+    ...createBoneyardEnemyVisibility(spawnCameraBounds, nextPlayers, inputs, worldLight.acceptedSources),
+    abilityEffects,
+    clipSpellSegment: ({ end, start, nativeExclusionMask }) => firstBoneyardLineObstruction(
+      start,
+      end,
+      activeBounds,
+      collision,
+      undefined,
+      nativeExclusionMask,
+    ) ?? end,
+    projectileWorldBlocked: createBoneyardProjectileWorld(
+      activeBounds,
+      collision,
+      projectileViewports,
+    ),
+    navigation: {
+      findRoute: ({ bodyRadius, end, navigationClearance, start }) => (
+        findBoneyardEnemyRoute({
+          bodyRadius,
+          bounds: activeBounds,
+          clearance: navigationClearance,
+          end,
+          start,
+          // Stock builds the three Arena NavMeshes once from Region geometry;
+          // moving gate leaves remain final movement-collision owners.
+          world: world.collision,
+        })
+      ),
+      isPathClear: ({ end, radius, start }) => firstBoneyardPathBlockProgress(
+        { ...start },
+        { ...end },
+        activeBounds,
+        collision,
+        radius,
+      ) === null,
+    },
+    paused: hostileScenePaused,
+    onProjectileExplosion: position => {
+      const viewport = projectileViewports[0]
+      if (!viewport) return
+      const intensity = Math.fround(NATIVE_ENEMY_WORLD_FEEDBACK.explosionIntensity
+        * boneyardProjectilePointGain(activeBounds, viewport, position, viewport.alternatePlayer))
+      enemyWorldFeedback = applyNativeEnemyWorldFeedback(enemyWorldFeedback, intensity)
+    },
+    lightAt: worldLight.scalarAt,
+    nativeMovementView: {
+      arenaBounds: activeBounds, enhancedEffects,
+      cameras: worldLight.cameras,
+    },
+    players: Object.fromEntries([
+      ...Object.entries(nextPlayers).map(([playerId, player]) => {
+        const combat = playerCombat[playerId]
+        return [playerId, {
+          alive: combat?.alive ?? false,
+          collisionRadius: PLAYER_CHARACTER_RADIUS,
+          connected: true,
+          eligible: combat?.eligible ?? false,
+          headingDeg: player.headingDegrees,
+          position: player.position,
+          velocityPerTick: {
+            x: player.velocity.x * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+            y: player.velocity.y * PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS,
+          },
+        }] as const
+      }),
+      ...summons.map((summon) => [summon.id, {
+        summoned: true,
+        alive: true,
+        collisionRadius: summon.collisionRadius,
+        connected: true,
+        eligible: true,
+        headingDeg: 0,
+        position: summon.position,
+        velocityPerTick: { x: 0, y: 0 },
+      }] as const),
+    ]),
+    onCollisionRecipientCleared: (actorId) => {
+      const index = dynamicBodyIndices.get(`enemy-${actorId}`)
+      if (index !== undefined) dynamicBodies[index]!.collisionRecipient = false
+    },
+    resolveMovement: ({ actorId, delta, position, purpose, radius }) => {
+      if (purpose === 'spawn-placement') {
+        return resolveBoneyardSpawnPosition(
+          position,
+          spawnBounds,
+          collision,
+          radius,
+        )
+      }
+      const moverId = `enemy-${actorId}`
+      let moverIndex = dynamicBodyIndices.get(moverId)
+      if (moverIndex === undefined) {
+        moverIndex = dynamicBodies.length
+        dynamicBodies.push(enemyCollisionBody(moverId, position, radius))
+        dynamicBodyIndices.set(moverId, moverIndex)
+        enemyMotionGrid.append(dynamicBodies[moverIndex]!)
+      }
+      // Enemy bodies never push, so the shared solver reduces to one swept root
+      // move plus ascending pair separation. The kernel fast path keeps that
+      // arithmetic while skipping the per-move crowd clone.
+      const mover = dynamicBodies[moverIndex]!
+      mover.position = resolveUnpushedMoverMotion(
+        dynamicBodies,
+        moverIndex,
+        delta,
+        enemyPhysicsWorld,
+        enemyMotionCandidates,
+      )
+      enemyMotionGrid.update(moverIndex, dynamicBodies)
+      return mover.position
+    },
+    resolvePikePlayerPosition: (_playerId, currentPosition, requestedPosition) => {
+      if (canPlaceBoneyardBody(
+        requestedPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      )) return requestedPosition
+      const safeStart = canPlaceBoneyardBody(
+        currentPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      ) ? currentPosition : resolveBoneyardSpawnPosition(
+        currentPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      )
+      return resolveBoneyardMovement(
+        safeStart, requestedPosition, activeBounds, collision, PLAYER_CHARACTER_RADIUS,
+      )
+    },
+    resolveSpawnPlacement: ({
+      actorId: _actorId,
+      navigationClearance,
+      position,
+      positionPolicy,
+      radius,
+      reachabilityRadius,
+      rngState,
+    }) => (
+      resolveNativeBoneyardSpawnPosition(
+        { ...position },
+        spawnBounds,
+        collision,
+        radius,
+        positionPolicy ?? 'direct',
+        rngState,
+        {
+          acceptsDomain: (candidate, candidateRadius) => (
+            (tutorialSpawnDomain === null
+              || tutorialSpawnDomain(candidate, candidateRadius))
+            && spawnPolicyFocuses.some((focus) => (
+              findBoneyardEnemyRoute({
+                bodyRadius: reachabilityRadius,
+                bounds: spawnBounds,
+                clearance: navigationClearance,
+                end: focus,
+                endBodyRadius: PLAYER_CHARACTER_RADIUS,
+                start: candidate,
+                world: collision,
+              }) !== null
+            ))
+          ),
+          isOffscreen: (candidate) => boneyardSpawnPositionIsOffscreen(
+            candidate,
+            spawnCameraBounds,
+            spawnPolicyFocuses,
+          ),
+          lightAt: worldLight.scalarAt,
+          ...(tutorial?.cameraLockTriggered === true
+            ? { retryBounds: NATIVE_TUTORIAL_CAMERA_TARGET }
+            : {}),
+        },
+      )
+    ),
+    resolveSpawnIntents: (liveEnemyCount, liveZombieCount, liveBossCount) => {
+      const external = pendingExternalSpawnIntents
+      pendingExternalSpawnIntents = []
+      if (
+        waves === null
+        || encounter === null
+        || hostileScenePaused
+      ) return external
+      const context = {
+        bounds: spawnBounds,
+        liveEnemyCount,
+        liveBossCount,
+        liveZombieCount,
+        players: livingPlayers,
+        tick,
+      }
+      const result = wavesStarted
+        ? stepBoneyardSlumpgutTrigger(waves, context)
+        : stepBoneyardWaveDirector(waves, context)
+      waves = result.director
+      return [...external, ...result.spawnIntents]
+    },
+    registerWorldPainter,
+    registerProjectileWorldPainter,
+    writeScreenFlash,
+    screenFlashWorldKey: `boneyard:${world.runId}`,
+    retirementObserver: {
+      onTerminalOutput: (output, outputCount) => {
+        for (const intensity of nativeEnemyWorldFeedbackImpulses(output, outputCount)) {
+          enemyWorldFeedback = applyNativeEnemyWorldFeedback(enemyWorldFeedback, intensity)
+        }
+      },
+    },
+    rollLootSeed: (bound) => {
+      const rolled = rollBoneyardLootSeed(loot, bound)
+      loot = rolled.store
+      return rolled.seed
+    },
+    tick,
+  })
+  const badguyCountBeforeDeaths = collisionResolvedEnemies.actors.length
+  for (const [playerId, position] of Object.entries(enemyStep.playerPositions)) {
+    const player = nextPlayers[playerId]
+    if (player) nextPlayers[playerId] = { ...player, position }
+  }
+  for (const [rewardIndex, reward] of enemyStep.rewards.entries()) {
+    const rewardCombat = reward.playerId === null
+      ? undefined
+      : playerCombat[reward.playerId]
+    const materialized = materializeBoneyardEnemyLoot(loot, {
+      actorSeed: reward.lootSource.actorSeed,
+      itemRecipePool: direBossItemRecipePool(
+        waves?.bossEncounters.find(encounter => encounter.kind === 'faculty')?.sourceSha256,
+        reward.lootSource.enemyToken,
+        reward.lootSource.recipeUid,
+      ),
+      advancedUnlocks: rewardCombat?.advancedUnlocks ?? new Array<boolean>(8).fill(false),
+      arena: {
+        disableMask: 0,
+        itemLevelMaximum: 100,
+        itemLevelMinimum: 0,
+        level: waves?.waveOrdinal ?? tutorial?.waveOrdinal ?? 0,
+        mode: 0,
+        specialSuppression: false,
+      },
+      inventoryHasHealthPotion: rewardCombat?.inventoryHasHealthPotion ?? false,
+      modifiers: rewardCombat?.lootModifiers ?? NATIVE_LOOT_DEFAULT_MODIFIERS,
+      nearbyMaskTwoCount: nearbyNativeMaskTwoCount(
+        collisionResolvedEnemies,
+        reward.actorId,
+        reward.lootSource.position,
+      ),
+      onDeathProgram: reward.lootSource.onDeathProgram,
+      ownedRecipeIndexes: boneyardLootParticipantRecipeIndexes(
+        lootParticipants.find(participant => participant.playerId === reward.playerId),
+        lootStep.pickups,
+      ),
+      participantLevel: rewardCombat?.level ?? 1,
+      participantSlot: reward.lootSource.participantSlot,
+      placement: createNativeLootPlacement(
+        activeBounds,
+        collision,
+      ),
+      policies: reward.lootSource.policies
+        ?? { gold: 0, item: 0, orb: 0, potion: 0, powerup: 0, specificItem: 0 },
+      position: reward.lootSource.position,
+      sceneForcesHealthPotion: false,
+      tick,
+      worldBadguyCount: badguyCountBeforeDeaths - rewardIndex - 1,
+      worldHasHealthPotionSack: loot.actors.some(({ item, kind }) => (
+        kind === 'sack'
+        && item?.nativeTypeId === 7001
+        && item.nativeSubtype === 0
+      )),
+    }, registerWorldPainter)
+    loot = materialized.store
+    if (reward.lootSource.recipeUid === 10051 && tutorial?.itemDropArmed) {
+      loot = spawnBoneyardCustomLootItems(
+        loot,
+        [nativeTutorialAmuletItem()],
+        reward.lootSource.position,
+        tick,
+        registerWorldPainter,
+      ).store
+      tutorial = { ...tutorial, itemDropArmed: false }
+    } else if (reward.lootSource.recipeUid === 10065 && tutorial !== null) {
+      loot = spawnBoneyardCustomLootItems(
+        loot,
+        [nativeTutorialHealthPotionItem()],
+        reward.lootSource.position,
+        tick,
+        registerWorldPainter,
+      ).store
+    }
+    const customItems = customLoot?.({
+      actorSeed: reward.lootSource.actorSeed,
+      enemyToken: reward.lootSource.enemyToken,
+    }) ?? []
+    if (customItems.length > 0) {
+      loot = spawnBoneyardCustomLootItems(
+        loot,
+        customItems,
+        reward.lootSource.position,
+        tick,
+        registerWorldPainter,
+      ).store
+    }
+  }
+  const knockback = applyBoneyardPlayerKnockbacks(
+    nextPlayers,
+    enemyStep.store,
+    enemyStep.playerKnockbacks,
+    playerCombat,
+    activeBounds,
+    collision,
+    lanternPosition,
+  )
+  const cleanupBounds = arenaTransition?.phase === 'sealed'
+    ? arenaTransition.combatBounds
+    : tutorial?.cameraLockTriggered === true
+      && tutorial.cameraLockTicksRemaining === 0
+      ? NATIVE_TUTORIAL_CAMERA_TARGET
+      : null
+  if (cleanupBounds !== null) {
+    loot = retireBoneyardGoodiesOutsideBounds(loot, cleanupBounds)
+  }
+  const earthquakeSceneryTargets = cleanupBounds === null
+    ? world.earthquakeSceneryTargets
+    : retainInsideBounds(world.earthquakeSceneryTargets, cleanupBounds)
+  const primarySceneryTargets = cleanupBounds === null
+    ? world.primarySceneryTargets
+    : retainInsideBounds(world.primarySceneryTargets, cleanupBounds, target => target.id.startsWith('fencepost:'))
+  const scenerySpellTargets = cleanupBounds === null
+    ? world.scenerySpellTargets
+    : retainInsideBounds(world.scenerySpellTargets, cleanupBounds)
+  return {
+    enemyEvents: enemyStep.events,
+    lootEvents: lootStep.events,
+    lootPickups: lootStep.pickups,
+    movementContactsByPlayerId: Object.freeze(Object.fromEntries(
+      Object.entries(movementContactsByPlayerId).map(([playerId, contacts]) => [
+        playerId,
+        Object.freeze(contacts),
+      ]),
+    )),
+    movementEpochActiveByPlayerId: Object.freeze(Object.fromEntries(
+      plans.map(({ collisionEnabled, plan, playerId }) => [
+        playerId,
+        collisionEnabled && plan.movementActive,
+      ]),
+    )),
+    playerDamage: enemyStep.playerDamage,
+    players: knockback.players,
+    rewards: enemyStep.rewards,
+    world: {
+      ...world,
+      arenaTransition,
+      earthquakeSceneryTargets,
+      encounter,
+      enemies: knockback.enemies,
+      lanternPosition: knockback.lanternPosition,
+      enemyWorldFeedback,
+      gateLeaves,
+      loot,
+      primarySceneryTargets,
+      scenerySpellTargets,
+      tutorial,
+      waves,
+    },
+  }
+}

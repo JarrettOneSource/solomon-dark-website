@@ -20,6 +20,7 @@ public static class WebGameSaveEndpoints
         int slot,
         HttpContext context,
         AppDb db,
+        WebGameSaveScope scope,
         CancellationToken cancellationToken)
     {
         if (slot != 0)
@@ -32,7 +33,7 @@ public static class WebGameSaveEndpoints
             return ApiErrors.Unauthorized("A website account is required for browser cloud saves.");
         }
         var save = await db.WebGameSaves.AsNoTracking().SingleOrDefaultAsync(
-            candidate => candidate.UserId == userId.Value && candidate.Slot == slot,
+            candidate => candidate.UserId == userId.Value && candidate.Slot == scope.StorageSlot,
             cancellationToken);
         return Results.Ok(new { save = save is null ? null : Payload(save) });
     }
@@ -42,6 +43,7 @@ public static class WebGameSaveEndpoints
         WebGameSaveWriteRequest request,
         HttpContext context,
         AppDb db,
+        WebGameSaveScope scope,
         CancellationToken cancellationToken)
     {
         if (slot != 0)
@@ -68,7 +70,7 @@ public static class WebGameSaveEndpoints
         }
 
         var save = await db.WebGameSaves.SingleOrDefaultAsync(
-            candidate => candidate.UserId == userId.Value && candidate.Slot == slot,
+            candidate => candidate.UserId == userId.Value && candidate.Slot == scope.StorageSlot,
             cancellationToken);
         var currentRevision = save?.Revision ?? 0;
         if (currentRevision != request.ExpectedRevision)
@@ -77,7 +79,7 @@ public static class WebGameSaveEndpoints
         }
         if (save is null)
         {
-            save = new WebGameSave { UserId = userId.Value, Slot = slot };
+            save = new WebGameSave { UserId = userId.Value, Slot = scope.StorageSlot };
             db.WebGameSaves.Add(save);
         }
         save.Document = request.Document!;
@@ -88,11 +90,11 @@ public static class WebGameSaveEndpoints
         }
         catch (DbUpdateConcurrencyException)
         {
-            return Conflict(await CurrentRevisionAsync(db, userId.Value, slot, cancellationToken));
+            return Conflict(await CurrentRevisionAsync(db, userId.Value, scope.StorageSlot, cancellationToken));
         }
         catch (DbUpdateException)
         {
-            return Conflict(await CurrentRevisionAsync(db, userId.Value, slot, cancellationToken));
+            return Conflict(await CurrentRevisionAsync(db, userId.Value, scope.StorageSlot, cancellationToken));
         }
         return Results.Ok(Payload(save));
     }
@@ -102,6 +104,7 @@ public static class WebGameSaveEndpoints
         int expectedRevision,
         HttpContext context,
         AppDb db,
+        WebGameSaveScope scope,
         CancellationToken cancellationToken)
     {
         if (slot != 0)
@@ -118,7 +121,7 @@ public static class WebGameSaveEndpoints
             return ApiErrors.Unauthorized("A website account is required for browser cloud saves.");
         }
         var save = await db.WebGameSaves.SingleOrDefaultAsync(
-            candidate => candidate.UserId == userId.Value && candidate.Slot == slot,
+            candidate => candidate.UserId == userId.Value && candidate.Slot == scope.StorageSlot,
             cancellationToken);
         var currentRevision = save?.Revision ?? 0;
         if (currentRevision != expectedRevision)
@@ -134,7 +137,7 @@ public static class WebGameSaveEndpoints
             }
             catch (DbUpdateConcurrencyException)
             {
-                return Conflict(await CurrentRevisionAsync(db, userId.Value, slot, cancellationToken));
+                return Conflict(await CurrentRevisionAsync(db, userId.Value, scope.StorageSlot, cancellationToken));
             }
         }
         return Results.NoContent();
@@ -142,7 +145,7 @@ public static class WebGameSaveEndpoints
 
     private static object Payload(WebGameSave save) => new
     {
-        save.Slot,
+        Slot = 0,
         save.Revision,
         save.Document
     };

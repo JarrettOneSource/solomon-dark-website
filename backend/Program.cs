@@ -28,6 +28,7 @@ var storageRoot = Path.IsPathRooted(configuredStorageRoot)
     : Path.Combine(builder.Environment.ContentRootPath, configuredStorageRoot);
 var storage = new StorageService(storageRoot);
 builder.Services.AddSingleton(storage);
+builder.Services.AddSingleton(new WebGameSaveScope(builder.Configuration));
 builder.Services.AddDbContext<AppDb>(options =>
     options.UseSqlite($"Data Source={storage.DatabasePath}"));
 builder.Services.AddScoped<ModPublishingService>();
@@ -348,16 +349,6 @@ var frontendFiles = new StaticFileOptions
         }
     }
 };
-// The last TypeScript game waits at this root URL for the announced Rust revision.
-app.Use((context, next) =>
-{
-    if (context.Request.Path == "/deployment.json"
-        && context.Request.Query["current"] == "093aee9938e0cae2fabfafc5403b01aed961397e")
-    {
-        context.Request.Path = "/game/deployment.json";
-    }
-    return next(context);
-});
 app.UseDefaultFiles();
 app.UseStaticFiles(frontendFiles);
 

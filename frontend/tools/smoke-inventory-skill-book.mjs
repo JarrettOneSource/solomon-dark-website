@@ -1,0 +1,384 @@
+import assert from 'node:assert/strict'
+import { fileURLToPath } from 'node:url'
+
+import { chromium } from 'playwright-core'
+import { unforgeBrowserReceipt } from './unforge-browser-receipt.mjs'
+import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startGameHost } from '../src/game/host/game-host.ts'
+
+import {
+  DEFAULT_GAME_SETTINGS,
+  GAME_SETTINGS_STORAGE_KEY,
+} from '../src/game/game-settings.ts'
+
+let baseUrl = process.env.SDR_GAME_BOOK_SMOKE_URL || 'http://127.0.0.1:4191'
+let staticServer = null
+let gameHost = null
+const gameCredential = 'inventory-book-browser-acceptance'
+if (process.env.SDR_GAME_BOOK_PRODUCTION === '1' && !process.env.SDR_GAME_BOOK_SMOKE_URL) {
+  staticServer = await startStaticClientServer({ root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)) })
+  gameHost = await startGameHost({ allowedOrigins: [staticServer.origin], authentication: { kind: 'shared', credential: gameCredential } })
+  baseUrl = staticServer.origin
+}
+const screenshotRoot = process.env.SDR_GAME_BOOK_SMOKE_SCREENSHOT_ROOT
+  || '/tmp/solomon-dark-inventory-skill-book'
+const mobile = process.env.SDR_GAME_BOOK_SMOKE_MOBILE === '1'
+const browser = await chromium.launch({
+  executablePath: process.env.SDR_CHROME_PATH || '/usr/bin/google-chrome',
+  headless: !process.argv.includes('--headed'),
+})
+const page = await browser.newPage({
+  ...(mobile ? { hasTouch: true, isMobile: true } : {}),
+  viewport: mobile ? { width: 844, height: 390 } : { width: 1600, height: 900 },
+})
+if (gameHost) await page.addInitScript(({ credential, url }) => {
+  window.solomonDarkRuntime = { gameEndpoint: { credential, kind: 'localhost', url } }
+}, { credential: gameCredential, url: gameHost.address.url })
+const consoleErrors = []
+const pageErrors = []
+const failedResponses = []
+page.on('console', (message) => {
+  if (message.type() === 'error') consoleErrors.push(message.text())
+})
+page.on('pageerror', (error) => pageErrors.push(error.message))
+page.on('response', (response) => {
+  if (response.status() >= 400) failedResponses.push(`${response.status()} ${response.url()}`)
+})
+await page.addInitScript(bypassStartupAudioPreload)
+await page.addInitScript(({ key, settings }) => {
+  localStorage.setItem(key, JSON.stringify(settings))
+}, {
+  key: GAME_SETTINGS_STORAGE_KEY,
+  settings: {
+    ...DEFAULT_GAME_SETTINGS,
+    controls: {
+      ...DEFAULT_GAME_SETTINGS.controls,
+      openInventory: 'KeyB',
+      openSkills: 'KeyV',
+    },
+  },
+})
+await page.addInitScript(() => {
+  window.__sdrInventoryPointerEvents = []
+  for (const type of ['pointerdown', 'pointerup', 'pointercancel', 'touchstart', 'touchend']) {
+    window.addEventListener(type, (event) => {
+      const target = event.target instanceof Element
+        ? event.target.closest('.hub-native-ui-action')
+        : null
+      if (!target) return
+      window.__sdrInventoryPointerEvents.push({
+        atMs: performance.now(),
+        label: target.getAttribute('aria-label'),
+        pointerType: 'pointerType' in event ? event.pointerType : 'touch',
+        type,
+      })
+    }, { capture: true })
+  }
+})
+await page.route('**/deployment.json?*', async (route) => {
+  const revision = new URL(route.request().url()).searchParams.get('current')
+  await route.fulfill({ json: { revision } })
+})
+
+try {
+  await enterHub(page)
+
+  const optionalBookReceipts = []
+  const skillBookViewportReceipts = []
+  const unforgeReceipts = []
+
+  await page.locator('.hub-scene[data-gameplay-input-blocked="false"]').waitFor({ timeout: 10_000 })
+  await activate(page, page.getByRole('button', { name: /Open inventory/ }))
+  const hubInventory = page.getByRole('dialog', { name: 'Inventory' })
+  await hubInventory.waitFor({ timeout: 5_000 })
+  await waitForInventory(hubInventory)
+  unforgeReceipts.push(await unforgeBrowserReceipt(page, hubInventory, 'Hub standalone Inventory'))
+  await page.setViewportSize({ width: 1200, height: 700 })
+  unforgeReceipts.push(await unforgeBrowserReceipt(page, hubInventory, 'Resized Hub Inventory'))
+  await page.setViewportSize({ width: 1600, height: 900 })
+  const inventoryToSkills = await observeOptionalBookOverlap(page, 'skills')
+  await hubInventory.getByRole('button', { name: 'Open skills' }).click()
+  optionalBookReceipts.push(await inventoryToSkills.result)
+  const hubSkills = page.getByRole('dialog', { name: 'Skills' })
+  await hubSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
+    timeout: 10_000,
+  })
+  skillBookViewportReceipts.push(await skillBookViewportReceipt(page, hubSkills, 'Hub'))
+  await hubInventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  assert.equal(await page.locator('canvas.hub-inventory-native-canvas:visible').count(), 0)
+  await page.screenshot({ path: `${screenshotRoot}-hub-skills.png` })
+  const skillsToInventory = await observeOptionalBookOverlap(page, 'inventory')
+  await hubSkills.getByRole('button', { name: 'Open inventory' }).click()
+  optionalBookReceipts.push(await skillsToInventory.result)
+  await hubSkills.waitFor({ state: 'hidden', timeout: 10_000 })
+  await hubInventory.waitFor({ timeout: 10_000 })
+  await waitForInventory(hubInventory)
+  const healthPotion = hubInventory.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Health Potion, quantity 1',
+  })
+  await activate(page, healthPotion)
+  await healthPotion.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  if (mobile) {
+    await page.waitForTimeout(250)
+    await doubleTouchActivate(healthPotion)
+  } else {
+    await page.waitForTimeout(550)
+    await doubleActivate(page, healthPotion)
+  }
+  await healthPotion.waitFor({ state: 'detached' })
+  await page.screenshot({ path: `${screenshotRoot}-hub-inventory.png` })
+  assert.equal(await hubInventory.getByRole('button', { name: 'Done' }).count(), 0)
+  await page.keyboard.press('b')
+  await hubInventory.waitFor({ state: 'hidden' })
+  await page.locator(
+    '.hub-scene[data-gameplay-input-blocked="false"]',
+  ).waitFor({ timeout: 15_000 })
+
+  await page.getByRole('button', { name: 'Enter the Boneyard' }).click()
+  const picker = page.getByRole('dialog', { name: 'Choose a Boneyard' })
+  if (await picker.count()) await picker.getByRole('button').first().click()
+  const boneyard = page.locator('.boneyard-scene[data-renderer-state="ready"]')
+  await boneyard.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor({ timeout: 90_000 })
+
+  await activate(page, page.getByRole('button', { name: /Open inventory/ }))
+  const matchInventory = page.getByRole('dialog', { name: 'Inventory' })
+  await matchInventory.waitFor()
+  await waitForInventory(matchInventory)
+  const matchInventoryToSkills = await observeOptionalBookOverlap(page, 'skills')
+  await page.keyboard.press('v')
+  optionalBookReceipts.push(await matchInventoryToSkills.result)
+  const matchSkills = page.getByRole('dialog', { name: 'Skills' })
+  await matchSkills.locator('xpath=self::*[@data-transition-phase="settled"]').waitFor({
+    timeout: 10_000,
+  })
+  skillBookViewportReceipts.push(await skillBookViewportReceipt(
+    page,
+    matchSkills,
+    'Boneyard',
+  ))
+  await matchInventory.waitFor({ state: 'hidden', timeout: 10_000 })
+  assert.equal(await page.locator('canvas.hub-inventory-native-canvas:visible').count(), 0)
+  const matchSkillsToInventory = await observeOptionalBookOverlap(page, 'inventory')
+  await page.keyboard.press('b')
+  optionalBookReceipts.push(await matchSkillsToInventory.result)
+  await matchSkills.waitFor({ state: 'hidden', timeout: 10_000 })
+  await matchInventory.waitFor({ timeout: 10_000 })
+  await waitForInventory(matchInventory)
+  assert.equal(await boneyard.getAttribute('data-gameplay-input-blocked'), 'true')
+  unforgeReceipts.push(await unforgeBrowserReceipt(page, matchInventory, 'Paused Boneyard Inventory after Skills'))
+  const matchManaPotion = matchInventory.getByLabel('Backpack').getByRole('button', {
+    exact: true,
+    name: 'Mana Potion, quantity 1',
+  })
+  assert.equal(await matchManaPotion.count(), 1)
+  await activate(page, matchManaPotion)
+  await matchManaPotion.locator('xpath=self::*[@data-selected="true"]').waitFor()
+  await page.waitForTimeout(250)
+  await matchInventory.locator(
+    '.hub-inventory-native-canvas[data-native-item-info="visible"]',
+  ).waitFor()
+  assert.match(
+    await matchInventory.getAttribute('data-native-inventory-selection') || '',
+    /^backpack:/,
+  )
+  if (mobile) {
+    await page.screenshot({ path: `${screenshotRoot}-match-inventory-item-info.png` })
+    await doubleTouchActivate(matchManaPotion)
+  } else {
+    await page.screenshot({ path: `${screenshotRoot}-match-inventory-item-info.png` })
+    await page.waitForTimeout(300)
+    await doubleActivate(page, matchManaPotion)
+  }
+  await matchManaPotion.waitFor({ state: 'detached' })
+  await page.screenshot({ path: `${screenshotRoot}-match-inventory.png` })
+
+  await page.keyboard.press('b')
+  await matchInventory.waitFor({ state: 'hidden' })
+  await boneyard.locator('xpath=self::*[@data-gameplay-input-blocked="false"]').waitFor()
+
+  assert.deepEqual(pageErrors, [])
+  assert.deepEqual(consoleErrors, [], JSON.stringify(failedResponses))
+  assert.deepEqual(failedResponses, [])
+  process.stdout.write(`${JSON.stringify({
+    consoleErrors,
+    failedResponses,
+    hubInventory: true,
+    matchInventory: true,
+    matchInventoryPotionConsumed: true,
+    mobile,
+    optionalBookReceipts,
+    pageErrors,
+    pointerEvents: await page.evaluate(() => window.__sdrInventoryPointerEvents),
+    skillBookViewportReceipts,
+    unforgeReceipts,
+  })}\n`)
+} finally {
+  await browser.close()
+  await gameHost?.close()
+  await staticServer?.close()
+}
+
+async function enterHub(target) {
+  await target.goto(`${baseUrl}/game`, { waitUntil: 'domcontentloaded' })
+  await target.getByRole('button', { name: 'Play' }).waitFor({ timeout: 90_000 })
+  assert.equal(await target.locator('canvas.hub-inventory-native-canvas:visible').count(), 0)
+  const tutorialPrompt = target.getByRole('dialog', { name: 'Play the Tutorial?' })
+  if (await tutorialPrompt.isVisible()) {
+    await tutorialPrompt.getByRole('button', { exact: true, name: 'NO' }).click()
+  }
+  await target.evaluate(() => window.__sdrRestoreAudioPreload?.())
+  await target.getByRole('button', { name: 'Play' }).click()
+  await target.getByRole('button', { name: 'New Game' }).click()
+  await target.locator('.create-menu-scene[data-motion-settled="true"]').waitFor({ timeout: 30_000 })
+  await target.getByRole('button', { name: /Ether/i }).click()
+  await target.locator('.create-menu-disciplines[data-visible="true"]').waitFor({ timeout: 15_000 })
+  await target.locator('.create-menu-discipline-arcane').click()
+  await target.locator('.hub-scene[data-renderer-state="ready"]').waitFor({ timeout: 30_000 })
+}
+
+async function waitForInventory(inventory) {
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor({
+    timeout: 10_000,
+  })
+}
+
+async function observeOptionalBookOverlap(page, target) {
+  // Arm before the action; a polling task can miss the short shared lifetime.
+  await page.evaluate((replacementTarget) => {
+    window.__sdrOptionalBookOverlap = null
+    const inspect = () => {
+      const inventory = document.querySelector('.hub-native-ui-overlay[data-surface-kind="inventory"]')
+      const skills = document.querySelector('.skill-book-stage')
+      if (!inventory || !skills) return
+      if (replacementTarget === 'skills') {
+        if (inventory.getAttribute('data-replacement-target') !== 'skills') return
+      } else if (skills.getAttribute('data-transition-target') !== 'inventory') return
+      window.__sdrOptionalBookOverlap = {
+        inventoryReveal: inventory.querySelector('.hub-inventory-native-canvas')
+          ?.getAttribute('data-native-reveal-progress') ?? null,
+        inventoryTarget: inventory.getAttribute('data-replacement-target'),
+        skillsProgress: skills.getAttribute('data-open-progress'),
+        skillsTarget: skills.getAttribute('data-transition-target'),
+        target: replacementTarget,
+      }
+      observer.disconnect()
+    }
+    const observer = new MutationObserver(inspect)
+    observer.observe(document.body, { attributes: true, childList: true, subtree: true })
+    inspect()
+  }, target)
+  return {
+    result: page.waitForFunction(() => window.__sdrOptionalBookOverlap, null, { timeout: 5_000 })
+      .then(receipt => receipt.jsonValue()),
+  }
+}
+
+async function skillBookViewportReceipt(page, book, scene) {
+  const overlay = page.locator('.skill-book-overlay').filter({ has: book })
+  assert.equal(await overlay.count(), 1, `${scene} Skills has no viewport owner`)
+  const [overlayBox, stageBox, curtainStyle] = await Promise.all([
+    overlay.boundingBox(),
+    book.boundingBox(),
+    overlay.locator('.skill-book-curtain').evaluate((curtain) => {
+      const style = getComputedStyle(curtain)
+      return {
+        backgroundColor: style.backgroundColor,
+        opacity: Number(style.opacity),
+        pointerEvents: style.pointerEvents,
+      }
+    }),
+  ])
+  assert.ok(overlayBox, `${scene} Skills viewport owner has no geometry`)
+  assert.ok(stageBox, `${scene} Skills native stage has no geometry`)
+  const viewport = page.viewportSize()
+  assert.ok(viewport)
+  assert.deepEqual({
+    height: Math.round(overlayBox.height),
+    width: Math.round(overlayBox.width),
+    x: Math.round(overlayBox.x),
+    y: Math.round(overlayBox.y),
+  }, {
+    height: viewport.height,
+    width: viewport.width,
+    x: 0,
+    y: 0,
+  })
+  assert.equal(curtainStyle.backgroundColor, 'rgb(0, 0, 0)')
+  assert.equal(curtainStyle.opacity, 1)
+  assert.equal(curtainStyle.pointerEvents, 'none')
+  assert.ok(stageBox.width <= overlayBox.width)
+  assert.ok(stageBox.height <= overlayBox.height)
+  if (viewport.width / viewport.height !== 16 / 9) {
+    assert.ok(
+      stageBox.width < overlayBox.width || stageBox.height < overlayBox.height,
+      `${scene} Skills native stage unexpectedly stretched to the viewport`,
+    )
+  }
+  return {
+    curtainStyle,
+    overlay: overlayBox,
+    scene,
+    stage: stageBox,
+    viewport,
+  }
+}
+
+async function activate(page, target) {
+  const box = await target.boundingBox()
+  assert.ok(box, 'inventory activation target has no browser geometry')
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  if (mobile) await page.touchscreen.tap(x, y)
+  else await page.mouse.click(x, y)
+  await page.waitForTimeout(25)
+}
+
+async function doubleActivate(page, target) {
+  const box = await target.boundingBox()
+  assert.ok(box, 'inventory double-activation target has no browser geometry')
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  await page.mouse.dblclick(x, y)
+}
+
+async function doubleTouchActivate(target) {
+  await target.evaluate((element) => {
+    const button = element
+    Object.defineProperties(button, {
+      hasPointerCapture: { configurable: true, value: () => false },
+      releasePointerCapture: { configurable: true, value: () => {} },
+      setPointerCapture: { configurable: true, value: () => {} },
+    })
+    for (const pointerId of [98, 99]) {
+      button.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        isPrimary: true,
+        pointerId,
+        pointerType: 'touch',
+      }))
+      button.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        button: 0,
+        isPrimary: true,
+        pointerId,
+        pointerType: 'touch',
+      }))
+    }
+    delete button.hasPointerCapture
+    delete button.releasePointerCapture
+    delete button.setPointerCapture
+  })
+}
+
+function bypassStartupAudioPreload() {
+  const nativeLoad = HTMLMediaElement.prototype.load
+  HTMLMediaElement.prototype.load = function loadWithoutDecode() {
+    if (!(this instanceof HTMLAudioElement)) return nativeLoad.call(this)
+    queueMicrotask(() => this.dispatchEvent(new Event('loadeddata')))
+  }
+  Object.defineProperty(window, '__sdrRestoreAudioPreload', {
+    value: () => { HTMLMediaElement.prototype.load = nativeLoad },
+  })
+}

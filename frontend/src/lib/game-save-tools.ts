@@ -1,6 +1,7 @@
 import { gameArtifactUrl } from './game-artifact.ts'
+import { gameRuntime } from './game-runtime.ts'
 
-/** The public save-tools WASM ABI. Validation and conversion are Rust-owned. */
+/** Common preview returned by the selected client's native-save importer. */
 export interface GameSaveImportPreview {
   readonly discipline: string
   readonly displayName: string
@@ -42,9 +43,15 @@ function saveTools(): Promise<SaveToolsModule> {
 }
 
 export async function readGameSaveFileSelection(files: FileList | readonly File[]): Promise<GameSaveImportPreview> {
+  if (gameRuntime === 'pixi') {
+    return (await import('../game/save/game-save-files.ts')).readGameSaveFileSelection(files)
+  }
   return (await saveTools()).readGameSaveFileSelection(files)
 }
 
 export async function exportWebGameSaveToNativeArchive(document: string): Promise<NativeArchiveExport> {
+  if (gameRuntime === 'pixi') {
+    return (await import('../game/save/game-save-portability.ts')).exportWebGameSaveToNativeArchive(document)
+  }
   return (await saveTools()).exportWebGameSaveToNativeArchive(document)
 }
