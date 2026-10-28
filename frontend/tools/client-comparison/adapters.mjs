@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
+import { writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { startElementHub, enterBoneyard } from '../game-smoke-navigation.mjs'
 import { GameWelcomeReceiver } from '../../src/game/protocol/game-welcome-transfer.ts'
 import { EntityReplicationReconstructor } from '../../src/game/protocol/entity-replication.ts'
+import { RunObservation } from './run-observation.mjs'
 
 // Adapters translate controls and accepted snapshots. They never send protocol
 // commands or assign game state; the running client owns every input and ACK.
@@ -12,9 +14,12 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
   const { startNewGame } = require(resolve(helpers, 'menu-journey.cjs'))
   const { createNativeMessageReader } = require(resolve(helpers, 'native-wire.cjs'))
   const { prepareBoneyardNavigation, walkSolomonEntrance } = require(resolve(helpers, 'solomon-entrance.cjs'))
-  let snapshot, playerId, host, loadedBoneyard, navigation, pixiPause
+  let snapshot, playerId, host, loadedBoneyard, navigation, pixiPause, modContent
   let admissions = 0
   const pickupEvents = new Set()
+  const observation = new RunObservation()
+  const luaRequests = new Map(), luaResults = new Map()
+  const word = value => value == null ? null : String(value).replace(/[-_ ]/g, '').toLowerCase()
   const bounds = value => ({ x: value.x, y: value.y, width: value.w, height: value.h })
   const title = async () => {
     if (client === 'rust') await ui.surface(page, 'title', { timeout: 180_000 })
@@ -43,20 +48,88 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
         player: { combat: { life_state: snapshot.players[playerId].progression.lifeState === 'alive' ? 'Alive' : 'Dead' } } },
     },
   }
+  const runFrame = () => {
+    const rust = client === 'rust'
+    const world = rust ? snapshot?.boneyard : snapshot?.world?.kind === 'boneyard' ? snapshot.world : null
+    const player = rust ? snapshot?.participants[playerId]?.player : snapshot?.players[playerId]
+    if (!world || !player) return null
+    const resource = rust ? player.combat : player.progression
+    const waves = rust ? world.waves?.state : world.waves
+    const wave = waves == null ? 0 : rust ? waves.wave_ordinal : waves.waveOrdinal
+    assert.ok(Number.isSafeInteger(wave) && wave >= 0, 'The accepted wave projection must contain its ordinal')
+    const secondary = (rust ? snapshot.secondary : snapshot.secondaryAbilities).players[playerId]
+    const protection = modContent?.content?.find(entry => entry.modId === 'local.performance.party-soak'
+      && entry.key === 'protected')?.contentId
+    return {
+      runId: rust ? world.run_id : world.runId, tick: rust ? snapshot.ticks : snapshot.tick,
+      seed: rust ? world.seed : loadedBoneyard?.seed,
+      sourceSha256: rust ? world.source_sha256 : loadedBoneyard?.sourceSha256,
+      geometrySha256: rust ? world.geometry_sha256 : loadedBoneyard?.geometrySha256,
+      wave, wavePhase: word(waves?.phase),
+      health: rust ? resource.current_health : resource.currentHealth,
+      mana: rust ? resource.current_mana : resource.currentMana,
+      maximumMana: rust ? resource.maximum_mana : resource.maximumMana,
+      reservedMana: rust ? secondary?.reserved_mana : secondary?.reservedMana,
+      castSequence: rust ? snapshot.participants[playerId].wizard.primary_cast.cast_sequence : player.primaryCast.castSequence,
+      secondaryCastSequence: (rust ? secondary?.cast_sequence : secondary?.castSequence) ?? 0,
+      secondarySkill: rust ? secondary?.last_skill_id : secondary?.lastSkillId,
+      protected: Boolean(protection && modContent.statuses.some(status => status.contentId === protection
+        && status.targetId === playerId && status.expiresTick > (rust ? snapshot.ticks : snapshot.tick))),
+      enemies: (rust ? world.enemies.actors : world.enemies).map(actor => ({
+        id: actor.id, kind: word(rust ? actor.config.enemy_token : actor.enemyToken),
+        nativeTypeId: rust ? actor.config.native_type_id : actor.nativeTypeId,
+        classification: word(rust ? actor.config.classification : actor.classification),
+        maximumHealth: rust ? actor.config.maximum_health : actor.maximumHealth,
+        spawnTick: rust ? actor.spawn_tick : actor.spawnTick, x: actor.position.x, y: actor.position.y,
+      })),
+      loot: (rust ? world.loot.actors : world.loot).map(actor => ({
+        id: actor.id, kind: word(actor.kind), amount: actor.amount, tier: actor.tier,
+        orbKind: word(rust ? actor.orb_kind : actor.orbKind),
+        orbValue: rust ? actor.orb_value : actor.orbValue,
+        nativeTypeId: rust ? actor.native_type_id : actor.nativeTypeId,
+        itemNativeTypeId: rust ? actor.item?.native_type_id ?? null : actor.itemNativeTypeId,
+        itemNativeSubtype: rust ? actor.item?.native_subtype ?? null : actor.itemNativeSubtype,
+        spawnTick: rust ? actor.spawn_tick : actor.spawnTick, x: actor.position.x, y: actor.position.y,
+      })),
+      enemyEvents: (rust ? world.enemy_events : world.enemyEvents).map(event => ({
+        id: rust ? event.event_id : event.eventId, kind: word(rust ? event.kind : event.type),
+        actorId: rust ? event.actor_id : event.actorId, tick: event.tick,
+      })),
+      lootEvents: (rust ? world.loot_events : world.lootEvents).map(event => ({
+        id: rust ? event.event_id : event.eventId, kind: word(rust ? event.event_type : event.type),
+        actorId: rust ? event.actor_id : event.actorId, tick: event.tick,
+      })),
+    }
+  }
+  const saveObservations = () => writeFile(resolve(output, 'run-observations.json'),
+    JSON.stringify({ scope: 'accepted browser snapshots; first-observed actors, not a complete authority replay',
+      runs: observation.runs }, null, 2) + '\n')
   page.on('websocket', socket => {
     const read = createNativeMessageReader()
     const welcome = new GameWelcomeReceiver()
     const reconstructor = new EntityReplicationReconstructor()
     socket.on('close', () => welcome.close())
+    socket.on('framesent', ({ payload }) => {
+      try {
+        const message = JSON.parse(payload.toString())
+        if (client === 'rust' && message.type === 'hosted' && message.command.kind === 'lua_execute') {
+          luaRequests.set(message.command.request_id, message.command.code)
+        } else if (message.type === 'client-lua-execute') luaRequests.set(message.requestId, message.code)
+      } catch (error) { errors.push({ observer: error.message }) }
+    })
     socket.on('framereceived', ({ payload }) => {
       try {
+        let updated = false
         if (client === 'rust') {
           const message = read(JSON.parse(payload.toString()))
           if (message?.type === 'welcome') { playerId = message.credentials.player_id; admissions++ }
           if (message?.type === 'welcome' || message?.type === 'snapshot') {
             snapshot = message.frame.snapshot
             host = message.frame.host
+            updated = true
           }
+          if (message?.type === 'hosted' && message.message.kind === 'mod_content') modContent = message.message.projection
+          if (message?.type === 'hosted' && message.message.kind === 'lua_result') luaResults.set(message.message.request_id, message.message)
         } else {
           const message = welcome.receivePayload(payload.toString(), () => {})
           if (message?.type === 'server-welcome') {
@@ -65,11 +138,16 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
             snapshot = message.snapshot
             reconstructor.reset(snapshot, message.snapshotSequence)
             pixiPause = message.gameplayPause
+            updated = true
           } else if (message?.type === 'server-snapshot') {
             snapshot = reconstructor.apply(message.frame, message.sequence)
+            updated = true
           } else if (message?.type === 'server-boneyard-loaded') loadedBoneyard = message.boneyard
           else if (message?.type === 'server-gameplay-pause') pixiPause = message.pause
+          else if (message?.type === 'server-mod-content') modContent = message
+          else if (message?.type === 'server-lua-result') luaResults.set(message.requestId, message)
         }
+        if (updated) { const frame = runFrame(); if (frame) observation.accept(frame) }
         const events = client === 'rust' ? snapshot?.boneyard?.loot_events : snapshot?.world?.lootEvents
         for (const event of events || []) {
           const pickup = client === 'rust' ? event.event_type === 'LootPickup' && event.player_id === playerId
@@ -82,7 +160,37 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
   const pixiDialog = () => page.getByRole('dialog', { name: "HAGATHA'S CHARMS AND CURSES", exact: true })
   const shortcuts = new Set(['Hagatha', 'Fomentius', 'Luthacus', 'Shlorio', 'Provokatus', 'Enter the Boneyard'])
   return {
-    async close() { if (navigation) assert.equal(await navigation.close(), 0) },
+    async close() { await saveObservations(); if (navigation) assert.equal(await navigation.close(), 0) },
+    saveObservations,
+    async setSeed(seed) {
+      assert.ok(Number.isSafeInteger(seed) && seed >= 1 && seed <= 0x3fffffff)
+      const code = `return sd.rng.set_seed(${seed})`
+      await page.keyboard.press('Backquote')
+      if (client === 'rust') {
+        await ui.click(page, 'cheats/tab:console')
+        await ui.fill(page, 'cheats/lua-editor', code)
+        await ui.click(page, 'cheats/run')
+      } else {
+        const dialog = page.getByRole('dialog', { name: 'Cheat menu' })
+        await dialog.getByRole('tab', { name: 'CONSOLE', exact: true }).click()
+        await dialog.getByLabel('LUA', { exact: true }).fill(code)
+        await dialog.getByRole('button', { name: 'RUN LUA', exact: true }).click()
+      }
+      const deadline = Date.now() + 30_000
+      let result
+      while (Date.now() < deadline) {
+        const id = [...luaRequests].find(([, source]) => source === code)?.[0]
+        result = luaResults.get(id)
+        if (result) break
+        await page.waitForTimeout(25)
+      }
+      assert.ok(result?.ok, result?.error || 'The host did not acknowledge the seed request')
+      assert.deepEqual(result.values, [seed])
+      await page.keyboard.press('Backquote')
+      if (client === 'rust') await ui.noWidget(page, 'cheats/lua-editor')
+      else await page.getByRole('dialog', { name: 'Cheat menu' }).waitFor({ state: 'hidden' })
+      return seed
+    },
     async captureReady() {
       if (client === 'rust') {
         await ui.nextFrame(page)
@@ -103,10 +211,10 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
         await page.locator('.hub-native-ui-renderer canvas[data-native-reveal-progress="1"]').waitFor()
       }
     },
-    async start(element) {
+    async start(element, continueLocal) {
       if (client === 'rust') {
         await ui.ready(page)
-        await startNewGame(page, { element: element.toLowerCase(), name: null })
+        await startNewGame(page, { element: element.toLowerCase(), name: null, continueLocal })
       } else await startElementHub(page, element)
     },
     async enterBoneyard() {
@@ -244,6 +352,13 @@ export async function createAdapter({ page, client, helpers, ui, errors, output 
       state.pendingOffer = Boolean(client === 'rust' ? player?.progression.pending_offer : player?.progression.pendingOffer)
       state.kills = client === 'rust' ? snapshot?.participants[playerId]?.score.monsters_killed : world?.hallOfFameRuns?.[playerId]?.monstersKilled
       state.pickups = pickupEvents.size
+      const observed = runFrame()
+      if (observed) {
+        const { enemies: _enemies, loot: _loot, enemyEvents: _enemyEvents, lootEvents: _lootEvents, ...summary } = observed
+        Object.assign(state, summary)
+        const run = observation.runs.find(run => run.runId === state.runId)
+        state.secondarySkills = [...new Set(run?.secondaryCasts.map(row => row.skill) || [])]
+      }
       state.combatBounds = rustWorld()?.arena_transition?.combat_bounds
       state.castSequence = client === 'rust' ? snapshot?.participants[playerId]?.wizard.primary_cast.cast_sequence : player?.primaryCast.castSequence
       state.enemies = ((client === 'rust' ? world?.enemies?.actors : world?.enemies) || []).filter(actor => client === 'rust'

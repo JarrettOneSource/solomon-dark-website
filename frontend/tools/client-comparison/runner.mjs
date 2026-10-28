@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
@@ -14,11 +14,14 @@ const { values } = parseArgs({ options: {
   scenario: { type: 'string' }, out: { type: 'string' },
   'rust-tools': { type: 'string' }, 'resolve-host': { type: 'string' },
   chrome: { type: 'string' },
+  seed: { type: 'string', default: '20261028' },
 } })
 for (const key of ['client', 'url', 'scenario', 'out', 'rust-tools']) {
   assert.ok(values[key], `--${key} is required`)
 }
 assert.ok(['pixi', 'rust'].includes(values.client), '--client must be pixi or rust')
+const seed = Number(values.seed)
+assert.ok(Number.isSafeInteger(seed) && seed >= 1 && seed <= 0x3fffffff, '--seed must be within 1..0x3fffffff')
 const require = createRequire(import.meta.url)
 const helpers = resolve(values['rust-tools'])
 const ui = require(resolve(helpers, 'gpu-ui.cjs'))
@@ -31,35 +34,50 @@ const receipt = {
   startedAt: new Date().toISOString(),
   client: values.client, url: values.url, scenario: resolve(values.scenario),
   scenarioSha256: createHash('sha256').update(source).digest('hex'),
+  seed,
   control: 'Lua scenario; ordinary browser mouse and keyboard; read-only protocol observation',
   passed: false, actions: [], checkpoints: [], errors: [],
 }
 const args = process.platform === 'darwin' ? ['--use-angle=metal', '--ignore-gpu-blocklist'] : []
 if (values['resolve-host']) args.push(`--host-resolver-rules=MAP ${values['resolve-host']} 127.0.0.1`)
 let owner, page, watched, lua, adapter
+let lastReceiptAt = 0
+let interrupted
+process.once('SIGINT', () => { interrupted = 'SIGINT' })
+process.once('SIGTERM', () => { interrupted = 'SIGTERM' })
 async function record(name, parameters, operation) {
   const row = { index: receipt.actions.length, name, parameters, startedAt: Date.now() }
   receipt.actions.push(row)
   console.log(`${values.client}: ${row.index} ${name} ${JSON.stringify(parameters)}`)
   try {
+    if (interrupted) throw new Error(`Journey interrupted by ${interrupted}`)
     assert.deepEqual(receipt.errors, [])
     const result = await operation()
     row.completedAt = Date.now()
     if (name === 'observe') {
-      const { ui: _ui, ...state } = result
-      row.state = state
+      const { ui: _ui, enemies, loot, ...state } = result
+      row.state = { ...state, enemyCount: enemies.length, lootCount: loot.length }
     } else if (typeof result === 'boolean') row.result = result
     return result
   } catch (error) {
     row.failure = error.message
     throw error
   } finally {
-    await writeFile(resolve(output, 'receipt.json'), JSON.stringify(receipt, null, 2) + '\n')
+    await appendFile(resolve(output, 'actions.jsonl'), JSON.stringify(row) + '\n')
+    // Long endurance runs must not rewrite their growing action history twice
+    // per sample. Checkpoints, failures and the final receipt are still durable.
+    if (row.failure || name === 'capture' || Date.now() - lastReceiptAt >= 30_000) {
+      await writeFile(resolve(output, 'receipt.json'), JSON.stringify(receipt, null, 2) + '\n')
+      if (name !== 'capture') await adapter?.saveObservations()
+      lastReceiptAt = Date.now()
+    }
   }
 }
 try {
   owner = await launchOwnedBrowser(chromium, {
     headless: true,
+    // This runner records interruption before closing its owned browser below.
+    handleSIGINT: false, handleSIGTERM: false,
     executablePath: values.chrome || process.env.SDR_CHROME_PATH
       || (process.platform === 'darwin'
         ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' : '/usr/bin/google-chrome'),
@@ -84,7 +102,10 @@ try {
   await page.goto(values.url, { waitUntil: 'domcontentloaded' })
   lua = await new LuaFactory().createEngine()
   lua.global.set('qa', {
-    start: element => record('start', { element }, () => adapter.start(element)),
+    seed,
+    start: (element, continueLocal = false) => record('start', { element, continueLocal },
+      () => adapter.start(element, continueLocal)),
+    set_seed: seed => record('set-seed', { seed }, () => adapter.setSeed(seed)),
     click: name => record('click', { name }, () => adapter.click(name)),
     fill: (name, value) => record('fill', { name, value }, () => adapter.fill(name, value)),
     key: key => record('key', { key }, () => page.keyboard.press(key)),
@@ -113,7 +134,8 @@ try {
       const deadline = Date.now() + 30_000
       while (Date.now() < deadline) {
         assert.deepEqual(receipt.errors, [])
-        assert.deepEqual(watched.errors, [])
+        // Raw media cancellations need the final lifetime reconciliation below.
+        // A document replacement can retire a loaded request during this wait.
         const state = await adapter.observe()
         if (state[field] === expected) return state
         await page.waitForTimeout(25)
@@ -128,6 +150,7 @@ try {
       await page.screenshot({ path: resolve(output, `${file}.png`), timeout: 120_000 })
       receipt.checkpoints.push({ name, image: `${file}.png`, stateFile: `${file}.json`, state })
       await writeFile(resolve(output, `${file}.json`), JSON.stringify(state, null, 2) + '\n')
+      await adapter.saveObservations()
       return state
     }),
   })
