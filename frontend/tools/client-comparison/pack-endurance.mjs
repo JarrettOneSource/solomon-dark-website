@@ -13,7 +13,7 @@ try {
   await mkdir(join(temporary, 'scripts'))
   await writeFile(join(temporary, 'scripts/main.lua'), source)
   await writeFile(join(temporary, 'manifest.json'), JSON.stringify({
-    id: 'local.performance.party-soak', name: 'Private invincible endurance pilot', version: '1.1.0',
+    id: 'local.performance.party-soak', name: 'Private invincible endurance pilot', version: '1.2.0',
     runtime: { apiVersion: '1.0.0', entryScript: 'scripts/main.lua' }, requiredMods: [],
   }, null, 2) + '\n')
   await runSdmod(['pack', temporary, output])

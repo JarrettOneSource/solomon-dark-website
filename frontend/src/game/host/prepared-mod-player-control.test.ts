@@ -333,6 +333,29 @@ test('the real stress pilot rotates ready abilities, keeps toggles on, and does 
   } finally { fixture.host.close() }
 })
 
+test('the actual stress pilot rotates abilities across all three belt banks', async () => {
+  const source = readFileSync(new URL('../../../tools/party-soak-pilot.lua', import.meta.url), 'utf8')
+  const fixture = await createFixture(source)
+  try {
+    const state = stepGameSimulationTick(fixture.state, humanInputs())
+    const book = grantPlayerSkillRanks(state.playerEntities.skillBooks[0]!, 48, 1)
+    fixture.state = { ...state, playerEntities: { ...state.playerEntities,
+      skillBooks: [book],
+      belts: [Array.from({ length: 24 }, (_, slot) => [0, 8, 16, 23].includes(slot)
+        ? { kind: 'skill' as const, skillId: 48 } : null)],
+    } }
+    const slots = []
+    for (let decision = 0; decision < 8; decision += 1) {
+      const inputs = humanInputs()
+      fixture.host.applyPlayerControls(inputs, decision * 100)
+      slots.push(inputs.wizard!.cast.quickbar)
+    }
+    assert.deepEqual(fixture.errors, [])
+    assert.deepEqual(slots, [0, 8, 16, 23, 0, 8, 16, 23])
+    assert.equal(fixture.host.checkpoint().statuses.instances.length, 1)
+  } finally { fixture.host.close() }
+})
+
 for (const element of ['fire', 'water'] as const) {
   test(`the actual ${element} stress pilot casts secondaries through native shared cooldowns without mana loss`, async () => {
     const source = readFileSync(new URL('../../../tools/party-soak-pilot.lua', import.meta.url), 'utf8')

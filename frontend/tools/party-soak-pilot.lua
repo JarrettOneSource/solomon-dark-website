@@ -112,16 +112,16 @@ sd.advanced.reducer({
       escape_remaining, stuck = 30, 0
       movement = {x = escape_x, y = escape_y}
     end
-    local quickbar, next_quickbar, nearest_slot = nil, state.next_quickbar, 8
+    local quickbar, next_quickbar, nearest_slot = nil, state.next_quickbar, 24
     if not event.entry and player.secondary_ready then
       for _, ability in ipairs(player.secondary_abilities) do
-        local distance = (ability.slot - state.next_quickbar) % 8
+        local distance = (ability.slot - state.next_quickbar) % 24
         if ability.cooldown_ticks <= 0 and not ability.active
           and ability.slot ~= player.held_quickbar and distance < nearest_slot then
           quickbar, nearest_slot = ability.slot, distance
         end
       end
-      if quickbar ~= nil then next_quickbar = (quickbar + 1) % 8 end
+      if quickbar ~= nil then next_quickbar = (quickbar + 1) % 24 end
     end
     return {x = position.x, y = position.y, stuck = stuck,
       escape_x = escape_x, escape_y = escape_y, escape_remaining = escape_remaining,
