@@ -227,6 +227,53 @@ that exhaustive gate while changing the player-facing name.
 
 ## Spawn-safety boundary and membership
 
+### Route attachment must consider a connected pair of endpoints
+
+The protected October 29 endurance run at Website `9c622514` failed at tick
+503812, wave 48, placing a radius-35 dark-policy enemy from
+`(276.52716064453125, 1089.437255859375)` in generated source
+`2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f`.
+The preceding signed save, host exception and browser observations are retained
+under `codex-runs/solomon-lua-wave60-20261028/pixi-wave48-diagnosis` on M2.
+The saved tick precedes the failure; its Lua continuation reached wave 50 on
+a different trajectory and is not an exact replay of the failed tick.
+
+A focused query in the same shipped arena reproduces the exception with a
+legal player at `(1050,1120)`, 23.46 units from the last sampled position.
+The clearance-50 mesh attaches that endpoint to triangle 260, a five-triangle
+component, then declares the origin unreachable. The same endpoint has an
+unobstructed radius-25 connector to triangle 200 in the origin's 1,501-triangle
+component. Fifty-two visible triangle centers belong to that component. The
+previous query selected the first endpoint attachment before checking graph
+connectivity, so it missed these legal routes. Independent regressions failed
+in both PixiJS and Rust before the correction and pass with paired endpoint
+selection. The exact historical failure position between browser samples was
+not retained; these are controlled reproductions in its admitted geometry.
+
+This reopens the endpoint ownership correction below: the earlier pass verified
+the destination footprint but did not cover multiple reachable graph components.
+The correction belongs to route endpoint selection, not spawn policy, collision
+clearance, graph construction, RNG, or enemy statistics. It is a demonstrated
+route-query defect, not a newly recovered retail numeric rule.
+
+| Member | Required behavior and current disposition |
+| --- | --- |
+| Clear direct routes and connected first-choice attachments | Preserved; existing route checks pass |
+| Start or destination touching multiple mesh components | Implemented; forward and reverse route regressions pass |
+| Both endpoints requiring alternative attachments | Implemented; shared-component and disconnected-component cases pass |
+| Distinct mover and destination footprints | Preserved; radius-35 birth and radius-25 target checks pass |
+| Dark, light, direct, offscreen and edge spawn policies | All use the shared correction; legal raw roots preserve RNG and policy admission |
+| Prepared and runtime-generated meshes | Rust independently exercises both; PixiJS uses its existing prepared-mesh owner |
+| Truly disconnected geometry, invalid bounds and impossible spawn worlds | Existing rejection checks pass; no new graph edges or relaxed clearance |
+| PixiJS and Rust navigation owners | Matching corrections and composed Demon-birth regressions pass |
+
+The existing 62 PixiJS navigation/world tests and five Rust navigation tests pass.
+Three historical Rust null routes now have verified collision-safe connections;
+their original recordings remain unchanged, with explicit corrected assertions.
+Complete M2 source gates and corrected browser endurance with saved continuation
+remain required. The earlier Rust wave-61 journey used the pre-correction tree
+and remains separate evidence.
+
 ### 2026-09-06: spawn reachability uses the destination owner's footprint
 
 A Mac continuation of a real production save reproduces another finite spawn
