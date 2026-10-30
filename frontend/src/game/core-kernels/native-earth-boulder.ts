@@ -52,10 +52,10 @@ export function consumeNativeEarthBoulderContact(
   requireNonnegativeFinite(input.releaseCharge, 'Boulder release charge')
   requireNonnegativeFinite(input.remainingPool, 'Boulder remaining damage pool')
   requireNonnegativeFinite(input.targetHealth, 'Boulder target health')
-  if (!Number.isFinite(input.toughness) || input.toughness <= 0) {
-    throw new RangeError('Boulder toughness must be finite and positive')
-  }
+  requireNonnegativeFinite(input.toughness, 'Boulder toughness')
   const damage = Math.fround(Math.min(input.targetHealth, input.remainingPool))
+  // Native +0x1E8 is zero for no-Bind Ethereal Boulder. Its lethal contact
+  // spends infinity at 0x00621231; the following pool clamp exhausts the actor.
   const consumed = Math.fround(input.remainingPool < input.targetHealth
     ? damage
     : damage / (2 * input.toughness))

@@ -90,6 +90,36 @@ test('a surviving rank-two Gargantuan Boulder never exceeds its released ceiling
   assert.ok(contact.charge <= maximumCharge)
 })
 
+test('no-Bind Boulder contact exhausts its pool for lethal and nonlethal targets', () => {
+  for (const targetHealth of [1, 2, 20]) {
+    assert.deepEqual(consumeNativeEarthBoulderContact({
+      releaseBaseDamage: 8,
+      releaseCharge: 0.5,
+      remainingPool: 2,
+      targetHealth,
+      toughness: 0,
+    }), {
+      charge: 0.32499998807907104,
+      continueTraversal: false,
+      damage: targetHealth === 1 ? 1 : 2,
+      depleted: true,
+      remainingPool: 0,
+    })
+  }
+})
+
+test('Boulder contact rejects negative and nonfinite toughness', () => {
+  for (const toughness of [-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    assert.throws(() => consumeNativeEarthBoulderContact({
+      releaseBaseDamage: 8,
+      releaseCharge: 0.5,
+      remainingPool: 2,
+      targetHealth: 1,
+      toughness,
+    }), RangeError)
+  }
+})
+
 test('Boulder same-tick threshold is distinct from its zero-pool retirement edge', () => {
   const result = consumeNativeEarthBoulderContact({
     releaseBaseDamage: 10,
