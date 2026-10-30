@@ -1,5 +1,55 @@
 # 2026-08-21 — Boulder residual-contact lifecycle correction
 
+## No-Bind contact domain
+
+The production PixiJS supervisor failed twice on 2026-10-30 at 05:11:29 and
+05:11:44 UTC in the released build-1006 contact path. Its kernel rejected
+`toughness` unless positive. Rust copied that assertion. The exception records
+do not contain the actual field value; the independently reproducible valid-zero
+path below establishes a defect with the same call path and failure.
+
+[The retained-rock construction evidence](259-2026-08-27-welded-retained-rock-scale-ceiling-ownership-correction.md)
+establishes that no-Bind build 1006 carries `[5.5,15,1,1,0,1]`: toughness zero is
+intentional. Ordinary Boulder defaults to toughness one. The earlier contact
+coverage omitted the zero-toughness consumer after validating its constructor.
+
+The shared contact program at `0x0062122B..0x00621321` accepts that native field.
+For positive target health, an insufficient pool spends the remaining pool;
+otherwise positive damage divided by zero spends positive infinity and the
+nonnegative pool clamp yields zero. Both paths exhaust the no-Bind Boulder,
+stop further traversal, emit the contact child and run the existing terminal
+breakup. Replacing zero with one would incorrectly allow it to survive a kill.
+
+Fresh disassembly of the same retail SHA-256 listed below confirms the unguarded
+`+0x1E8` load/double/divide at `0x00621231..0x0062123B`, the insufficient-pool
+replacement at `0x0062123F..0x0062125A`, and the negative-result clamp at
+`0x00621293..0x006212C2`. The kernel and released-actor regressions both fail
+with the production `Boulder toughness must be finite and positive` exception
+before the correction. Negative/nonfinite rejection already passes.
+
+The reopened boundary is the contact input domain and its existing consumers:
+
+| Member | Disposition | Verification |
+| --- | --- | --- |
+| No-Bind Ethereal Boulder, insufficient/equal/excess pool | exact-ported | Independent kernel and constructed/released actor regressions in both implementations pin capped damage, exhaustion, untouched next target and terminal children. Both browser clients observe toughness zero through held/flight phases and an actual lethal contact. |
+| Positive-Bind Ethereal Boulder and ordinary Boulder | verified-already-at-parity | Existing residual, shrink, traversal and terminal regressions pass unchanged. |
+| Hailstones without Bind | verified-already-at-parity | Its independent per-rock path already accepts zero. Regressions verify one contacted rock exhausts, other targets remain untouched and retained rocks serialize with finite state. |
+| Negative or nonfinite toughness | exact-ported | The existing nonnegative finite validator rejects all four negative/nonfinite regression inputs. |
+| Save, protocol, renderer and native desktop/browser | exact-ported | No shape/version change. Finite terminal state passes serialization and existing gates; both clients save, reload and continue the same no-Bind run. The candidate passes four desktop platforms and Windows browser qualification. |
+
+The correction changes only the existing toughness precondition. Authored tables,
+constructors, pool arithmetic, assets and registration rules remain the recovered
+program. The M2 Website gate and Rust native/WASM gates pass. Candidate Rust
+`04e1cdcb84ce72862dcfafe2314bb91fe291316e` is qualified by
+[workflow 41047728647](https://github.com/JarrettOneSource/solomon-darker-rust/actions/runs/41047728647).
+Its actual M2 browser contact produces 23 debris actors and a fade at charge .75;
+the independent .5-charge regression expects 16. Browser prerequisites use the
+private developer Console for Ether and XP, then ordinary skill choices and casts.
+All sixteen contact/save journey images were reviewed. The loaded media requests
+cancelled at reload match their observed document retirement; audibility is not
+established. This qualification does not claim production installation or close
+the separate native-completion review.
+
 ## Reported smell and parity question
 
 - Reported web behavior: the Earth Boulder appears to explode on the first

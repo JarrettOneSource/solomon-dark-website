@@ -13,7 +13,7 @@ import { createPlayerSkillBook, playerStatBook } from '../core-kernels/player-pr
 import { createNativeRng, drawNativeFloat, drawNativeInteger, drawNativeSign, type NativeRngState } from '../core-kernels/native-rng.ts'
 import type { NativeWeldBuildId, NativeWeldCastKind } from '../core-kernels/native-weld-primary-profile.ts'
 import type { NativeWeldOneShotBuildId } from '../core-kernels/native-weld-primary-runtime.ts'
-import { createNativeWeldPersistentActor, spawnNativeWeldOneShot } from '../core-kernels/native-weld-primary-runtime.ts'
+import { createNativeWeldPersistentActor, releaseNativeWeldPersistentActor, spawnNativeWeldOneShot } from '../core-kernels/native-weld-primary-runtime.ts'
 import { spawnNativeWeldSteamActor } from '../core-kernels/native-weld-steam.ts'
 import { EARTH_BOULDER_IDENTITY_ORIENTATION } from '../core-kernels/primary-spell-earth-orientation.ts'
 import type { NativeFireActorContact } from '../core-kernels/primary-spell-fire-effects.ts'
@@ -2422,67 +2422,129 @@ test('terminal Ethereal Boulder keeps the contact bit, Ether fade, and full brea
   assert.equal(fade.presentationScale, 2)
 })
 
-test('released Hailstones rocks contact at carrier offsets and divide only pool consumption', () => {
-  const spawned = spawnEnemies([
-    { position: { x: 0, y: 0 }, token: 'SKELETON' },
-    { position: { x: 0, y: 0 }, token: 'SKELETON' },
-  ])
-  const enemies = {
-    ...spawned,
-    actors: spawned.actors.map((actor) => ({
-      ...actor,
-      currentHealth: 4,
-      maximumHealth: 4,
-    })),
+test('released no-Bind Ethereal Boulder ends after its first contact without crashing', () => {
+  for (const targetHealth of [1, 1.375, 20]) {
+    const spawned = spawnEnemies([
+      { position: { x: 0, y: 0 }, token: 'SKELETON' },
+      { position: { x: 10, y: 0 }, token: 'SKELETON' },
+    ])
+    const enemies = {
+      ...spawned,
+      actors: spawned.actors.map((actor) => ({
+        ...actor,
+        currentHealth: targetHealth,
+        maximumHealth: targetHealth,
+      })),
+    }
+    const held = createNativeWeldPersistentActor({
+      buildId: 1006,
+      direction: { x: 1, y: 0 },
+      id: 33,
+      origin: { x: 0, y: 0 },
+      ownerId: 'wizard',
+      tick: 0,
+      vector: [5.5, 15, 1, 1, 0, 1],
+      worldKey: WORLD_KEY,
+    })
+    assert.equal(held.buildId, 1006)
+    if (held.buildId !== 1006) throw new Error('expected EBoulder')
+    const released = releaseNativeWeldPersistentActor({
+      actor: { ...held, scale: 0.5, shellScale: 0.5, assemblyScale: 0.5 },
+      firstChildId: 34,
+      tick: 4,
+      rng: createNativeRng(17),
+    })
+    const result = resolveCombatWithAuthority(
+      enemies,
+      spellState({ transients: released.actors }),
+      [],
+      5,
+    )
+    assert.equal(result.hits.length, 1)
+    assert.equal(result.hits[0]!.amount, targetHealth === 1 ? 1 : 1.375)
+    assert.equal(result.hits[0]!.killed, targetHealth <= 1.375)
+    assert.equal(result.enemies.actors.find((actor) => actor.id === 2)!.currentHealth, targetHealth)
+    assert.equal(result.spells.transients.some(({ id }) => id === held.id), false)
+    assert.equal(result.spells.transients.filter(({ kind }) => kind === 'weld-boulder-debris').length, 16)
+    assert.ok(result.spells.transients.some((effect) => effect.kind === 'weld-impact' && effect.buildId === 1006))
+    assertFiniteSpellNumbers(result.spells)
   }
-  const hailstones: PrimarySpellTransientState = {
-    ageTicks: 1,
-    birthTick: 0,
-    buildId: 1008,
-    collisionRadius: 40,
-    damage: 10,
-    direction: { x: 1, y: 0 },
-    id: 32,
-    kind: 'weld-persistent',
-    lightRegistration: { managerLane: 'actor', registrationOrdinal: 32 },
-    maximumScale: 1,
-    origin: { x: 0, y: 0 },
-    ownerId: 'wizard',
-    phase: 'flight',
-    releaseAgeTicks: 1,
-    releaseFadeScale: 1,
-    pulseSequence: 1,
-    pushback: 0,
-    rocks: [{
-      damageRemaining: 10,
-      decay: 1,
-      localPosition: { x: 0, y: 0, z: 0 },
-      phase: 0,
-      rockId: 0,
-      releaseOffset: { x: 0, y: 0 },
-      spriteRecord: 168,
-      visualScale: 0.2,
-    }],
-    scale: 0.5,
-    toughness: 2,
-    vector: [10, 2, 1, 2, 0, 0],
-    widen: 0,
-    worldKey: WORLD_KEY,
-  }
-  const resolved = resolveCombatWithAuthority(
-    enemies,
-    spellState({ transients: [hailstones] }),
-    [],
-    4,
-  )
-  assert.deepEqual(resolved.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
-    { actorId: 2, amount: 4 },
-    { actorId: 1, amount: 4 },
-  ])
-  const retained = resolved.spells.transients.find(({ id }) => id === 32)
-  assert.ok(retained?.kind === 'weld-persistent' && retained.buildId === 1008)
-  assert.equal(retained.rocks[0]!.damageRemaining, 6)
 })
+
+for (const toughness of [0, 2]) {
+  test(`released Hailstones contact uses toughness ${toughness} only for pool consumption`, () => {
+    const spawned = spawnEnemies([
+      { position: { x: 0, y: 0 }, token: 'SKELETON' },
+      { position: { x: 0, y: 0 }, token: 'SKELETON' },
+    ])
+    const enemies = {
+      ...spawned,
+      actors: spawned.actors.map((actor) => ({
+        ...actor,
+        currentHealth: 4,
+        maximumHealth: 4,
+      })),
+    }
+    const hailstones: PrimarySpellTransientState = {
+      ageTicks: 1,
+      birthTick: 0,
+      buildId: 1008,
+      collisionRadius: 40,
+      damage: 10,
+      direction: { x: 1, y: 0 },
+      id: 32,
+      kind: 'weld-persistent',
+      lightRegistration: { managerLane: 'actor', registrationOrdinal: 32 },
+      maximumScale: 1,
+      origin: { x: 0, y: 0 },
+      ownerId: 'wizard',
+      phase: 'flight',
+      releaseAgeTicks: 1,
+      releaseFadeScale: 1,
+      pulseSequence: 1,
+      pushback: 0,
+      rocks: [{
+        damageRemaining: 10,
+        decay: 1,
+        localPosition: { x: 0, y: 0, z: 0 },
+        phase: 0,
+        rockId: 0,
+        releaseOffset: { x: 0, y: 0 },
+        spriteRecord: 168,
+        visualScale: 0.2,
+      }],
+      scale: 0.5,
+      toughness,
+      vector: [10, 2, 1, toughness, 0, 0],
+      widen: 0,
+      worldKey: WORLD_KEY,
+    }
+    const resolved = resolveCombatWithAuthority(
+      enemies,
+      spellState({ transients: [hailstones] }),
+      [],
+      4,
+    )
+    if (toughness === 0) {
+      assert.deepEqual(resolved.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+        { actorId: 2, amount: 4 },
+      ])
+      assert.equal(resolved.enemies.actors.find(({ id }) => id === 1)!.currentHealth, 4)
+      assert.equal(resolved.spells.transients.some(({ id }) => id === 32), false)
+      assert.equal(resolved.spells.transients.filter(({ kind }) => kind === 'weld-hail-line').length, 1)
+      assert.equal(resolved.spells.transients.filter(({ kind }) => kind === 'weld-hail-flash').length, 1)
+    } else {
+      assert.deepEqual(resolved.hits.map(({ actorId, amount }) => ({ actorId, amount })), [
+        { actorId: 2, amount: 4 },
+        { actorId: 1, amount: 4 },
+      ])
+      const retained = resolved.spells.transients.find(({ id }) => id === 32)
+      assert.ok(retained?.kind === 'weld-persistent' && retained.buildId === 1008)
+      assert.equal(retained.rocks[0]!.damageRemaining, 6)
+    }
+    assertFiniteSpellNumbers(resolved.spells)
+  })
+}
 
 test('Hail contacts own ColdSlow, one resident Knockback, and per-rock line and flash retirement', () => {
   const spawned = spawnEnemies([
@@ -2901,6 +2963,13 @@ function riseCoffins(source: BoneyardEnemyStore): BoneyardEnemyStore {
       }
     }),
   }
+}
+
+function assertFiniteSpellNumbers(spells: PrimarySpellSimulationState): void {
+  JSON.stringify(spells, (key, value: unknown) => {
+    if (typeof value === 'number') assert.ok(Number.isFinite(value), `${key} must remain finite`)
+    return value
+  })
 }
 
 function spellState(options: {
