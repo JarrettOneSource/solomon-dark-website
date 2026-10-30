@@ -6,6 +6,28 @@
 > as equivalent to invalidating Last Game. The reported failure demonstrates
 > why the native profile/run lifetime split was not optional.
 
+## Portable inventory rarity compatibility
+
+The schema-51 inventory contract spells the two named-item rarities `Rare` and
+`Epic`; ordinary items use null. The Rust portable serializer previously applied
+its generic lowercase enum conversion and wrote `rare`/`epic`. A retained player
+profile reproduces rejection at
+`snapshot.players.player-1.economy.storage[0].contents[5].contents[0].rarity`.
+The same profile feeds Last Game and New Game, so both entry paths can fail even
+though their run lifetimes differ. This is an interchange spelling defect; it
+changes no recovered item rule and requires no inventory reset.
+
+The canonical Rust writer must preserve the source spelling. Both save readers
+must accept the previously written lowercase values and normalize them before
+wire publication, including nested Sacks, backpack and equipped items. Item IDs,
+recipes, stats, slots, ordering, quantities and random state must survive intact.
+Unknown rarity values remain invalid; the live wire contract is unchanged.
+Profile/new-game and continuation tests cover both variants and nested contents.
+Original player data stays in the private report investigation; checked-in tests
+construct independent inventory examples. Browser acceptance uses isolated copies
+of both original slots and checks item preservation through saving and a fresh
+document continuation; the reporter's live slots are not rewritten.
+
 ## 2026-09-27 — Report 48 advanced-spell profile boundary reopening
 
 The prior durable-profile inventory omitted the eight Machinimbus purchase

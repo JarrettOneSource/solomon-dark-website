@@ -3806,3 +3806,45 @@ test('Wraith recipient state round-trips birth, paused birth and completed first
     assert.throws(() => restoreGameSaveDocument(JSON.stringify(legacy)), /Wraith collision recipient/)
   }
 })
+
+test('portable item rarities restore earlier Rust profiles and continuations without losing nested items', () => {
+  const initial = createGameSimulation({ owner: OWNER })
+  const economy = getPlayerEconomy(initial, 'owner')
+  const rare = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[0]!, 1002)
+  const epic = createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[1]!, 1003)
+  const sack: HubInventoryItem = { equipmentType: null, iconRecords: [70], id: 1000,
+    kind: 'sack', name: 'Retained storage', nativeSubtype: 0, nativeTypeId: 7008,
+    quantity: 1, rarity: null, recipeIndex: null }
+  const state = { ...initial, playerEntities: replacePlayerEconomy(initial.playerEntities, 'owner', {
+    ...economy,
+    storage: [{ ...sack, contents: [{ ...sack, id: 1001, contents: [rare, epic] }] }],
+    backpack: [...economy.backpack, { ...rare, id: 1006 }],
+    equipment: { ...economy.equipment, robe: { ...epic, id: 1004 }, rings: [{ ...rare, id: 1005 }, null, null] },
+    nextItemId: 1010,
+  }) }
+  const options = { integrity: 'local-only', mods: [], modState: {}, playerId: 'owner', state } as const
+  for (const document of [createGameProfileSaveDocument(options), createGameSaveDocument({ ...options, loadedBoneyard: null })]) {
+    const legacy = document.replaceAll('"rarity":"Rare"', '"rarity":"rare"')
+      .replaceAll('"rarity":"Epic"', '"rarity":"epic"')
+    assert.notEqual(legacy, document)
+    const expected = restoreGameSaveProfile(document)
+    const restored = restoreGameSaveProfile(legacy)
+    assert.deepEqual(restored.economy, expected.economy)
+    const fresh = hydrateGameSaveProfile(createGameSimulation({ owner: OWNER }), 'owner', restored)
+    assert.doesNotThrow(() => decodeGameSnapshot(createGameSnapshot(fresh, 'owner')))
+    assert.deepEqual(JSON.parse(createGameProfileSaveDocument({ ...options, state: fresh })).profile.economy.storage,
+      JSON.parse(document).profile.economy.storage)
+    if (JSON.parse(document).continuation !== null) {
+      const continued = restoreGameSaveDocument(legacy)
+      const current = restoreGameSaveDocument(document)
+      assert.deepEqual(continued.state.playerEntities.economies, current.state.playerEntities.economies)
+      assert.doesNotThrow(() => decodeGameSnapshot(createGameSnapshot(continued.state, continued.playerId)))
+    }
+    const invalid = legacy.replaceAll('"rarity":"rare"', '"rarity":"mythic"')
+    assert.throws(() => {
+      const profile = restoreGameSaveProfile(invalid)
+      const hydrated = hydrateGameSaveProfile(createGameSimulation({ owner: OWNER }), 'owner', profile)
+      decodeGameSnapshot(createGameSnapshot(hydrated, 'owner'))
+    }, /rarity is not supported/)
+  }
+})
