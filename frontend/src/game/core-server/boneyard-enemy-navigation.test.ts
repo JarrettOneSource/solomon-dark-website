@@ -18,6 +18,7 @@ import {
   buildPreparedBoneyardNavigationMesh,
   type BoneyardNavigationMeshData,
   findBoneyardEnemyRoute,
+  installPreparedBoneyardNavigationMesh,
   navigationCircleBlocks,
   navigationPolygonBlocks,
   navigationSegmentBlocks,
@@ -114,6 +115,36 @@ test('spawn reachability can use the smaller destination footprint beside collis
   }), null, 'destination clearance must not bridge a disconnected mesh')
 })
 
+test('spawn reachability uses a connected endpoint attachment beside a small mesh island', () => {
+  const template = NATIVE_GENERATED_BONEYARDS.find(row => row.sourceSha256 ===
+    '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f')!
+  const world = createBoneyardCollisionWorld(template.scene)
+  const bounds = createBoneyardArenaTransition(template.scene.bounds, template.scene.spawn).combatBounds
+  const origin = { x: 276.52716064453125, y: 1089.437255859375 }
+  const rng = createNativeRng(503812)
+  assert.ok(canPlaceBoneyardBody(origin, bounds, world, 35))
+  for (const target of [{ x: 1050, y: 1120 }, { x: 1040, y: 1120 }, { x: 1050, y: 1140 }]) {
+    assert.ok(canPlaceBoneyardBody(target, bounds, world, 25))
+    const acceptsDomain = (start: Readonly<{ x: number; y: number }>) => findBoneyardEnemyRoute({
+      start, end: target, bodyRadius: 35, endBodyRadius: 25, clearance: 50, bounds, world,
+    }) !== null
+    for (const policy of ['dark', 'light', 'direct', 'offscreen', 'edge'] as const) {
+      const placed = resolveNativeBoneyardSpawnPosition(origin, bounds, world, 35, policy, rng, {
+        acceptsDomain, lightAt: () => policy === 'light' ? 1 : 0,
+        isOffscreen: () => true, isOutsidePolicyBounds: () => true,
+      })
+      assert.deepEqual(placed.position, origin, `${policy}: the raw point has a connected route`)
+      assert.deepEqual(placed.rngState, rng, 'no retry draw is needed for the legal raw point')
+    }
+    const reverse = findBoneyardEnemyRoute({ start: target, end: origin,
+      bodyRadius: 25, endBodyRadius: 35, clearance: 50, bounds, world })
+    assert.ok(reverse, 'the alternate attachment must work at the start endpoint too')
+    for (let index = 1; index < reverse.length; index += 1) {
+      assert.equal(firstBoneyardPathBlockProgress(reverse[index - 1]!, reverse[index]!, bounds, world, 25), null)
+    }
+  }
+})
+
 test('enemy route A* clears a solid blocker and every retained segment is occupiable', () => {
   const world: BoneyardCollisionWorld = {
     circles: [],
@@ -138,6 +169,31 @@ test('enemy route A* clears a solid blocker and every retained segment is occupi
       world,
       10,
     ), null)
+  }
+})
+
+test('both route endpoints can leave isolated first choices through a shared component', () => {
+  const bounds = { x: 0, y: 0, w: 1000, h: 1000 }
+  const points = [
+    { x: 200, y: 650 }, { x: 400, y: 650 }, { x: 300, y: 850 },
+    { x: 600, y: 650 }, { x: 800, y: 650 }, { x: 700, y: 850 },
+    { x: 200, y: 50 }, { x: 800, y: 50 }, { x: 200, y: 200 }, { x: 800, y: 200 },
+  ]
+  for (const joined of [false, true]) {
+    const world = { circles: [], polygons: [rectangle(400, 300, 600, 900)], segments: [] }
+    const mesh: BoneyardNavigationMeshData = { points, triangles: [
+      { id: 0, center: { x: 300, y: 2150 / 3 }, vertices: [0, 1, 2], neighbors: [] },
+      { id: 1, center: { x: 700, y: 2150 / 3 }, vertices: [3, 4, 5], neighbors: [] },
+      { id: 2, center: { x: 400, y: 100 }, vertices: [6, 7, 8], neighbors: joined ? [3] : [] },
+      { id: 3, center: { x: 600, y: 150 }, vertices: [7, 9, 8], neighbors: joined ? [2] : [] },
+    ] }
+    installPreparedBoneyardNavigationMesh(world, { key: '0:0:1000:1000:50', mesh })
+    const route = findBoneyardEnemyRoute({ start: { x: 300, y: 700 }, end: { x: 700, y: 700 },
+      bodyRadius: 25, clearance: 50, bounds, world })
+    assert.equal(route !== null, joined, 'endpoint attachment must not invent a graph connection')
+    if (route) for (let index = 1; index < route.length; index += 1) {
+      assert.equal(firstBoneyardPathBlockProgress(route[index - 1]!, route[index]!, bounds, world, 25), null)
+    }
   }
 })
 

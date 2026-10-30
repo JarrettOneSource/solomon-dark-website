@@ -1,5 +1,29 @@
 # 2026-08-15 — Complete right-click ability system
 
+## Active arena domain for spell-driven bodies
+
+The world adapter supplies the playable arena domain to Teleport, Phase, Golem
+placement, Golem movement and its foot targets. An Open entrance retains the
+full bounds; Locking and Sealed use the combat bounds. This is the same arena
+transition contract used by ordinary movement and enemy routing, applied to
+the existing spell kernels. Visibility, point effects and line queries retain
+their existing domains.
+
+A seeded Rust endurance run exposed the previous adapter mismatch at wave 29:
+Teleport placed the wizard at y=382.6965 while the sealed arena began at y=375.
+The wizard's 25-unit route footprint then extended outside the domain, rejecting
+every attempted enemy birth. Both implementations had passed full scene bounds
+to secondary body queries. The correction preserves the recovered Teleport
+kernel `0x00465440`, collision spiral `0x00645910`, Phase `0x0063FEE0`, placement
+radii and RNG ordering within the selected domain. It does not establish new
+retail geometry or make an impossible enemy birth silently succeed.
+
+The public session regression cases cover north/south entrances in all three
+phases: Teleport followed by a reachable enemy birth in Rust; open/closed Phase;
+Golem birth, walking and foot placement in both implementations. They live in
+`game-simulation.test.ts` and Rust's `session_arena_spell_placement.rs`. The M2
+long-run and release evidence remains separate from these focused regressions.
+
 ## 2026-10-06 — Report 90: Iron Golem reflection multiplier wire domain
 
 Report 90 reopens the Golem projection boundary. Earlier summon/contact recovery

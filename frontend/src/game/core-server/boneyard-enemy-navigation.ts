@@ -119,7 +119,6 @@ export function findBoneyardEnemyRoute(
     bounds,
     clearance,
     end,
-    endBodyRadius = bodyRadius,
     ignoredSourceIds,
     start,
     world,
@@ -132,25 +131,9 @@ export function findBoneyardEnemyRoute(
   }
 
   const mesh = nativeNavMesh(bounds, world, clearance)
-  const startAttachment = resolveEndpointAttachment(
-    mesh,
-    start,
-    bounds,
-    world,
-    bodyRadius,
-    ignoredSourceIds,
-  )
-  const endAttachment = resolveEndpointAttachment(
-    mesh,
-    end,
-    bounds,
-    world,
-    endBodyRadius,
-    ignoredSourceIds,
-  )
-  if (startAttachment === null || endAttachment === null) return null
-  const trianglePath = findTrianglePath(mesh, startAttachment.triangleId, endAttachment.triangleId)
-  if (trianglePath === null) return null
+  const connected = resolveConnectedEndpoints(mesh, request)
+  if (connected === null) return null
+  const { startAttachment, endAttachment, trianglePath } = connected
 
   const route: Readonly<BoneyardPoint>[] = []
   for (const point of startAttachment.points) appendDistinctRoutePoint(route, point)
@@ -752,6 +735,49 @@ interface EndpointAttachment {
   readonly points: readonly Readonly<BoneyardPoint>[]
 }
 
+function resolveConnectedEndpoints(
+  mesh: BoneyardNavigationMeshData,
+  request: FindBoneyardEnemyRouteRequest,
+): {
+  startAttachment: EndpointAttachment
+  endAttachment: EndpointAttachment
+  trianglePath: readonly number[]
+} | null {
+  const { start, end, bounds, world, bodyRadius, endBodyRadius = bodyRadius, ignoredSourceIds } = request
+  const attach = (point: Readonly<BoneyardPoint>, radius: number, acceptsTriangle?: (id: number) => boolean) => (
+    resolveEndpointAttachment(mesh, point, bounds, world, radius, ignoredSourceIds, acceptsTriangle)
+  )
+  let startAttachment = attach(start, bodyRadius)
+  const firstEnd = attach(end, endBodyRadius)
+  if (startAttachment === null || firstEnd === null) return null
+  const firstPath = findTrianglePath(mesh, startAttachment.triangleId, firstEnd.triangleId)
+  if (firstPath !== null) return { startAttachment, endAttachment: firstEnd, trianglePath: firstPath }
+
+  // A small mesh island may be nearest to an endpoint that also sees the main
+  // component. Search endpoint-reachable components without joining graph edges
+  // or relaxing either footprint; connected first-choice routes stay unchanged.
+  const visited = new Set<number>()
+  while (startAttachment !== null) {
+    const connected = new Set([startAttachment.triangleId])
+    const pending = [startAttachment.triangleId]
+    for (let index = 0; index < pending.length; index += 1) {
+      for (const id of mesh.triangles[pending[index]!]!.neighbors) {
+        if (connected.has(id)) continue
+        connected.add(id)
+        pending.push(id)
+      }
+    }
+    const endAttachment = attach(end, endBodyRadius, id => connected.has(id))
+    if (endAttachment !== null) {
+      const trianglePath = findTrianglePath(mesh, startAttachment.triangleId, endAttachment.triangleId)
+      if (trianglePath !== null) return { startAttachment, endAttachment, trianglePath }
+    }
+    for (const id of connected) visited.add(id)
+    startAttachment = attach(start, bodyRadius, id => !visited.has(id))
+  }
+  return null
+}
+
 function byEndpointDistanceThenId(
   left: EndpointTriangleCandidate,
   right: EndpointTriangleCandidate,
@@ -774,12 +800,14 @@ function resolveEndpointAttachment(
   world: BoneyardCollisionWorld,
   radius: number,
   ignoredSourceIds?: ReadonlySet<string>,
+  acceptsTriangle?: (id: number) => boolean,
 ): EndpointAttachment | null {
   // Every candidate check starts with pathIsClear(point, ...), which rejects a
   // start point outside the navigation bounds before looking at geometry.
   if (!pointInsideNavigationBounds(point, bounds, radius)) return null
   const containing: EndpointTriangleCandidate[] = []
   for (const id of selectNavigationTriangleCandidates(mesh, point)) {
+    if (acceptsTriangle && !acceptsTriangle(id)) continue
     const vertices = navigationTriangleVertices(mesh, id)
     if (pointInTriangle(point, vertices)) {
       containing.push({ distance: pointTriangleDistanceSquared(point, vertices), id })
@@ -794,6 +822,7 @@ function resolveEndpointAttachment(
   const containingIds = new Set(containing.map(({ id }) => id))
   const remaining: EndpointTriangleCandidate[] = []
   for (const triangle of mesh.triangles) {
+    if (acceptsTriangle && !acceptsTriangle(triangle.id)) continue
     if (containingIds.has(triangle.id)) continue
     remaining.push({
       distance: pointTriangleDistanceSquared(

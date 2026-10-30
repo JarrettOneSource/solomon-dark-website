@@ -18,7 +18,9 @@ import { NATIVE_DAMAGE_X4_BONUS_TICKS, NATIVE_WELD_BUILDS, grantPlayerSkillRanks
 import type { NativeBeltSkillId } from '../core-kernels/player-progression.ts'
 import { freezeNativeBelt } from '../core-kernels/native-belt.ts'
 import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-schema.ts'
-import { startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
+import { boneyardActiveBounds, createBoneyardArenaTransition, startBoneyardArenaTransition } from '../core-kernels/boneyard-arena-transition.ts'
+import type { BoneyardArenaTransitionPhase } from '../core-kernels/boneyard-arena-transition.ts'
+import { canPlaceBoneyardBody } from './boneyard-collision.ts'
 import { startBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import {
   PLAYER_DEATH_PRESENTATION_DURATION_TICKS,
@@ -3973,6 +3975,111 @@ test('Inventory belt preserves aimed placement and Teleport relocation without a
   assert.equal(castTeleport.accepted, true)
   assert.notDeepEqual(getPlayerCharacter(castTeleport.state, 'caster').position, position)
   assert.equal(castTeleport.state.tick, teleport.tick)
+})
+
+function arenaSecondaryState(north: boolean, phase: BoneyardArenaTransitionPhase, skillId: NativeSecondaryAbilityId) {
+  const loaded = combatBoneyard('arena-spells')
+  loaded.scene.bounds = { x: 0, y: 0, w: 1200, h: 1800 }
+  loaded.scene.spawn = { x: 600, y: north ? 100 : 1700, facingDeg: 180 }
+  let state = enterBoneyardWorld(createGameSimulation({ caster: {
+    discipline: 'body', displayName: 'Arena caster', element: 'fire',
+  } }), loaded)
+  state = withPlayerSkillRank(state, 'caster', skillId, 1)
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', skillId, 0)!
+  assert.equal(state.world.kind, 'boneyard')
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  return { ...state,
+    world: { ...state.world, arenaTransition: {
+      ...createBoneyardArenaTransition(loaded.scene.bounds, loaded.scene.spawn), phase,
+    } },
+    playerEntities: replacePlayerCharacter({ ...state.playerEntities,
+      progressions: state.playerEntities.progressions.map(progression => ({
+        ...progression, currentMana: 1000, maximumMana: 1000,
+      })),
+    }, 'caster', { ...getPlayerCharacter(state, 'caster'),
+      position: { x: 600, y: north ? 400 : 1375 },
+      headingDegrees: north ? 0 : 180, headingIndex: north ? 0 : 12,
+    }),
+    secondaryAbilities: { ...state.secondaryAbilities, players: { caster: createNativeSecondaryPlayerState() } },
+  }
+}
+
+test('Teleport stays inside the active arena for north and south entrances', () => {
+  for (const north of [true, false]) for (const phase of ['open', 'locking', 'sealed'] as const) {
+    for (let seed = 1; seed <= 8; seed++) {
+      const state = arenaSecondaryState(north, phase, 48)
+      const before = { x: 600, y: north ? 1500 : 500 }
+      const result = applyGameSimulationHubAction({ ...state,
+        playerEntities: replacePlayerCharacter(state.playerEntities, 'caster', {
+          ...getPlayerCharacter(state, 'caster'), position: before,
+        }),
+        secondaryAbilities: { ...state.secondaryAbilities, rng: createNativeRng(seed) },
+      }, 'caster', { type: 'activate-belt-slot', slot: 0 })
+      assert.equal(result.accepted, true)
+      const position = getPlayerCharacter(result.state, 'caster').position
+      assert.notDeepEqual(position, before)
+      assert.ok(canPlaceBoneyardBody(position, boneyardActiveBounds(state.world.arenaTransition),
+        state.world.collision, 40), `Teleport left the arena: ${north}/${phase}/${seed}`)
+    }
+  }
+})
+
+test('Phase rejects a closed arena entrance and accepts an open entrance', () => {
+  for (const north of [true, false]) for (const phase of ['open', 'locking', 'sealed'] as const) {
+    const state = arenaSecondaryState(north, phase, 15)
+    const result = applyGameSimulationHubAction(state, 'caster', { type: 'activate-belt-slot', slot: 0 })
+    assert.equal(result.accepted, true)
+    const position = getPlayerCharacter(state, 'caster').position
+    const after = getPlayerCharacter(result.state, 'caster').position
+    if (phase === 'open') assert.notDeepEqual(after, position)
+    else assert.deepEqual(after, position, `Phase crossed the closed ${north ? 'north' : 'south'} entrance`)
+  }
+})
+
+test('Raise Golem resolves its body inside the active arena', () => {
+  for (const north of [true, false]) for (const phase of ['open', 'locking', 'sealed'] as const) {
+    const state = arenaSecondaryState(north, phase, 45)
+    const result = applyGameSimulationHubAction(state, 'caster', { type: 'activate-belt-slot', slot: 0 })
+    assert.equal(result.accepted, true)
+    const golem = result.state.secondaryAbilities.actors.find(actor => actor.kind === 'golem')
+    assert.ok(golem)
+    assert.ok(canPlaceBoneyardBody(golem.position, boneyardActiveBounds(state.world.arenaTransition),
+      state.world.collision, 25), `Golem left the arena: ${north}/${phase}`)
+    assert.ok(golem.golem)
+    for (const foot of [golem.golem.leftFoot, golem.golem.rightFoot]) {
+      assert.ok(canPlaceBoneyardBody(foot, boneyardActiveBounds(state.world.arenaTransition), state.world.collision, 0))
+    }
+  }
+})
+
+test('walking Golems keep their body and feet inside the active arena', () => {
+  for (const north of [true, false]) for (const phase of ['open', 'locking', 'sealed'] as const) {
+    const state = arenaSecondaryState(north, phase, 45)
+    const result = applyGameSimulationHubAction(state, 'caster', { type: 'activate-belt-slot', slot: 0 })
+    assert.equal(result.accepted, true)
+    const origin = { x: 600, y: north ? 405 : 1370 }
+    const rotation = north ? 0 : Math.PI
+    const walking = stepGameSimulationTick({ ...result.state,
+      secondaryAbilities: { ...result.state.secondaryAbilities,
+        actors: result.state.secondaryAbilities.actors.map(actor => actor.golem === null ? actor : ({ ...actor,
+          position: origin, ageTicks: 400, rotationRadians: rotation,
+          golem: { ...actor.golem, phase: 'active', orbitHeadingRadians: rotation, gaitTick: 99,
+            leftFoot: origin, rightFoot: origin, leftFootNext: origin, rightFootNext: origin,
+            leftFootPrevious: origin, rightFootPrevious: origin },
+        })),
+      },
+    }, {})
+    const actor = walking.secondaryAbilities.actors.find(actor => actor.kind === 'golem')
+    assert.ok(actor?.golem)
+    assert.equal(actor.ageTicks, 401)
+    assert.ok(walking.world.kind === 'boneyard' && walking.world.arenaTransition)
+    const bounds = boneyardActiveBounds(walking.world.arenaTransition)
+    assert.ok(canPlaceBoneyardBody(actor.position, bounds, walking.world.collision, 30),
+      `Golem walked beyond the arena: ${north}/${phase}`)
+    for (const foot of [actor.golem.leftFoot, actor.golem.rightFoot, actor.golem.leftFootNext, actor.golem.rightFootNext]) {
+      assert.ok(canPlaceBoneyardBody(foot, bounds, walking.world.collision, 0))
+    }
+  }
 })
 
 test('Inventory belt rejection does not advance cooldowns or debit mana', () => {

@@ -1662,6 +1662,26 @@ test('world spawn reachability uses the living player footprint for larger enemi
   }
 })
 
+test('wave-48 Demon births stay reachable beside a small navigation island', () => {
+  const template = NATIVE_GENERATED_BONEYARDS.find(row => row.sourceSha256 ===
+    '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f')!
+  const created = createBoneyardWorld({ ...template,
+    choice: { id: 'default-random', name: 'Spawn connectivity', source: 'default' },
+    runId: 'spawn-connectivity', seed: 'spawn-connectivity' })
+  const world = { ...created, bounds: created.arenaTransition!.combatBounds,
+    arenaTransition: null, encounter: null, waves: null }
+  const player = { ...spawnPlayerCharacterInBoneyard({ discipline: 'arcane',
+    displayName: 'Spawn target', element: 'fire' }, world), position: { x: 1050, y: 1120 } }
+  const position = { x: 276.52716064453125, y: 1089.437255859375 }
+  const result = stepWorld(world, { player }, { player: movementInput(0, 0) }, 503812, [{
+    enemyToken: 'DEMON', flags: [], id: 1, locationPolicy: 'anywhere',
+    nativeTypeId: BONEYARD_WAVE_ENEMY_TYPES.DEMON, position,
+    positionPolicy: 'dark', spawnTick: 503812, waveOrdinal: 48,
+  }])
+  assert.equal(result.world.enemies.actors.length, 1)
+  assert.deepEqual(result.world.enemies.actors[0]!.position, position)
+})
+
 test('wave-28 Deep Portal materializes after LIGHT search misses the recorded distant players', () => {
   const template = NATIVE_GENERATED_BONEYARDS[7]!
   assert.equal(template.sourceSha256, 'e62e5e847562d822382fba14709d5367c9cd7de40f8b4fa52ecea3bfc8d9a430')

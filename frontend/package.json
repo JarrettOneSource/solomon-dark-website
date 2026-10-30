@@ -12,7 +12,7 @@
     "dev": "vite",
     "build": "node tools/build-parallel-apps.mjs",
     "lint": "oxlint && node tools/check-game-boundaries.mjs && npm run check:ml-bot-policy-spec && npm run check:sdmod-generated",
-    "test": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/editor/*.test.ts src/editor/library-ui/*.test.ts src/boneyard/*.test.ts src/lib/*.test.ts && node --experimental-strip-types --test tools/game-artifact.test.mjs tools/workshop-navigation.test.mjs",
+    "test": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/editor/*.test.ts src/editor/library-ui/*.test.ts src/boneyard/*.test.ts src/lib/*.test.ts && node --experimental-strip-types --test tools/game-artifact.test.mjs tools/workshop-navigation.test.mjs && npm run test:client-comparison",
     "preview": "vite preview",
     "smoke:library:subscriptions": "node tools/smoke-library-subscriptions.mjs",
     "smoke:workshop-storage": "node --test tools/workshop-request-store.test.mjs",
@@ -154,7 +154,9 @@
     "benchmark:hub-network": "node --experimental-strip-types tools/benchmark-hub-network.mjs",
     "benchmark:game-host-lag": "node --experimental-strip-types tools/benchmark-game-host-lag.mjs",
     "smoke:game:mage-effects": "node --experimental-strip-types tools/smoke-mage-player-effects.mjs",
-    "test:hail-browser": "node --experimental-strip-types tools/smoke-hail.mjs"
+    "test:hail-browser": "node --experimental-strip-types tools/smoke-hail.mjs",
+    "smoke:client-comparison": "node --experimental-strip-types tools/client-comparison/runner.mjs",
+    "test:client-comparison": "node --test tools/client-comparison/*.test.mjs"
   },
   "dependencies": {
     "@fontsource/alegreya": "^5.2.8",
