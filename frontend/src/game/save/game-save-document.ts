@@ -1986,6 +1986,20 @@ function repairLegacyHagathaOutcomes(
   return { outcomes: retained, removed }
 }
 
+function normalizeSavedItemRarity(value: unknown): unknown {
+  if (value === null) return null
+  const item = record(value, 'game save inventory item')
+  // Earlier Rust schema-51 exports used lowercase enum names. Keep the wire
+  // contract canonical without changing item identity or discarding old saves.
+  return {
+    ...item,
+    rarity: item.rarity === 'rare' ? 'Rare' : item.rarity === 'epic' ? 'Epic' : item.rarity,
+    ...(item.contents === undefined ? {} : {
+      contents: array(item.contents, 'game save Sack contents').map(normalizeSavedItemRarity),
+    }),
+  }
+}
+
 function normalizeEconomy(
   value: unknown,
   sourceSchemaVersion: number,
@@ -2053,8 +2067,20 @@ function normalizeEconomy(
   const bundleRepair = sourceSchemaVersion < 24 && Array.isArray(sourceBundle)
     ? repairLegacyHagathaOutcomes(sourceBundle, bundleTonics, 3 + bundleTonics * 3)
     : { outcomes: sourceBundle, removed: [] }
+  const equipment = record(source.equipment, 'game save equipment')
   const restored = normalizeHubEconomyInventorySlots({
     ...source,
+    backpack: array(source.backpack, 'game save backpack').map(normalizeSavedItemRarity),
+    storage: array(source.storage, 'game save storage').map(normalizeSavedItemRarity),
+    fomentiusStock: array(source.fomentiusStock, 'game save Fomentius stock').map(normalizeSavedItemRarity),
+    equipment: {
+      ...equipment,
+      amulet: normalizeSavedItemRarity(equipment.amulet),
+      hat: normalizeSavedItemRarity(equipment.hat),
+      robe: normalizeSavedItemRarity(equipment.robe),
+      weapon: normalizeSavedItemRarity(equipment.weapon),
+      rings: array(equipment.rings, 'game save rings').map(normalizeSavedItemRarity),
+    },
     actionFeedback: paintingFeedback ? null : feedback,
     collegeIntroPending: sourceSchemaVersion >= 13 && source.collegeIntroPending === true,
     dowsingRolled,
