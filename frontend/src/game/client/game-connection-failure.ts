@@ -105,7 +105,7 @@ export function failureFromTransportClose(
     return new GameConnectionFailure({
       code: 'server-restart',
       explanation: transport.reason === 'game updating'
-        ? 'Solomon Dark is updating. Your saved game will resume after the app restarts.'
+        ? 'Solomon Dark is updating. Reopen the game after the update.'
         : 'The game server shut down or restarted while you were connected.',
       technicalDetail,
       transport,

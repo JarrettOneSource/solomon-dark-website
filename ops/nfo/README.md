@@ -142,7 +142,14 @@ restored PixiJS clients require a different Website revision for that restart;
 same-revision Caddy drift is rejected before the drain or reload. Publish a new
 Website revision to reconcile it through the normal release. Reloads initiated
 by other applications on the shared Caddy service remain outside this game
-save barrier and can still disconnect both clients. The Website stays live until
+save barrier and can still close both sockets. Both maintained browser clients
+can reattach to their same still-live authority after an unexpected `1001`/transport
+loss, within one absolute 30-second lease and at most two attempts. That path
+retains accepted authority state; it does not import a saved checkpoint or
+provision a new game. Account/authentication changes, expired or retired hosts
+and announced deployments stop recovery. See the Report 74 retained-authority
+contract in ledger 145; the proxy reload itself is not interruption-free.
+The Website stays live until
 the save grace completes so authenticated cloud-slot writes can finish. Root
 `/deployment.json` identifies Website/PixiJS. `/game-rust/deployment.json`
 identifies the immutable Rust artifact, while `/game-rust/api/game/deployment`

@@ -6,6 +6,10 @@ export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64
 
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
 
+/** One absolute retained-authority recovery episode; admission/progress never renew it. */
+export const GAME_RECONNECT_LEASE_MS = 30_000
+export const GAME_RECONNECT_MAX_ATTEMPTS = 2
+
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 
 export const GAME_HOST_ENDED_SESSION_CLOSE_CODE = 4001

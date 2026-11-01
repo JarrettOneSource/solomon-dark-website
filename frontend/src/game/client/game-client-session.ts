@@ -14,6 +14,8 @@ import {
 } from '../core-kernels/player-character.ts'
 import {
   GAME_PROTOCOL_VERSION,
+  GAME_RECONNECT_LEASE_MS,
+  GAME_RECONNECT_MAX_ATTEMPTS,
   type GameSessionKind,
   type GameplayPauseSource,
   type GameplayPauseState,
@@ -83,7 +85,7 @@ import {
   nativeSkillCategory,
 } from '../core-kernels/player-progression.ts'
 import type { NativeTutorialSurfaceAction } from '../core-kernels/native-tutorial.ts'
-import type { GameTransport } from './game-transport.ts'
+import type { GameTransport, GameTransportClose } from './game-transport.ts'
 import {
   GameConnectionFailure,
   failureFromServerDisconnect,
@@ -113,7 +115,16 @@ import {
 import { createGameClientSnapshot } from '../protocol/primary-spell-hail-replication.ts'
 import { appendGameChatMessage } from '../game-chat.ts'
 
+export interface GameReconnectIdentity {
+  readonly playerId: string
+  readonly resumeToken: string
+  readonly requestId: string
+}
+
 export interface GameClientSessionOptions {
+  reconnect?: (identity: GameReconnectIdentity, signal: AbortSignal) => Promise<{ credential: string; transport: GameTransport }>
+  onReconnecting?: (recovering: boolean) => void
+  onSessionActiveChange?: (active: boolean) => void
   allowModMismatch?: boolean
   beginCollegeIntro?: boolean
   character: PlayerCharacterConfig
@@ -307,6 +318,12 @@ export function connectGameClientSession(
   const saveStreamId = nextGameSaveStreamId
   nextGameSaveStreamId += 1
   return new Promise((resolve, reject) => {
+    let transport = options.transport
+    let recovering = false
+    let recoveryWelcomed = false
+    let recoveryController: AbortController | null = null
+    let recoveryAttempt: { resolve: () => void; reject: (error: unknown) => void } | null = null
+    let recoveryTimer: ReturnType<typeof globalThis.setTimeout> | undefined
     let settled = false
     let destroyed = false
     let deploymentRestarting = false
@@ -378,12 +395,12 @@ export function connectGameClientSession(
     let pendingLoadout: PendingLoadoutConfirmation | null = null
     const entityReplication = new EntityReplicationReconstructor()
     const saveCheckpointReceiver = new GameSaveCheckpointReceiver()
-    const welcomeReceiver = new GameWelcomeReceiver()
+    let welcomeReceiver = new GameWelcomeReceiver()
     let pendingInputs: PendingInput[] = []
     let handshakeDeadline = globalThis.setTimeout(() => {
       fail(new Error('The game server handshake timed out.'))
     }, GAME_WELCOME_PROGRESS_TIMEOUT_MS)
-    const removeMessage = options.transport.onMessage((payload) => {
+    const receiveMessage = (payload: string) => {
       let message
       let welcomeOffset: number | null = null
       try {
@@ -401,7 +418,7 @@ export function connectGameClientSession(
           handshakeDeadline = globalThis.setTimeout(() => {
             fail(new Error('The game server handshake timed out.'))
           }, GAME_WELCOME_PROGRESS_TIMEOUT_MS)
-          options.transport.send(encodeGameMessage({
+          transport.send(encodeGameMessage({
             type: 'client-welcome-chunk-ack', nextOffset: reception.nextOffset,
           }))
           return
@@ -417,8 +434,15 @@ export function connectGameClientSession(
       }
       if (message.type === 'server-welcome') {
         try {
-          if (settled || message.observer === true || message.protocolVersion !== GAME_PROTOCOL_VERSION) {
+          if ((settled && (!recovering || recoveryWelcomed)) || message.observer === true || message.protocolVersion !== GAME_PROTOCOL_VERSION) {
             fail(new Error('The server selected an incompatible protocol.'))
+            return
+          }
+          if (recovering && (!welcome || welcome.playerId !== message.playerId
+            || welcome.resumeToken !== message.resumeToken || welcome.sessionKind !== message.sessionKind
+            || welcome.developerAccess !== message.developerAccess
+            || JSON.stringify(welcome.content) !== JSON.stringify(message.content))) {
+            fail(new Error('The reconnect admission changed the retained wizard or content.'))
             return
           }
           welcome = message
@@ -453,14 +477,23 @@ export function connectGameClientSession(
               message,
             )
           }
-          if (welcomeOffset !== null) options.transport.send(encodeGameMessage({
+          if (welcomeOffset !== null) transport.send(encodeGameMessage({
             type: 'client-welcome-chunk-ack', nextOffset: welcomeOffset,
           }))
           sendPing()
           pingTimer = globalThis.setInterval(sendPing, PING_INTERVAL_MS)
           settled = true
           globalThis.clearTimeout(handshakeDeadline)
-          resolve(session)
+          if (recovering) {
+            recoveryWelcomed = true
+            for (const listener of gameplayPauseListeners) listener(gameplayPause)
+            for (const listener of gameplayResumeGraceListeners) listener(gameplayResumeGrace)
+            for (const listener of snapshotListeners) listener(snapshot)
+            if (snapshot.world.kind === 'hub') recoveryAttempt?.resolve()
+          } else {
+            options.onSessionActiveChange?.(true)
+            resolve(session)
+          }
         } catch (error) {
           fail(error)
         }
@@ -513,7 +546,7 @@ export function connectGameClientSession(
           return
         }
         if (checkpoint) publishSaveCheckpoint(checkpoint)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-save-checkpoint-chunk-ack',
           sequence: message.sequence,
           nextOffset: message.offset + message.data.length,
@@ -682,7 +715,7 @@ export function connectGameClientSession(
           'A game-state update was missed; the client requested a complete replacement.',
           `receivedSequence=${message.sequence}; lastSequence=${lastSnapshotSequence}`,
         )
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-snapshot-ack',
           requireKeyframe: true,
           sequence: lastSnapshotSequence,
@@ -690,7 +723,7 @@ export function connectGameClientSession(
         return
       }
       lastSnapshotSequence = message.sequence
-      options.transport.send(encodeGameMessage({
+      transport.send(encodeGameMessage({
         type: 'client-snapshot-ack',
         requireKeyframe: false,
         sequence: lastSnapshotSequence,
@@ -771,32 +804,40 @@ export function connectGameClientSession(
       publishEnemyEvents(snapshot)
       resolvePendingLoadout(snapshot)
       for (const listener of snapshotListeners) listener(snapshot)
-    })
-    const removeClose = options.transport.onClose((event) => {
+    }
+    const handleClose = (event: GameTransportClose) => {
       if (deploymentRestarting) {
         finishDeploymentRestart()
         return
       }
-      if (!destroyed) fail(failureFromTransportClose(event))
-    })
+      const failure = failureFromTransportClose(event)
+      if (recovering) {
+        recoveryAttempt?.reject(failure)
+      } else if (!destroyed && welcome && options.reconnect && !pendingLeaveSave
+        && welcome.sessionKind !== 'standalone' && (event.code === 1001 || event.code === 1006)) {
+        void recoverTransport(failure)
+      } else if (!destroyed) fail(failure)
+    }
+    let removeMessage = transport.onMessage(receiveMessage)
+    let removeClose = transport.onClose(handleClose)
 
     const session: GameClientSession = {
       acceptPartyJoinRequest(requestId) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-party-request-accept',
           requestId,
         }))
       },
       acceptPartyInvitation(invitationId) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-party-accept',
           invitationId,
         }))
       },
       bindSkillQuickbar(skillId, slot) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
           !Number.isInteger(slot)
@@ -807,17 +848,17 @@ export function connectGameClientSession(
             && (progression?.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1)
         ) throw new Error('The quickbar skill is unavailable.')
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-skill-quickbar-bind',
           skillId,
           slot,
         }))
       },
       castModSpell(contentId, target) {
-        if (!welcome || destroyed) return
+        if (!welcome || destroyed || recovering) return
         const requestId = nextModRequestId
         nextModRequestId += 1
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-mod-cast',
           contentId,
           requestId,
@@ -826,10 +867,10 @@ export function connectGameClientSession(
         }))
       },
       sendModAction(action, target, args = {}) {
-        if (!welcome || destroyed) return
+        if (!welcome || destroyed || recovering) return
         const requestId = nextModRequestId
         nextModRequestId += 1
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-mod-action',
           action,
           arguments: args,
@@ -838,7 +879,7 @@ export function connectGameClientSession(
         }))
       },
       confirmLoadout(element, discipline, displayName) {
-        if (!welcome || !snapshot || destroyed || pendingLoadout) return Promise.resolve(false)
+        if (!welcome || !snapshot || destroyed || recovering || pendingLoadout) return Promise.resolve(false)
         const collegeLoadout = isHubGameSnapshot(snapshot)
           && snapshot.world.participants[welcome.playerId]?.transition?.phase
             === 'college-loadout'
@@ -853,7 +894,7 @@ export function connectGameClientSession(
           }, LOADOUT_CONFIRMATION_TIMEOUT_MS)
           pendingLoadout = { config: { element, discipline, displayName }, resolve, reject, timeout }
           try {
-            options.transport.send(encodeGameMessage({
+            transport.send(encodeGameMessage({
               type: 'client-confirm-loadout', discipline, displayName, element,
             }))
           } catch (error) {
@@ -862,22 +903,22 @@ export function connectGameClientSession(
         })
       },
       continueGameOver(runId, eventId) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         if (
           snapshot.run.phase !== 'game-over'
           || snapshot.run.runId !== runId
           || snapshot.run.gameOverEventId !== eventId
           || snapshot.run.gameOverExitTicks !== null
         ) return
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-continue-game-over',
           eventId,
           runId,
         }))
       },
       dismissCollegeInvitation(invitationId) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-college-invitation-dismiss',
           invitationId,
         }))
@@ -914,20 +955,22 @@ export function connectGameClientSession(
       destroy() {
         if (destroyed) return
         destroyed = true
+        cancelRecovery()
+        options.onSessionActiveChange?.(false)
         globalThis.clearTimeout(handshakeDeadline)
         stopPing()
         saveCheckpointReceiver.close()
         welcomeReceiver.close()
         removeClose()
         removeMessage()
-        if (options.transport.readyState === 'open') {
+        if (transport.readyState === 'open') {
           options.diagnostics?.info(
             'connection.client_disconnect',
             'The game client requested a normal disconnect.',
           )
-          options.transport.send(encodeGameMessage({ type: 'client-disconnect' }))
+          transport.send(encodeGameMessage({ type: 'client-disconnect' }))
         }
-        options.transport.close(1000, 'session destroyed')
+        transport.close(1000, 'session destroyed')
         rejectPendingLeaveSave(new Error('The game session was destroyed.'))
         rejectPendingLuaExecutions(new Error('The game session was destroyed.'))
         rejectPendingPlayerCardRequests(new Error('The game session was destroyed.'))
@@ -953,21 +996,21 @@ export function connectGameClientSession(
         saveCheckpointListeners.clear()
       },
       denyPartyInvitation(invitationId) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-party-deny',
           invitationId,
         }))
       },
       denyPartyJoinRequest(requestId) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-party-request-deny',
           requestId,
         }))
       },
       executeLua(code) {
-        if (!welcome || !snapshot || destroyed) {
+        if (!welcome || !snapshot || destroyed || recovering) {
           return Promise.reject(new Error('The game session is not connected.'))
         }
         if (!session.developerAccess && !session.isHost) {
@@ -1001,7 +1044,7 @@ export function connectGameClientSession(
             resolve: resolveExecution,
             timeout,
           })
-          options.transport.send(encodeGameMessage({
+          transport.send(encodeGameMessage({
             type: 'client-lua-execute',
             code,
             requestId,
@@ -1152,7 +1195,7 @@ export function connectGameClientSession(
         }
       },
       sendInput(nextInput) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const offered = snapshot.players[welcome.playerId]?.progression.pendingOffer
         const lifeState = snapshot.players[welcome.playerId]?.progression.lifeState
         const requestedInput = gameplayPause !== null
@@ -1223,7 +1266,7 @@ export function connectGameClientSession(
         const pending = { sequence, targetTick }
         if (pendingAtTick < 0) pendingInputs.push(pending)
         else pendingInputs[pendingAtTick] = pending
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-input',
           input,
           sequence,
@@ -1231,15 +1274,15 @@ export function connectGameClientSession(
         }))
       },
       setCheatsEnabled(enabled) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-cheat-mode',
           enabled,
         }))
       },
       setEnhancedEffects(enabled) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-enhanced-effects',
           enabled,
         }))
@@ -1248,12 +1291,12 @@ export function connectGameClientSession(
         if (
           !welcome
           || !snapshot
-          || destroyed
+          || destroyed || recovering
           || snapshot.world.kind !== 'hub'
           || requestedHubActivity === activity
         ) return
         requestedHubActivity = activity
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-hub-activity',
           activity,
         }))
@@ -1262,14 +1305,14 @@ export function connectGameClientSession(
         const next = validatedOnlinePreferences(preferences)
         if (sameOnlinePreferences(onlinePreferences, next)) return
         onlinePreferences = next
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-online-preferences',
           onlinePreferences,
         }))
       },
       resolvePlayerCard(playerReference) {
-        if (!welcome || destroyed) {
+        if (!welcome || destroyed || recovering) {
           return Promise.reject(new Error('The game session is not connected.'))
         }
         if (pendingPlayerCardRequests.size >= 8) {
@@ -1290,7 +1333,7 @@ export function connectGameClientSession(
             resolve: resolveCard,
             timeout,
           })
-          options.transport.send(encodeGameMessage({
+          transport.send(encodeGameMessage({
             type: 'client-player-card-request',
             playerReference,
             requestId,
@@ -1298,7 +1341,7 @@ export function connectGameClientSession(
         })
       },
       requestGameplayPause(source) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         if (gameplayResumeGrace !== null && source !== null) return
         if (source !== null) {
           if (snapshot.world.kind === 'hub') return
@@ -1314,12 +1357,12 @@ export function connectGameClientSession(
             )
           ) return
         } else if (gameplayPause?.ownerPlayerId !== welcome.playerId) return
-        options.transport.send(encodeGameMessage(source === null
+        transport.send(encodeGameMessage(source === null
           ? { type: 'client-gameplay-pause', paused: false }
           : { type: 'client-gameplay-pause', paused: true, source }))
       },
       saveBeforeLeave() {
-        if (!welcome || !snapshot || destroyed || deploymentRestarting) {
+        if (!welcome || !snapshot || destroyed || recovering || deploymentRestarting) {
           return Promise.reject(new Error('The game session is not available to save.'))
         }
         if (pendingLeaveSave) return pendingLeaveSave.promise
@@ -1340,14 +1383,14 @@ export function connectGameClientSession(
           requestId,
           resolve: resolveSave,
         }
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-save-before-leave',
           requestId,
         }))
         return promise
       },
       selectSkill(choiceIndex, offerSequence, skillId) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const offer = snapshot.players[welcome.playerId]?.progression.pendingOffer
         const option = offer?.options[choiceIndex]
         if (
@@ -1356,7 +1399,7 @@ export function connectGameClientSession(
           || option?.skillId !== skillId
         ) throw new Error('The selected skill is not in the current offer.')
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-select-skill',
           choiceIndex,
           offerSequence,
@@ -1364,35 +1407,35 @@ export function connectGameClientSession(
         }))
       },
       rerollSkill(offerSequence) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
           !progression?.sorcerorsCharmAvailable
           || progression.pendingOffer?.sequence !== offerSequence
         ) throw new Error('Roll Again is not available for the current skill offer.')
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-level-up-action',
           action: 'reroll',
           offerSequence,
         }))
       },
       saveSkill(offerSequence) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
           !progression?.sorcerorsCharmAvailable
           || progression.pendingOffer?.sequence !== offerSequence
         ) throw new Error('Save Skill is not available for the current skill offer.')
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-level-up-action',
           action: 'save',
           offerSequence,
         }))
       },
       selectConcentration(skillId) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
           !progression
@@ -1401,13 +1444,13 @@ export function connectGameClientSession(
           || (progression.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1
         ) throw new Error('The concentration is unavailable.')
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-select-concentration',
           skillId,
         }))
       },
       selectConcentrationSlot(skillId, slot) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
           !progression
@@ -1418,14 +1461,14 @@ export function connectGameClientSession(
           || (progression.learnedSkills.find(([id]) => id === skillId)?.[2] ?? 0) < 1
         ) throw new Error('The concentration is unavailable.')
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-select-concentration-slot',
           skillId,
           slot,
         }))
       },
       selectPrimarySkill(skillId) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         const progression = snapshot.players[welcome.playerId]?.progression
         if (
           nativeSkillCategory(skillId) !== 1
@@ -1433,20 +1476,20 @@ export function connectGameClientSession(
           || (skillId === 52 && progression?.weldBuildId === null)
         ) throw new Error('The primary skill is unavailable.')
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-select-primary-skill',
           skillId,
         }))
       },
       sendChatMessage(channel, text, targetPlayerReference) {
-        if (!welcome || destroyed) return
+        if (!welcome || destroyed || recovering) return
         if (channel === 'global' && !onlinePreferences.globalChat) {
           throw new Error('Global chat is disabled.')
         }
         if ((channel === 'whisper') !== (targetPlayerReference !== undefined)) {
           throw new Error('Whispers require a target wizard.')
         }
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-chat',
           channel,
           ...(targetPlayerReference === undefined ? {} : { targetPlayerReference }),
@@ -1454,89 +1497,90 @@ export function connectGameClientSession(
         }))
       },
       sendHubAction(action) {
-        if (!welcome || !snapshot || destroyed) return
+        if (!welcome || !snapshot || destroyed || recovering) return
         session.sendInput(STOPPED_INPUT)
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-hub-action',
           action,
         }))
       },
       inviteToParty(playerId) {
-        if (!welcome || destroyed || playerId === welcome.playerId) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering || playerId === welcome.playerId) return
+        transport.send(encodeGameMessage({
           type: 'client-party-invite',
           targetPlayerId: playerId,
         }))
       },
       inviteToCollege(playerReference) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-college-invite',
           playerReference,
         }))
       },
       kickPartyPlayer(playerId) {
-        if (!welcome || destroyed || playerId === welcome.playerId) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering || playerId === welcome.playerId) return
+        transport.send(encodeGameMessage({
           type: 'client-party-kick',
           targetPlayerId: playerId,
         }))
       },
       leaveParty() {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({ type: 'client-party-leave' }))
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({ type: 'client-party-leave' }))
       },
       rotatePartyCode() {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({ type: 'client-party-rotate-code' }))
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({ type: 'client-party-rotate-code' }))
       },
       setPartyVisibility(visibility) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-party-settings',
           visibility,
         }))
       },
       startMatch(boneyardId) {
-        if (!welcome || destroyed) return
+        if (!welcome || destroyed || recovering) return
         if (!welcome.boneyards.some((choice) => choice.id === boneyardId)) {
           throw new Error(`Unknown Boneyard: ${boneyardId}`)
         }
-        options.transport.send(encodeGameMessage({
+        transport.send(encodeGameMessage({
           type: 'client-start-match',
           boneyardId,
         }))
       },
       startTutorial() {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({ type: 'client-start-tutorial' }))
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({ type: 'client-start-tutorial' }))
       },
       readyCollegeIntro() {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({ type: 'client-ready-college-intro' }))
       },
       readyBoneyard(runId) {
-        if (!welcome || destroyed || !runId) return
-        options.transport.send(encodeGameMessage({ type: 'client-ready-boneyard', runId }))
+        if (!welcome || destroyed || (recovering && !recoveryWelcomed) || !runId) return
+        transport.send(encodeGameMessage({ type: 'client-ready-boneyard', runId }))
+        if (recovering && loadedBoneyard?.runId === runId) recoveryAttempt?.resolve()
       },
       readyResumeGrace() {
         const grace = gameplayResumeGrace
-        if (!welcome || destroyed || !grace || grace.remainingMs !== null) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || (recovering && !recoveryWelcomed) || !grace || grace.remainingMs !== null) return
+        transport.send(encodeGameMessage({
           type: 'client-resume-grace-ready',
           sequence: grace.sequence,
         }))
       },
       sendTutorialAction(action) {
-        if (!welcome || destroyed) return
-        options.transport.send(encodeGameMessage({
+        if (!welcome || destroyed || recovering) return
+        transport.send(encodeGameMessage({
           type: 'client-tutorial-action',
           action,
         }))
       },
     }
 
-    options.transport.send(encodeGameMessage({
+    transport.send(encodeGameMessage({
       type: 'client-hello',
       ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
       beginCollegeIntro: options.beginCollegeIntro === true,
@@ -1554,8 +1598,117 @@ export function connectGameClientSession(
         : {}),
     }))
 
+    function cancelRecovery(): void {
+      recoveryController?.abort()
+      recoveryController = null
+      globalThis.clearTimeout(recoveryTimer)
+      recoveryTimer = undefined
+      recoveryAttempt?.reject({ terminal: true, error: new Error('Transport recovery was cancelled.') })
+      recoveryAttempt = null
+      if (recovering) options.onReconnecting?.(false)
+      recovering = false
+    }
+
+    async function recoverTransport(original: GameConnectionFailure): Promise<void> {
+      const reconnect = options.reconnect
+      if (!reconnect || !welcome || destroyed || deploymentRestarting) return
+      recovering = true
+      recoveryWelcomed = false
+      const controller = new AbortController()
+      recoveryController = controller
+      options.onReconnecting?.(true)
+      options.diagnostics?.warning('connection.reconnecting', 'Restoring the live game connection.',
+        diagnosticFailureDetail(original))
+      currentInput = copyInput(STOPPED_INPUT)
+      sentInput = copyInput(STOPPED_INPUT)
+      pendingInputs = []
+      predictionEnabled = false
+      stopPing()
+      saveCheckpointReceiver.close()
+      welcomeReceiver.close()
+      const interrupted = new Error('The game connection was interrupted; the new authoritative state will show its outcome.')
+      rejectPendingLuaExecutions(interrupted)
+      rejectPendingPlayerCardRequests(interrupted)
+      rejectPendingLoadout(interrupted)
+      const deadline = performance.now() + GAME_RECONNECT_LEASE_MS
+      recoveryTimer = globalThis.setTimeout(() => {
+        controller.abort()
+        recoveryAttempt?.reject({ terminal: true, error: original })
+      }, GAME_RECONNECT_LEASE_MS)
+      let finalError: unknown = original
+      let requestId = crypto.randomUUID().replaceAll('-', '')
+      for (let attempt = 0; attempt < GAME_RECONNECT_MAX_ATTEMPTS && !controller.signal.aborted && !destroyed && !deploymentRestarting; attempt += 1) {
+        if (attempt > 0) {
+          await new Promise<void>(resolvePause => {
+            const complete = () => { globalThis.clearTimeout(pause); controller.signal.removeEventListener('abort', complete); resolvePause() }
+            const pause = globalThis.setTimeout(complete, Math.min(1_000, Math.max(0, deadline - performance.now())))
+            controller.signal.addEventListener('abort', complete, { once: true })
+          })
+          if (controller.signal.aborted || destroyed) break
+        }
+        removeClose()
+        removeMessage()
+        transport.close(1000, 'replacing interrupted transport')
+        recoveryWelcomed = false
+        welcomeReceiver = new GameWelcomeReceiver()
+        pendingPings.clear()
+        sequence = 0
+        nextModRequestId = 1
+        nextLuaRequestId = 1
+        nextPlayerCardRequestId = 1
+        let helloSent = false
+        try {
+          const replacement = await reconnect({ playerId: welcome.playerId, resumeToken: welcome.resumeToken,
+            requestId }, controller.signal)
+          if (destroyed || controller.signal.aborted || performance.now() >= deadline) {
+            replacement.transport.close(1000, 'recovery cancelled')
+            break
+          }
+          transport = replacement.transport
+          const ready = new Promise<void>((resolveReady, rejectReady) => {
+            recoveryAttempt = { resolve: resolveReady, reject: rejectReady }
+          })
+          removeMessage = transport.onMessage(receiveMessage)
+          removeClose = transport.onClose(handleClose)
+          globalThis.clearTimeout(handshakeDeadline)
+          handshakeDeadline = globalThis.setTimeout(() => fail(new Error('The game server handshake timed out.')), 5_000)
+          helloSent = true
+          transport.send(encodeGameMessage({ type: 'client-hello', character: options.character,
+            profile: options.profile, onlinePreferences, cheatsEnabled: options.cheatsEnabled === true,
+            enhancedEffects: options.enhancedEffects ?? true, beginCollegeIntro: false,
+            protocolVersion: GAME_PROTOCOL_VERSION, credential: replacement.credential, resumeToken: welcome.resumeToken }))
+          await ready
+          if (transport.readyState !== 'open') throw original
+          recoveryAttempt = null
+          cancelRecovery()
+          options.diagnostics?.info('connection.reconnected', 'The live game connection was restored.', `playerId=${welcome.playerId}`)
+          return
+        } catch (error) {
+          finalError = error
+          if (helloSent) requestId = crypto.randomUUID().replaceAll('-', '')
+          recoveryAttempt = null
+          globalThis.clearTimeout(handshakeDeadline)
+          const terminal = typeof error === 'object' && error !== null && 'terminal' in error
+          const retryable = error instanceof TypeError || error instanceof GameConnectionFailure
+            && (error.code === 'transport-unavailable' || error.transport?.code === 1001 || error.transport?.code === 1006)
+          if (terminal || !retryable || controller.signal.aborted) break
+        }
+      }
+      if (destroyed || deploymentRestarting) return
+      cancelRecovery()
+      const terminal = typeof finalError === 'object' && finalError !== null && 'terminal' in finalError
+        && 'error' in finalError ? GameConnectionFailure.from(finalError.error) : null
+      const finalFailure = terminal ?? (finalError instanceof GameConnectionFailure
+        && finalError.transport?.code !== 1001 && finalError.transport?.code !== 1006 ? finalError : null)
+      const detail = finalFailure ? diagnosticFailureDetail(finalFailure)
+        : finalError instanceof Error ? finalError.message : 'The retained authority could not be reached.'
+      fail(new GameConnectionFailure({ code: finalFailure?.code ?? original.code,
+        explanation: finalFailure?.message ?? 'The live game connection could not be restored.',
+        technicalDetail: `${diagnosticFailureDetail(original)}; recovery=${detail}`, transport: original.transport }))
+    }
+
     function sendPing(): void {
-      if (!welcome || destroyed || options.transport.readyState !== 'open') return
+      if (!welcome || destroyed || transport.readyState !== 'open') return
       const sentAtMs = now()
       let expiredPings = 0
       let oldestExpiredAgeMs = 0
@@ -1576,7 +1729,7 @@ export function connectGameClientSession(
       const nonce = nextPingNonce
       nextPingNonce = nextPingNonce === 0x7fffffff ? 1 : nextPingNonce + 1
       pendingPings.set(nonce, sentAtMs)
-      options.transport.send(encodeGameMessage({ type: 'client-ping', nonce }))
+      transport.send(encodeGameMessage({ type: 'client-ping', nonce }))
     }
 
     function stopPing(): void {
@@ -1753,6 +1906,7 @@ export function connectGameClientSession(
     }
 
     function advanceLocalHubPresentation(requestedNow: number): void {
+      if (recovering) return
       if (!welcome || !localHubPresentation) return
       const state = localHubPresentation
       const elapsedMs = Math.max(0, requestedNow - state.lastAdvancedAtMs)
@@ -1808,6 +1962,10 @@ export function connectGameClientSession(
     }
 
     function fail(error: unknown): void {
+      if (recovering && recoveryAttempt) {
+        recoveryAttempt.reject({ terminal: true, error })
+        return
+      }
       const failure = GameConnectionFailure.from(error)
       if (!settled) {
         settled = true
@@ -1827,13 +1985,15 @@ export function connectGameClientSession(
           failure.message,
           diagnosticFailureDetail(failure),
         )
-        options.transport.close(4008, failure.message.slice(0, 123))
+        transport.close(4008, failure.message.slice(0, 123))
         reject(failure)
         return
       }
       if (destroyed || fatalReported) return
       fatalReported = true
       destroyed = true
+      cancelRecovery()
+      options.onSessionActiveChange?.(false)
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
       saveCheckpointReceiver.close()
@@ -1849,7 +2009,7 @@ export function connectGameClientSession(
         failure.message,
         diagnosticFailureDetail(failure),
       )
-      options.transport.close(4008, failure.message.slice(0, 123))
+      transport.close(4008, failure.message.slice(0, 123))
       snapshotListeners.clear()
       boneyardListeners.clear()
       gameplayPauseListeners.clear()
@@ -1872,6 +2032,9 @@ export function connectGameClientSession(
         return
       }
       deploymentRestarting = true
+      // The announced save/drain owns the transport from this point, including its deadline.
+      cancelRecovery()
+      globalThis.clearTimeout(handshakeDeadline)
       rejectPendingLeaveSave(new Error('The game is restarting for an update.'))
       currentInput = copyInput(STOPPED_INPUT)
       sentInput = copyInput(STOPPED_INPUT)
@@ -1890,8 +2053,8 @@ export function connectGameClientSession(
         return
       }
       void persist({ checkpoint, targetRevision: message.targetRevision }).then(() => {
-        if (destroyed || options.transport.readyState !== 'open') return
-        options.transport.send(encodeGameMessage({
+        if (destroyed || transport.readyState !== 'open') return
+        transport.send(encodeGameMessage({
           type: 'client-deployment-ready',
           checkpointSequence: message.checkpointSequence,
           targetRevision: message.targetRevision,
@@ -1913,6 +2076,8 @@ export function connectGameClientSession(
     function finishDeploymentRestart(): void {
       if (destroyed) return
       destroyed = true
+      cancelRecovery()
+      options.onSessionActiveChange?.(false)
       globalThis.clearTimeout(handshakeDeadline)
       stopPing()
       saveCheckpointReceiver.close()
