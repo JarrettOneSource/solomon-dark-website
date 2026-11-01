@@ -2181,7 +2181,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         const activeState = stateForPlayer(client.playerId)
         const barrierBefore = activeState.levelUpBarrier
-        const selected = selectGameSimulationPlayerSkill(activeState, client.playerId, message)
+        const selected = selectGameSimulationPlayerSkill(
+          activeState, client.playerId, message, modBoastResolverForPlayer(client.playerId),
+        )
         if (!selected) {
           disconnect(socket, 'invalid-message', 'The skill choice is stale or not in this offer.')
           return
@@ -6125,7 +6127,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         }
         if (intent.kind === 'select-skill') {
           const barrierBefore = active.levelUpBarrier
-          const selected = selectGameSimulationPlayerSkill(active, bot.playerId, intent)
+          const selected = selectGameSimulationPlayerSkill(
+            active, bot.playerId, intent, modBoastResolverForPlayer(bot.playerId),
+          )
           if (selected) {
             bot.skillPicks += 1
             replaceStateForPlayer(bot.playerId, selected)
