@@ -52,7 +52,7 @@ const ONLINE_PREFERENCES = {
 } as const
 
 test('Create root domain uses the current protocol across hello, confirmation, snapshot, and Player Card', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 154)
+  assert.equal(GAME_PROTOCOL_VERSION, 155)
   const elements = ['ether', 'fire', 'air', 'water', 'earth'] as const
   for (const element of elements) {
     for (const discipline of [...elements, 'body', 'mind', 'arcane'] as const) {
@@ -6895,7 +6895,13 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     hitTargetIds: [],
     kind: 'weld-persistent',
     lightRegistration: ACTOR_LIGHT_REGISTRATION,
-    lifetimeTicksRemaining: 1_250,
+    flightSpeed: 2.25,
+    headingDegrees: 90,
+    reacquiresTarget: false,
+    targetId: null,
+    trackingTicksRemaining: 250,
+    turnAccumulator: Math.fround(.01),
+    turnInput: 1,
     maximumScale: Math.fround(0.75),
     orientation: EARTH_BOULDER_IDENTITY_ORIENTATION,
     phase: 'held',
@@ -6904,7 +6910,6 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     remainingDamage: 12,
     scale: Math.fround(0.18),
     shellScale: Math.fround(0.18),
-    speedFactor: 1,
     toughness: 0,
     vector: [12, 2, 1, 1, 0, 1],
     velocity: { x: 0, y: 0 },
@@ -7241,6 +7246,19 @@ test('protocol strictly round-trips every welded projectile and persistent actor
     actor.kind === 'weld-persistent' && actor.buildId === 1006
   ))
   if (!etherealActor) throw new Error('expected Ethereal Boulder fixture')
+  for (const [field, invalid] of [
+    ['flightSpeed', 0], ['headingDegrees', null], ['reacquiresTarget', 1],
+    ['targetId', 1], ['trackingTicksRemaining', -1], ['turnAccumulator', 0],
+    ['turnAccumulator', 10.1], ['turnInput', 0],
+  ] as const) {
+    assert.throws(() => decodeFrame({ nextId: 2, projectiles: [],
+      transients: [{ ...etherealActor, [field]: invalid }] }), new RegExp(field))
+  }
+  for (const field of ['flightSpeed', 'headingDegrees', 'reacquiresTarget', 'targetId',
+    'trackingTicksRemaining', 'turnAccumulator', 'turnInput']) {
+    assert.throws(() => decodeFrame({ nextId: 2, projectiles: [],
+      transients: [{ ...etherealActor, [field]: undefined }] }), new RegExp(field))
+  }
   const hailActor = actors.find((actor) => 'rocks' in actor)
   if (!hailActor || !('rocks' in hailActor)) throw new Error('expected Hailstones fixture')
   assert.throws(() => decodeFrame({

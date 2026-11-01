@@ -19,6 +19,7 @@ import {
   boolean,
   finite,
   limitedArray,
+  limitedString,
   nonnegativeFinite,
   nonnegativeInteger,
   onlyKeys,
@@ -47,8 +48,9 @@ export function primarySpellWeldEtherealBoulder(
 ): NativeWeldEtherealBoulderState {
   onlyKeys(source, field, [
     ...commonKeys, 'assemblyScale', 'damage', 'flightTicks', 'hitTargetIds',
-    'lifetimeTicksRemaining', 'maximumScale', 'orientation', 'phase',
-    'pulseSequence', 'quantity', 'remainingDamage', 'scale', 'speedFactor',
+    'flightSpeed', 'headingDegrees', 'reacquiresTarget', 'targetId',
+    'trackingTicksRemaining', 'turnAccumulator', 'turnInput', 'maximumScale', 'orientation', 'phase',
+    'pulseSequence', 'quantity', 'remainingDamage', 'scale',
     'shellScale', 'toughness', 'velocity',
   ])
   if (source.phase !== 'held' && source.phase !== 'flight') {
@@ -110,10 +112,13 @@ export function primarySpellWeldEtherealBoulder(
       `${field}.lightRegistration`,
       'actor',
     ),
-    lifetimeTicksRemaining: positiveInteger(
-      source.lifetimeTicksRemaining,
-      `${field}.lifetimeTicksRemaining`,
-    ),
+    flightSpeed: positiveFinite(source.flightSpeed, `${field}.flightSpeed`),
+    headingDegrees: finite(source.headingDegrees, `${field}.headingDegrees`),
+    reacquiresTarget: boolean(source.reacquiresTarget, `${field}.reacquiresTarget`),
+    targetId: source.targetId === null ? null : limitedString(source.targetId, `${field}.targetId`, 256),
+    trackingTicksRemaining: nonnegativeInteger(source.trackingTicksRemaining, `${field}.trackingTicksRemaining`),
+    turnAccumulator: boulderTurnAccumulator(source.turnAccumulator, `${field}.turnAccumulator`),
+    turnInput: positiveFinite(source.turnInput, `${field}.turnInput`),
     maximumScale,
     orientation,
     phase: source.phase,
@@ -122,7 +127,6 @@ export function primarySpellWeldEtherealBoulder(
     remainingDamage: positiveFinite(source.remainingDamage, `${field}.remainingDamage`),
     scale,
     shellScale,
-    speedFactor: positiveFinite(source.speedFactor, `${field}.speedFactor`),
     toughness: nonnegativeFinite(source.toughness, `${field}.toughness`),
     velocity: vector(source.velocity, `${field}.velocity`),
   }
@@ -340,4 +344,10 @@ function primarySpellWeldHailstone(
     spriteRecord,
     visualScale,
   }
+}
+
+function boulderTurnAccumulator(value: unknown, field: string): number {
+  const turn = positiveFinite(value, field)
+  if (turn < Math.fround(.01) || turn > 10) throw new GameProtocolError(`${field} is outside native turn bounds`)
+  return turn
 }

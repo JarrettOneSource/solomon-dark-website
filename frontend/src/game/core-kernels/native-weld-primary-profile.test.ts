@@ -209,3 +209,19 @@ function withManaCosts(
   })
   return { entries }
 }
+
+test('EBoulder public vector keeps the retail four-rock cap and every authored Smart turn scalar', () => {
+  const stats = playerStatBook()
+  // Retail RebuildWeldedSpell1006 clamps row10's quantity, then stores row9's
+  // 1 + mSpeed/100. The runtime matrix independently exercises each child.
+  const smartAdditions = [0, 10, 25, 40, 55, 100, 110, 120, 130, 140, 150]
+  for (let missileRank = 0; missileRank < 14; missileRank++) {
+    for (const [smartRank, addition] of smartAdditions.entries()) {
+      const vector = nativeWeldPrimaryVector(book(1006, {
+        8: 1, 40: 1, 10: missileRank, 9: smartRank,
+      }), stats, 1006)
+      assert.equal(vector.values[2], Math.min(4, missileRank + 1))
+      assert.equal(vector.values[3], Math.fround(1 + addition / 100))
+    }
+  }
+})

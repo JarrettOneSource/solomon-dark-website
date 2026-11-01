@@ -10,6 +10,8 @@ import {
   ETHER_PRIMARY_INITIAL_TURN,
   advanceEtherPrimaryTracking,
   directionFromHeading,
+  nativeHeadingTurnDirection,
+  selectEtherPrimaryTargetAtPoint,
   nativeMissileFanHeading,
   nativeMissileFanTurnScale,
   selectEtherPrimaryTarget,
@@ -189,7 +191,13 @@ export interface NativeWeldEtherealBoulderState extends NativeWeldPersistentActo
   readonly damage: number
   readonly flightTicks: number
   readonly hitTargetIds: readonly string[]
-  readonly lifetimeTicksRemaining: number
+  readonly flightSpeed: number
+  readonly headingDegrees: number
+  readonly reacquiresTarget: boolean
+  readonly targetId: string | null
+  readonly trackingTicksRemaining: number
+  readonly turnAccumulator: number
+  readonly turnInput: number
   readonly lightRegistration: NativeWorldManagerRegistration
   readonly maximumScale: number
   readonly orientation: EarthBoulderOrientation
@@ -198,7 +206,6 @@ export interface NativeWeldEtherealBoulderState extends NativeWeldPersistentActo
   readonly remainingDamage: number
   readonly scale: number
   readonly shellScale: number
-  readonly speedFactor: number
   readonly toughness: number
   readonly velocity: Vector2
 }
@@ -888,7 +895,13 @@ export function createNativeWeldPersistentActor(input: {
       damage: input.vector[0]!,
       flightTicks: 0,
       hitTargetIds: Object.freeze([]),
-      lifetimeTicksRemaining: Math.floor(input.vector[3]! * 1_000 + 250),
+      flightSpeed: 2.25,
+      headingDegrees: Math.fround(actorHeadingFromVector(input.direction.x, input.direction.y)),
+      reacquiresTarget: input.vector[3]! > 1,
+      targetId: null,
+      trackingTicksRemaining: input.vector[3]! > 1 ? Math.trunc(input.vector[3]! * 1_000 + 250) : 250,
+      turnAccumulator: Math.fround(0.01),
+      turnInput: Math.fround(input.vector[3]!),
       lightRegistration: weldActorLightRegistration(input),
       maximumScale: NATIVE_WELD_ETHEREAL_BOULDER_HELD_SCALE_CEILING,
       orientation: Object.freeze([
@@ -899,7 +912,6 @@ export function createNativeWeldPersistentActor(input: {
       remainingDamage: input.vector[0]!,
       scale: NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
       shellScale: NATIVE_WELD_PERSISTENT_INITIAL_SCALE,
-      speedFactor: input.vector[3]!,
       toughness: input.vector[4]!,
       velocity: Object.freeze({ x: 0, y: 0 }),
     })
@@ -992,7 +1004,11 @@ export function updateNativeWeldPersistentActor(
           : actor.remainingDamage,
         scale,
         shellScale: assemblyScale,
-        speedFactor: underpowered ? 1 : actor.speedFactor,
+        headingDegrees: Math.fround(actorHeadingFromVector(direction.x, direction.y)),
+        reacquiresTarget: !underpowered && actor.vector[3]! > 1,
+        trackingTicksRemaining: underpowered ? 150
+          : actor.vector[3]! > 1 ? Math.trunc(actor.vector[3]! * 1_000 + 250) : actor.trackingTicksRemaining,
+        turnInput: underpowered ? 1 : actor.turnInput,
       }),
       debris: debrisProgram.debris,
       hailRockFades: Object.freeze([]),
@@ -1148,6 +1164,7 @@ export function createNativeWeldGroundSparkFadeActor(input: {
 }
 
 export function releaseNativeWeldPersistentActor(input: {
+  readonly targets?: readonly PrimarySpellTarget[]
   readonly actor: NativeWeldPersistentActorState
   readonly firstChildId: number
   readonly registerWorldPainter?: RegisterNativeWorldPainter
@@ -1213,33 +1230,42 @@ export function releaseNativeWeldPersistentActor(input: {
 
   const split = nativeWeldEtherealBoulderSplit(actor)
   return {
-    actors: Object.freeze(split.map((piece, index) => Object.freeze({
-      ...actor,
-      // New children enroll from their own light root, not the retained parent's.
-      ...(index === 0 ? {} : { painterRegistrations: undefined }),
-      direction: piece.direction,
-      hitTargetIds: Object.freeze([]),
-      id: index === 0 ? actor.id : input.firstChildId + index - 1,
-      lightRegistration: index === 0
-        ? actor.lightRegistration
-        : input.registerWorldPainter?.('actor') ?? Object.freeze({
-            managerLane: 'actor',
-            registrationOrdinal: input.firstChildId + index - 1,
-          }),
-      lifetimeTicksRemaining: Math.floor(piece.speedFactor * 1_000 + 250),
-      maximumScale: actor.scale,
-      origin: piece.origin,
-      phase: 'flight',
-      flightTicks: 0,
-      pulseSequence: actor.pulseSequence + 1,
-      quantity: 0,
-      remainingDamage: nativeEarthBoulderReleasedDamage(actor.damage, actor.scale),
-      speedFactor: piece.speedFactor,
-      velocity: Object.freeze({
-        x: Math.fround(piece.direction.x * 3 * piece.speedFactor),
-        y: Math.fround(piece.direction.y * 3 * piece.speedFactor),
-      }),
-    }))),
+    actors: Object.freeze(split.map((piece, index) => {
+      const targetId = selectEtherPrimaryTargetAtPoint({
+        origin: piece.origin, targets: input.targets ?? [],
+      })?.id ?? null
+      const flightSpeed = Math.fround(2.25 * piece.motionFactor)
+      return Object.freeze({
+        ...actor,
+        // New children enroll from their own light root, not the retained parent's.
+        ...(index === 0 ? {} : { painterRegistrations: undefined }),
+        direction: piece.direction,
+        hitTargetIds: Object.freeze([]),
+        id: index === 0 ? actor.id : input.firstChildId + index - 1,
+        lightRegistration: index === 0
+          ? actor.lightRegistration
+          : input.registerWorldPainter?.('actor') ?? Object.freeze({
+              managerLane: 'actor',
+              registrationOrdinal: input.firstChildId + index - 1,
+            }),
+        flightSpeed,
+        headingDegrees: piece.headingDegrees,
+        targetId,
+        reacquiresTarget: actor.reacquiresTarget && targetId !== null,
+        maximumScale: actor.scale,
+        origin: piece.origin,
+        phase: 'flight',
+        flightTicks: 0,
+        pulseSequence: actor.pulseSequence + 1,
+        quantity: 0,
+        remainingDamage: nativeEarthBoulderReleasedDamage(actor.damage, actor.scale),
+        turnInput: piece.turnInput,
+        velocity: Object.freeze({
+          x: Math.fround(piece.direction.x * flightSpeed),
+          y: Math.fround(piece.direction.y * flightSpeed),
+        }),
+      })
+    })),
     nextId: input.firstChildId + split.length - 1,
     rng: input.rng,
   }
@@ -1534,8 +1560,6 @@ export function stepNativeWeldWorldActor(
   }
   if (actor.phase === 'held') return { actor, rng: sourceRng }
   if (actor.buildId === 1006) {
-    const lifetimeTicksRemaining = actor.lifetimeTicksRemaining - 1
-    if (lifetimeTicksRemaining <= 0) return { actor: null, rng: sourceRng }
     const origin = Object.freeze({
       x: Math.fround(actor.origin.x + actor.velocity.x),
       y: Math.fround(actor.origin.y + actor.velocity.y),
@@ -1544,7 +1568,7 @@ export function stepNativeWeldWorldActor(
       ...actor,
       ageTicks: actor.ageTicks + 1,
       flightTicks: actor.flightTicks + 1,
-      lifetimeTicksRemaining,
+      trackingTicksRemaining: Math.max(0, actor.trackingTicksRemaining - 1),
       origin,
       orientation: Object.freeze(earthBoulderFlightOrientationStep(
         actor.orientation,
@@ -1934,50 +1958,64 @@ function roundHalfToEven(value: number): number {
   return floor % 2 === 0 ? floor : floor + 1
 }
 
+/** Retail EBoulder0x621450: called after shared movement/contact, never by a painter. */
+export function finishNativeWeldEtherealBoulderGuidance(
+  actor: NativeWeldEtherealBoulderState,
+  targets: readonly PrimarySpellTarget[],
+): NativeWeldEtherealBoulderState {
+  if (actor.phase !== 'flight' || actor.flightTicks === 0
+    || actor.trackingTicksRemaining === 0 || actor.targetId === null) return actor
+  const target = targets.find(({ id }) => id === actor.targetId)
+  if (!target) {
+    const selected = actor.reacquiresTarget
+      ? selectEtherPrimaryTargetAtPoint({ origin: actor.origin, targets }) : null
+    const targetId = selected && !actor.hitTargetIds.includes(selected.id) ? selected.id : null
+    return Object.freeze({
+      ...actor, targetId, reacquiresTarget: actor.reacquiresTarget && targetId !== null,
+    })
+  }
+  const desired = actorHeadingFromVector(target.position.x - actor.origin.x, target.position.y - actor.origin.y)
+  const turn = Math.fround(nativeHeadingTurnDirection(actor.headingDegrees, desired) * Math.fround(0.7))
+  const headingDegrees = Math.fround(actor.headingDegrees + actor.turnInput * actor.turnAccumulator * turn)
+  const direction = Object.freeze(directionFromHeading(headingDegrees))
+  return Object.freeze({
+    ...actor, direction, headingDegrees,
+    targetId: target.active ? target.id : null,
+    turnAccumulator: Math.min(10, Math.fround(actor.turnAccumulator + (
+      actor.turnAccumulator > 1 ? Math.fround(0.002) : Math.fround(0.05)
+    ))),
+    velocity: Object.freeze({ x: Math.fround(direction.x * actor.flightSpeed), y: Math.fround(direction.y * actor.flightSpeed) }),
+  })
+}
+
 function nativeWeldEtherealBoulderSplit(
   actor: NativeWeldEtherealBoulderState,
 ): readonly Readonly<{
   direction: Vector2
   origin: Vector2
-  speedFactor: number
+  headingDegrees: number
+  motionFactor: number
+  turnInput: number
 }>[] {
   const direction = actor.direction
   const perpendicular = Object.freeze({ x: direction.y, y: -direction.x })
-  const heading = actorHeadingFromVector(direction.x, direction.y)
-  const piece = (
-    along: number,
-    across: number,
-    headingOffset: number,
-    speedFactor: number,
-  ) => Object.freeze({
-    direction: Object.freeze(directionFromHeading(heading + headingOffset)),
-    origin: Object.freeze({
-      x: Math.fround(actor.origin.x + direction.x * along + perpendicular.x * across),
-      y: Math.fround(actor.origin.y + direction.y * along + perpendicular.y * across),
-    }),
-    speedFactor: Math.fround(speedFactor),
-  })
+  const piece = (along: number, across: number, headingOffset: number, factor: number, original = false) => {
+    const headingDegrees = Math.fround(actor.headingDegrees + headingOffset)
+    return Object.freeze({ headingDegrees,
+      direction: Object.freeze(directionFromHeading(headingDegrees)),
+      origin: Object.freeze({
+        x: Math.fround(actor.origin.x + direction.x * along + perpendicular.x * across),
+        y: Math.fround(actor.origin.y + direction.y * along + perpendicular.y * across),
+      }),
+      motionFactor: Math.fround(factor),
+      turnInput: original ? actor.turnInput : Math.fround(factor),
+    })
+  }
   switch (actor.quantity) {
-    case 1:
-      return Object.freeze([piece(0, 0, 0, actor.speedFactor)])
-    case 2:
-      return Object.freeze([
-        piece(0, 30, 0, actor.speedFactor),
-        piece(0, -30, 10, 1),
-      ])
-    case 3:
-      return Object.freeze([
-        piece(30, 0, 0, actor.speedFactor),
-        piece(0, 30, -10, 0.95),
-        piece(0, -30, 10, 0.95),
-      ])
-    case 4:
-      return Object.freeze([
-        piece(30, 0, 0, actor.speedFactor),
-        piece(0, 30, -10, 0.95),
-        piece(0, -30, 10, 0.95),
-        piece(-15, 0, 0, 0.9),
-      ])
+    case 1: return Object.freeze([piece(0, 0, 0, 1, true)])
+    case 2: return Object.freeze([piece(0, 30, 0, 1, true), piece(0, -30, 10, 1)])
+    case 3: return Object.freeze([piece(30, 0, 0, 1, true), piece(0, 30, -10, .95), piece(0, -30, 10, .95)])
+    case 4: return Object.freeze([piece(30, 0, 0, 1, true), piece(0, 30, -10, .95), piece(0, -30, 10, .95), piece(-15, 0, 0, .9)])
   }
   throw new RangeError(`native Ethereal Boulder quantity ${actor.quantity} is outside 1..4`)
 }

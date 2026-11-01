@@ -2332,7 +2332,9 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     id: 31,
     kind: 'weld-persistent',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 31 },
-    lifetimeTicksRemaining: 1_000,
+    trackingTicksRemaining: 1_000,
+    headingDegrees: 90, flightSpeed: 3, targetId: 'enemy:1',
+    reacquiresTarget: false, turnAccumulator: Math.fround(.01), turnInput: 1,
     maximumScale: 0.5,
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
@@ -2343,12 +2345,22 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     remainingDamage: 10,
     scale: 0.5,
     shellScale: 0.5,
-    speedFactor: 1,
     toughness: 2,
     vector: [10, 2, 1, 1, 2, 1],
     velocity: { x: 3, y: 0 },
     worldKey: WORLD_KEY,
   }
+  const distant = { ...enemies, actors: enemies.actors.map(actor => ({ ...actor,
+    position: { x: 400, y: -100 } })) }
+  const untouched = resolveCombatWithAuthority(distant, spellState({ transients: [{
+    ...boulder, shellScale: .49, assemblyScale: .49,
+  }] }), [], 3)
+  const uncontacted = untouched.spells.transients.find(({ id }) => id === 31)
+  assert.ok(uncontacted?.kind === 'weld-persistent' && uncontacted.buildId === 1006)
+  assert.equal(uncontacted.shellScale, .49, 'guidance without accepted contact preserves the shell rebuild bucket')
+  assert.equal(uncontacted.assemblyScale, .49)
+  assert.equal(uncontacted.scale, .5)
+  assert.ok(uncontacted.headingDegrees < 90, 'the empty contact gather still reaches guidance')
   const resolved = resolveCombatWithAuthority(
     enemies,
     spellState({ transients: [boulder] }),
@@ -2366,6 +2378,8 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
   assert.equal(retained.shellScale, retained.scale)
   assert.equal(retained.assemblyScale, 0.5)
   assert.deepEqual(retained.hitTargetIds, ['enemy:1', 'enemy:2'])
+  assert.equal(retained.targetId, null, 'contact-killed target is cleared after its final steering sample')
+  assert.equal(retained.headingDegrees, Math.fround(90 + Math.fround(.01) * Math.fround(.7)))
   assert.equal(resolved.spells.transients.filter(({ kind }) => (
     kind === 'weld-boulder-debris'
   )).length, 2)
