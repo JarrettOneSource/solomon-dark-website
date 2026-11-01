@@ -102,6 +102,36 @@ These are source and focused simulation receipts. Combined browser/material
 and actual-game acceptance remain owned by workers 125/130 and coordinator;
 Report 135 stays open until its supported scope is accepted.
 
+### Successor and idle pose after hand-action retirement
+
+The retirement rule does not imply that displayed K persists indefinitely.
+For the ordinary living/control-admitted path, native PlayerTick first saves
+the action-list count (`actor+E4`, the list at `actor+DC`) at
+`00549008..0054900E`, then steps/removes actions through `00483000` at
+`00549022`. The current list count is queried again during input admission.
+Local primary request is loaded into BL from input `+1E4` at `005493C1`;
+the remote-control branch derives the corresponding request from its aim
+program. When BL is false, `0054961C ->005496C8` checks current count zero
+and **explicitly writes float K0 to actor+238 at `005496D0..005496D2`**.
+Therefore the tick removing the sole done HandCast1 or HandCast2 action also
+restores ordinary unheld idle K0; it does not retain terminal K2/K3.
+
+Held one-shot input takes the other successor branch:
+`005496B7..005496C1` admits the next action when current count is zero.
+HandCast1 construction clears neutral `+23C` but does not write displayed
+`+238`, so this successor retains the previous terminal pose until its first
+step. Channels and concurrent Spin/other actions remain separate owners;
+the explicit idle write is skipped while the action list is nonempty. The
+later neutral-copy writer `0054B6BB..0054B6C1` additionally requires no active
+channel and both old/current action counts zero. It is not the decisive writer
+on the ordinary unheld retirement tick: the earlier explicit K0 write is.
+
+This bounded direct-PE audit confirms the candidate's K0 fallback for ordinary
+unheld idle and inherited terminal pose for held repeat. It requires no action
+or renderer patch, no new state, and no historical fixture/golden change.
+Death/control-gated paths and another active action are not ordinary idle;
+their existing owners are not redefined by this conclusion.
+
 ## 2026-09-22 — Report 14: equipped Wand selected-element effect
 
 ### Evidence and recovered contract (recorded before implementation)
