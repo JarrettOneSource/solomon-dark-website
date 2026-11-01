@@ -2,6 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { advanceNativeRngWords, createNativeRng } from './native-rng.ts'
+import { createPlayerCharacter } from './player-character.ts'
+import type { NativeWeldPrimarySkillProfile } from './native-primary-skill-profile.ts'
+import { createPrimarySpellSimulation, stepPrimarySpells } from './primary-spells.ts'
 import {
   createNativeWeldSteamDetonation,
   spawnNativeWeldSteamActor,
@@ -196,3 +199,49 @@ test('the Over selector stays cosmetic when funded and becomes damaging normal S
   }
   assert.ok(overCount > 0)
 })
+
+for (const row of [
+  { rate: 0.5, boost: 1, mana: 100, damage: 2, spent: 0.1, weak: false },
+  { rate: 1, boost: 1, mana: 100, damage: 4, spent: 0.2, weak: false },
+  { rate: 2, boost: 1, mana: 100, damage: 8, spent: 0.4, weak: false },
+  { rate: 2, boost: 1, mana: 0.3, damage: 2, spent: 0.3, weak: true },
+  { rate: 0.5, boost: 1, mana: 0.15, damage: 2, spent: 0.1, weak: false },
+  { rate: 2, boost: 3, mana: 100, damage: 24, spent: 0.4, weak: false },
+  { rate: 2, boost: 3, mana: 0, damage: 6, spent: 0, weak: true },
+]) {
+  test(`Steam rate ${row.rate}, resolved boost ${row.boost}, reserve ${row.mana} follows the native debit/damage lanes`, () => {
+    const values = [400, 20, 0, 0, 0, 0, 0, 0]
+    const primarySkill: NativeWeldPrimarySkillProfile = {
+      buildId: 1005, castKind: 'channel', damageFactor: row.boost,
+      damageMaximum: 400 * row.boost, damageMinimum: 400 * row.boost, damageRollCount: 1,
+      kind: 'weld', manaCost: 20, rank: 1, skillId: 1005,
+      vector: { buildId: 1005, castKind: 'channel', values },
+    }
+    let player = createPlayerCharacter({ discipline: 'mind', displayName: 'Rate', element: 'fire' }, { x: 0, y: 0 })
+    let spells = createPrimarySpellSimulation()
+    let rng = createNativeRng(0)
+    for (let tick = 1; tick <= 20; tick++) {
+      const result = stepPrimarySpells({
+        canPlaceProjectile: () => true, canTraverseProjectile: () => true,
+        castAuthority: { caster: { alive: true, availableMana: row.mana,
+          castProgressFactor: row.rate, eligible: true, primarySkill, weaponKind: 'staff' } },
+        inputs: { caster: { aim: { x: 100, y: 0 }, cast: { primary: true, quickbar: null },
+          movement: { x: 0, y: 0 }, viewportWidth: 1600, viewportHeight: 900 } },
+        players: { caster: player }, previousPlayers: { caster: player }, rng, spells, tick,
+        spellObstructionPoint: () => null, spellRangeEndpoint: () => ({ x: 100, y: 0 }),
+        spellTargets: () => [], viewScale: 1, worldKeyForPlayer: () => 'boneyard:rate',
+      })
+      player = result.players.caster!; spells = result.spells; rng = result.rng
+      const particle = spells.transients.find(effect => effect.kind === 'weld-steam' && effect.birthTick === tick)
+      if (particle?.kind !== 'weld-steam') continue
+      const emission = result.channelEmissions[0]!
+      assert.equal(emission.underpowered, row.weak)
+      assert.equal(emission.damage, row.damage)
+      assert.equal(emission.manaCost, 0.2 * row.rate)
+      assert.equal(result.manaSpent.caster, row.spent)
+      assert.equal(particle.contactDamage, row.damage)
+      return
+    }
+    assert.fail('held input did not reach its Steam particle birth')
+  })
+}

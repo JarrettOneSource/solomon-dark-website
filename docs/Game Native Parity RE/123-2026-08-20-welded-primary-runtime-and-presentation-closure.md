@@ -2044,3 +2044,42 @@ modifier regressions pass (237 tests in the recorded focused invocation).
 Scoped TypeScript and changed-file lint pass. These source checks do not replace
 Rust's independent verification, the exact combined gate or installed browser
 acceptance. The joint membership rows above remain pending those checks.
+
+### Steam casting-rate and resolved-damage factor audit
+
+The same handler loads `0x00656580(7)` twice before the mana debit. This is the
+native casting-rate/class query already identified by ledger185; the two loads
+supply the cost and full-power contact multiplier. `0x00542D8D..0x00542DA4`
+multiplies cached per-tick mana `+0x2D0` by that rate before mana adjustment.
+`0x00543279..0x00543283` multiplies cached damage `+0x28C` by the retained rate,
+while weak replaces only the damage multiplier with .5 as recorded above.
+The field layout and extra instruction ranges are in the same evidence catalog.
+
+This does not remove equipment or offensive damage factors when weak. Setup
+`0x0054A633` first calls shared offensive resolver `0x0065FFF0` for Welding52,
+divides by the manager's100-Hz timestep and stores `PlayerWizard+0x28C` at
+`0x0054A640`. That cached value already includes those damage factors. The port's
+resolved `profile.damageMinimum/100` is therefore the correct base. Full Steam
+particle damage multiplies it by the current casting rate; weak uses its half
+regardless of that rate. The mana debit always scales by the casting rate, and
+insufficient or exactly exhausted reserve selects weak from the scaled cost.
+
+The two clients already retain the matching casting-rate authority value for
+Staff/Wand Constant actions. Their Steam per-tick cost and funded damage omitted
+it. This is a second confirmed Steam owner defect, including Faster Caster and
+class/equipment casting factors above or below one. Weak damage's existing half
+of the resolved profile is correct. Add a failure-first matrix with rates .5,1,2,
+funded and marginal/empty reserves, and an independently boosted resolved-damage
+profile. Correct Steam's admission and emission owners; do not infer a different
+contract for ordinary or other welded channel handlers from this Steam trace.
+The original frozen Steam step fixtures use rate1 and remain unchanged except
+for the previously identified contact fields. Combined and installed acceptance
+remain pending this additional owner correction.
+
+The Steam-only rate correction passes its failure-first six-failure red and
+14-test green matrix. The final 321-test focused invocation also covers the
+existing complete primary kernel and the prior contact/terminal/modifier checks.
+Scoped TypeScript and changed-file lint pass. The added rate-1 behavior remains
+covered by the original regression expectations. Rust verification, the combined
+candidate gate and installed journeys remain pending; no native-runtime numerical,
+x87, pixel/audio or performance equality is inferred from these source checks.

@@ -1239,8 +1239,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       ? null
       : authority?.primarySkill.kind ?? null
     const castClockElement = primaryElement ?? 'fire'
+    // Steam 0x00542D20 scales its debit and funded contact by the class cast rate.
+    const steamCastFactor = authority?.primarySkill.kind === 'weld'
+      && authority.primarySkill.buildId === 1005 ? authority.castProgressFactor : 1
     const manaCost = authority
-      ? primarySpellManaCost(castClockElement, authority.primarySkill)
+      ? primarySpellManaCost(castClockElement, authority.primarySkill) * steamCastFactor
       : 0
     let availableMana = authority?.availableMana ?? 0
     manaSpent[playerId] = 0
@@ -1812,7 +1815,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             const channelDamage = primarySpellChannelDamage(
               authority.primarySkill,
               underpowered,
-            )
+            ) * (underpowered ? 1 : steamCastFactor)
             channelEmissions.push({
               ...(buildId === 1003 ? { flameLashPresentation: {
                 cameraDisplacement: flameCamera!.displacement,
