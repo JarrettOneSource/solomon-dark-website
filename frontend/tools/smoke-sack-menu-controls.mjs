@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import {
   DOWSING_EQUIPMENT_RECIPES, FOMENTIUS_STOCK_DEFINITIONS, NATIVE_SKILL_BOOK_DEFINITIONS,
   createEquipmentInventoryItem, createFomentiusInventoryItem, createNativeSkillBookInventoryItem,

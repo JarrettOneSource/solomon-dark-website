@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 const evidence = process.env.SDR_TYPOGRAPHY_EVIDENCE || '/tmp/solomon-font-built-20260904'

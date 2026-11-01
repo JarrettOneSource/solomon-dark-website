@@ -12,7 +12,7 @@
     "dev": "vite",
     "build": "node tools/build-parallel-apps.mjs",
     "lint": "oxlint && node tools/check-game-boundaries.mjs && npm run check:ml-bot-policy-spec && npm run check:sdmod-generated",
-    "test": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/editor/*.test.ts src/editor/library-ui/*.test.ts src/boneyard/*.test.ts src/lib/*.test.ts && node --experimental-strip-types --test tools/game-artifact.test.mjs tools/workshop-navigation.test.mjs && npm run test:client-comparison",
+    "test": "tsc -p tsconfig.test.json --noEmit && node --experimental-strip-types --test src/editor/*.test.ts src/editor/library-ui/*.test.ts src/boneyard/*.test.ts src/lib/*.test.ts && node --experimental-strip-types --test tools/static-client-server.test.mjs tools/game-artifact.test.mjs tools/workshop-navigation.test.mjs && npm run test:client-comparison",
     "preview": "vite preview",
     "smoke:library:subscriptions": "node tools/smoke-library-subscriptions.mjs",
     "smoke:workshop-storage": "node --test tools/workshop-request-store.test.mjs",

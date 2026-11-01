@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { createGameSimulation } from '../src/game/core-server/game-simulation.ts'
 import { createHubSkorcha } from '../src/game/core-server/hub-skorcha.ts'
 import { createHubStudentFixturePopulation } from '../src/game/core-server/hub-student-fixtures.ts'

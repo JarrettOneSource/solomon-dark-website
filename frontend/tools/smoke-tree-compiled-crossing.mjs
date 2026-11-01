@@ -16,7 +16,7 @@ const output = process.env.SDR_TREE_CROSSING_OUTPUT
     new Date().toISOString().replaceAll(':', '-') + '-' + randomBytes(4).toString('hex'))
 const imported = relative => import(pathToFileURL(resolve(source, 'frontend', relative)).href)
 const { chromium } = await imported('node_modules/playwright-core/index.mjs')
-const { startStaticClientServer } = await imported('desktop/static-client-server.mjs')
+const { startStaticClientServer } = await imported('tools/static-client-server.mjs')
 const { startGameHost } = await imported('src/game/host/game-host.ts')
 const { getPlayerCharacter } = await imported('src/game/core-server/game-simulation.ts')
 const { createGameSnapshot } = await imported('src/game/host/game-snapshot.ts')

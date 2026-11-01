@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { createServer } from 'vite'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { MOBILE_UI_ELEMENT_IDS } from '../src/game/mobile-ui-layout.ts'
 import { assertNativeCloudChrome, assertNativePanel, assertStockCloudSurfaces } from './dark-cloud-presentation-assertions.mjs'
 

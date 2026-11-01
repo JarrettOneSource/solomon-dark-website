@@ -12,7 +12,7 @@ import { acceptStormMaterial, installStormMaterialProbe } from './storm-material
 import { acceptEtherDrainGameplay } from './ether-drain-gameplay-smoke-acceptance.mjs'
 import { chromium } from 'playwright-core'
 import { createServer as createViteServer } from 'vite'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { installGameAudioSmokeProbe } from './game-audio-smoke-probe.mjs'
 import { installGameTextureUploadSmokeProbe } from './game-texture-upload-smoke-probe.mjs'
 import { NATIVE_SECONDARY_ABILITY_IDS } from '../src/game/core-kernels/native-secondary-ability-contract.ts'

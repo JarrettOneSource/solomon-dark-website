@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { monitorEventLoopDelay, performance } from 'node:perf_hooks'
 import { fileURLToPath } from 'node:url'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { writeSoakEvidence } from './party-soak-evidence.mjs'
 import { SOAK_MUTATION } from './party-soak-settings.mjs'

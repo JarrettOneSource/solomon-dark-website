@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
 import { unforgeBrowserReceipt } from './unforge-browser-receipt.mjs'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 
 import {

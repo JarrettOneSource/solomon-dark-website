@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { startGameSessionSupervisor } from '../src/game/host/game-session-supervisor.ts'
 import { enterBoneyard, enterElementHub, waitUntil } from './game-smoke-navigation.mjs'
 

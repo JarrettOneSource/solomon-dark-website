@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
 import { WebSocket } from 'ws'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { startGameSocialBroker } from '../src/game/host/game-social-broker.ts'
 import { GAME_PROTOCOL_VERSION } from '../src/game/protocol/game-protocol-contract.ts'
