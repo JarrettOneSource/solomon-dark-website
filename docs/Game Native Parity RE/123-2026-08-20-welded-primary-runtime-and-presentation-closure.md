@@ -2057,7 +2057,7 @@ The field layout and extra instruction ranges are in the same evidence catalog.
 
 This does not remove equipment or offensive damage factors when weak. Setup
 `0x0054A633` first calls shared offensive resolver `0x0065FFF0` for Welding52,
-divides by the manager's100-Hz timestep and stores `PlayerWizard+0x28C` at
+divides by the manager's 100-Hz timestep and stores `PlayerWizard+0x28C` at
 `0x0054A640`. That cached value already includes those damage factors. The port's
 resolved `profile.damageMinimum/100` is therefore the correct base. Full Steam
 particle damage multiplies it by the current casting rate; weak uses its half
@@ -2065,10 +2065,10 @@ regardless of that rate. The mana debit always scales by the casting rate, and
 insufficient or exactly exhausted reserve selects weak from the scaled cost.
 
 The two clients already retain the matching casting-rate authority value for
-Staff/Wand Constant actions. Their Steam per-tick cost and funded damage omitted
+Staff/Wand and bare Constant actions. Their Steam per-tick cost and funded damage omitted
 it. This is a second confirmed Steam owner defect, including Faster Caster and
 class/equipment casting factors above or below one. Weak damage's existing half
-of the resolved profile is correct. Add a failure-first matrix with rates .5,1,2,
+of the resolved profile is correct. Add a failure-first matrix with rates .5, 1, 2,
 funded and marginal/empty reserves, and an independently boosted resolved-damage
 profile. Correct Steam's admission and emission owners; do not infer a different
 contract for ordinary or other welded channel handlers from this Steam trace.
@@ -2083,6 +2083,33 @@ Scoped TypeScript and changed-file lint pass. The added rate-1 behavior remains
 covered by the original regression expectations. Rust verification, the combined
 candidate gate and installed journeys remain pending; no native-runtime numerical,
 x87, pixel/audio or performance equality is inferred from these source checks.
+
+The authority mapping is shared for Steam, including bare Constant. Player update
+`0x0054AB62..0x0054AB7F` calls channel dispatcher `0x00548A00` while held
+`PlayerWizard+0x270` is nonzero. Its item query chooses equipped Constant mode 5
+or no-item Constant mode 8 before dispatching build 1005 to `0x00542D20` at
+`0x00548AC5`. The retained factory table maps mode 8 to `0x0044F807`, which
+constructs HandConstant `0x0044C750`. That constructor/step writes pose 2 and
+calls the player action callback; it does not own Steam damage or its rate.
+No Staff/Wand/bare branch intervenes in the Steam handler's rate/debit lanes.
+The ports therefore pass the same resolved `castProgressFactor` through each
+of their Staff, Wand and null/bare authorities. Their weapon emitter/pose owners
+remain distinct. The separate native-rounded `handCastFactor` is for bare
+one-shot admission; it is not a second Steam multiplier.
+
+The independent matrix crosses all three authority variants with the .5, 1, 2
+rate examples, resolved damage boost, full/empty/marginal mana, and exact reserve
+exhaustion at both .5 and 2 rates. It supplies a deliberately different hand pose
+rate to protect the owner boundary. In particular rate 2/cost 20 needs .4 per tick:
+reserve .3 and reserve .4 both emit weak damage 2 from resolved damage 400, while
+full reserve emits 8. At rate .5 the scaled cost is .1, so reserve .15 is funded
+and reserve .1 is weak. These are source-contract checks, not a native-runtime
+floating-point equivalence assertion.
+
+
+All 27 authority/rate/reserve examples pass; the full focused Website invocation
+now passes 341 tests. Scoped TypeScript and changed-test lint also pass. Rust's
+matching matrix is prepared for its queued independent failure-first Cargo run.
 
 ## 2026-11-01 — Report131: EBoulder guidance and flight reopening
 
