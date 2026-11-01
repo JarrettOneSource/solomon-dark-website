@@ -1,5 +1,84 @@
 # 2026-08-27 — Inventory Sack pages, heterogeneous BeltButton items, and Teleport activation audit
 
+## 2026-11-01 — Report 99: complete Rust HUD item artwork
+
+### Reopened question and evidence
+
+A fresh read of messages `1557549570215383111`, `1557550152774848553`,
+`1557566134776111187`, and `1557566284747640903` with surrounding discussion
+finds their original text unchanged and unedited. The original gameplay image
+shows flat Hat/Robe fills; its Inventory reference retains shading. Samples at
+1, 3, 6, 9, 12, 15, 18 and 20 seconds of the original `Hotbar_Perfect.mp4`
+show the preserved Sack quick-set exchanging equipment and retaining the Sack.
+This positive follow-up is preservation context, not a defect/completion target.
+The static screenshots do not establish an equip-input failure.
+
+Website `f87dd326` already contains the textured `tint` consumer documented in
+the October 8 reopening. All item records and the common equipment transforms
+still flow through `NativeBeltItemIcon`; no new Website runtime change follows
+from the report. The earlier individual-equip allegation remains unreproduced.
+
+Rust `6aad9630` has a separate confirmed presentation omission. Its
+`Game::refresh_hud` projects only `item.icon_records.first()` into
+`HudBeltEntry::Item`; the HUD paints that one record white without the equipment
+transform. It drops clothing trim records and tint and changes Staff/Wand/Amulet
+placement. The sibling sweep also finds an authored partial-tint case:
+Combinator's Cap/Cape use recipe primary `0xc0c0c0` and no trim tint. Existing
+Rust Inventory calls `clothing_tints`, whose two-channel requirement returns no
+colors for those rows; its painter therefore loses the valid primary tint.
+Website and the mobile editor correctly retain that primary and paint the
+untinted trim white. The presentation projection must treat each authored layer
+independently; the dye service's separate two-color transaction is unchanged.
+This is direct current-source and focused-test evidence; no new retail capture
+or native table is claimed. The complete item catalog, ordinary equip and Sack ownership rules,
+textured RGB modulation, and transforms recovered below remain authoritative.
+
+### Boundary and membership
+
+The reopened system is the item-art projection from the actor's accepted belt
+through every stock item layer and tint into the Rust HUD. Inventory, its modal
+belt, service companion panels and the mobile editor are sibling consumers of
+the same item catalog. Simulation equipment/Sack transactions, bank addressing,
+input ownership, saves, networking and audio remain their existing owners.
+
+| Member | Recovered contract | Disposition and verification |
+| --- | --- | --- |
+| Every Hat/Robe recipe, explicit dye colors and starter element fallback | all authored records, per-layer RGB tint, original texture shading/alpha | `recovered-pending-port` for Rust HUD; Website consumer already present; focused projection assertions and composed browser pixels required |
+| Staff/Wand/Amulet and Ring, Sack, all potion and other bound item records | full record sequence; existing equipment translation/rotation; untinted non-clothing art | `recovered-pending-port` for Rust HUD; enumerate all catalog rows and transforms in focused assertions |
+| Inventory, modal belt, service companions and mobile preview | same record/tint/transform contract, including partial recipe tint rows | `recovered-pending-port` for Rust Inventory partial-tint rows; share the complete tint projection and transform data while preserving surface-owned scale and rotation; focused review and composed browser comparison required |
+| Individual equip across all three banks, fixed and Ring sinks, root/nested ownership, repeated UID, admission rejection | exact UID, exact owning root, same equipped UID no-op | authority source matches recovered contract; focused session matrix required; original allegation remains unreproduced |
+| Sack quick-set, repeats, displaced return, nested/non-equipment preservation | existing quick-set transaction retained | preservation regression required; no authority behavior change proposed |
+| Skill/potion activation, bank direction, Report 100 dots, mod item images | separate existing contracts | `out-of-system` for behavior changes; preserve their paths and counts |
+
+The correction carries the complete stock item-art model into the existing HUD
+entry. Shared presentation tint and transform functions replace duplicate or
+incomplete projections in the sibling consumers. No asset, protocol, save,
+setting, or gameplay mutation is needed. Focused tests must distinguish the previous first-record/white/no-
+transform result before the correction. Combined M2 gates and actual built/live
+Hub and Boneyard mouse/key/touch journeys remain coordinator-owned acceptance.
+
+### Local implementation and focused verification
+
+The Rust source now retains every item-art record, resolves presentation tints
+per layer, and shares equipment transforms across the HUD and sibling painters.
+The initial presentation regressions fail against the previous projection. The
+47-recipe sweep also rejects the incomplete two-channel tint projection before
+its replacement. Exact-source M2 focused checks pass four HUD tests (all recipe
+rows, explicit complete/partial dyes, five element defaults and all transforms),
+one shared-client mobile-preview test, and strict `solomon-web --lib` clippy.
+The independent session matrix passes 144 equipment scenarios and 12 two-press
+Sack scenarios with exact owning-root return, nested Sack/direct potion
+preservation and repeated-UID no-op. Simulation mutations remain unchanged.
+Website's existing 36 shortcut tests (144 internal scenarios) and 23 Sack/tint
+controls pass without runtime changes.
+
+The shared Cargo target required forced crate-root freshness and explicit
+nonzero test-name/count checks; logs name this worker's exact source tree.
+These are focused source receipts. Final parity dispositions, combined gates,
+composed/browser/native acceptance, installed behavior and reactions remain
+pending with the coordinator. The original individual-equip allegation remains
+unreproduced; this presentation correction is not its asserted cause.
+
 ## 2026-10-19 — Report 117: one weapon swap per quick-set activation
 
 The current `c20fd89c` two-press check reproduces the reported usability bug:
