@@ -280,3 +280,54 @@ and, after set removal, `98/196 -> 196/293`. Measured ratios matched
 The final before image was inspected and visibly agrees. Error arrays remain
 empty. This corrects the evidence timing without changing that existing HUD
 animation or making a new claim about its native parity.
+
+## 2026-11-01 — Report 109: current PixiJS and Rust identity audit
+
+The original message `1558638384904278106`, its October 13 attention cue and
+the surrounding nine-message window were read again. Text, timestamps and
+attachment identity match the retained archive. The original movie still hashes
+to `3dc7c3064a41f86ee07ab19cb0b9ae892690db1f3974294d00a890c4b97e89b6`.
+Decoded frames at approximately 11.5 and 14 seconds visibly show the previously
+recorded `20%/80% -> 80%/100%` pattern. Neither frame supplies actor IDs.
+
+The bounded ownership inventory remains:
+
+| Member | Current owner and contract | Disposition |
+| --- | --- | --- |
+| Raise Golem with Fete of Clay retained or removed | PixiJS case 45 and Rust `secondary/casting.rs` retire one lowest-current-HP owned Golem, with actor ID breaking ties, then construct one new full-health actor. Existing survivors are not rescaled or healed. | Verified unchanged for the bounded actor-health contract by the retained qualified Website transaction and current public tests in both clients. |
+| Actor birth, damage and retirement | Each client's secondary simulation owns Golem current/max HP and unique actor IDs. The damage path changes only the selected actor; death retires that actor. | Existing construction, damage and lifecycle regressions retained. |
+| Accepted-state projection and world filtering | `AllyHud.tsx` reads accepted secondary actors; Rust `game/social.rs` borrows actual Golem components from the accepted session. Other actor kinds, missing Golem payloads and other worlds cannot donate a health value. | Current source and existing static roster regressions inspected. |
+| Row identity, order and ratio | Both selectors sort numeric actor IDs and derive `current/max` for `golem:<id>`. PixiJS keys the DOM row by that ID; Rust recreates motion when row identity changes. Player rows share the presentation surface without owning Golem state. | Current source agrees with the retained identity/painted-width receipt. |
+| HUD animation | Both clients use their existing 220 ms health-width transition. This is presentation state and cannot write simulation HP. | Preserved; no new native animation claim. |
+| Historical clip and native behavior after set removal | The clip cannot identify its surviving actors. The reporter's description alone does not establish the native post-removal cap. | Remains unresolved; no gameplay correction or complete-report claim. |
+| Leviathan, Good Imp and local/player health | They are not Golem row-state producers or the owner of this resummon transaction. | Out of this bounded audit; their accepted behavior is preserved. |
+
+The unchanged current PixiJS public tests already directly cover replacement
+with the set retained and removed, the survivor's exact current/max HP, and
+the resulting actor-bound HUD rows. Rust's retained goldens cover construction,
+damage/death and static HUD projection separately, but do not directly connect
+resummoning two damaged Golems after set loss to the survivor's HP and HUD ID.
+One public secondary-tick regression closes that coverage gap. It uses actual
+casts and damage, lets normal admission clocks expire, and asserts the surviving
+actor and its HUD ratio through both set states. It changes no golden fixture
+or runtime rule and is not evidence that a bug was fixed.
+
+Current M2 checks pass all 140 tests in `ally-hud.test.ts`,
+`native-secondary-golem.test.ts` and `native-secondary-abilities.test.ts`.
+Rust `cargo test -p solomon-sim --features persistence --test golem_replacement`
+compiles the exact report worktree and passes its named test with both set
+states: two live actors at `20/100` and `80/100` become the same survivor at
+`80/100` and a fresh actor at `100/100`; the survivor's HUD row remains equal.
+These are baseline successes, not a failing-before/passing-after repair.
+
+All 16 inspected source/test-support files match the campaign's published
+bases and integration snapshot. Five of seven relevant PixiJS files, including
+the Golem kernel, HUD selector/component and browser journey, are byte-identical
+to qualified commit `c92edbb4`. The larger secondary file changed elsewhere;
+its complete Raise Golem case 45 remains byte-identical. All nine retained
+Golem browser images still match the earlier exact-build manifest.
+
+The campaign's combined M2 Rust gate and any new real browser/native journey
+remain separate acceptance work. The retained October 11 exact-build headed
+receipt remains valid evidence for its recorded PixiJS tree and scenario; it
+does not become a current Rust or production cast receipt by source comparison.
