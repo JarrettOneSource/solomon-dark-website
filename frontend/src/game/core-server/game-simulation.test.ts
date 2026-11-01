@@ -4970,6 +4970,90 @@ test('Ether Drain center contact can kill its living caster', () => {
   assert.ok(progression.currentHealth <= -10)
 })
 
+for (const victim of ['caster', 'peer']) {
+  for (const selectors of [[7], [24], [25], [24, 25], [7, 24, 25]]) {
+    test(`Ether Drain retains accepted charm ${selectors.join('+')} feedback for its ${victim}`, () => {
+      const config = { discipline: 'arcane', displayName: 'Wizard', element: 'ether' } as const
+      const loadedBoneyard = combatBoneyard('ether-drain-rescue')
+      let state = createGameSimulation({ caster: config, peer: config })
+      state = { ...state, playerEntities: replacePlayerCharacter(
+        replacePlayerEconomy(state.playerEntities, victim, {
+          ...getPlayerEconomy(state, victim), gold: 50_000,
+        }), victim, { ...getPlayerCharacter(state, victim), position: { x: 1340, y: 280 } },
+      ) }
+      for (const selector of selectors) {
+        const purchase = applyGameSimulationHubAction(state, victim, { type: 'buy-hagatha', selector })
+        assert.equal(purchase.accepted, true, purchase.reason ?? `charm ${selector} purchase`)
+        state = purchase.state
+      }
+      state = enterBoneyardWorld(state, loadedBoneyard)
+      state = withPlayerSkillRank(state, 'caster', 74, 1)
+      state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', 74, 0)!
+      state = { ...state, playerEntities: {
+        ...state.playerEntities,
+        locomotions: state.playerEntities.locomotions.map((character, index) => ({ ...character,
+          position: { x: state.playerEntities.identities[index]!.playerId === victim ? 250 : 90, y: 250 },
+        })),
+        progressions: state.playerEntities.progressions.map((progression, index) => (
+          state.playerEntities.identities[index]!.playerId === victim
+            ? { ...progression, currentHealth: selectors.includes(7) ? 0.01 : 100_000,
+              maximumHealth: selectors.includes(7) ? progression.maximumHealth : 100_000 } : progression
+        )),
+      } }
+      for (let tick = 0; tick < 120; tick += 1) {
+        state = stepGameSimulationTick(state, tick === 0 ? { caster: {
+          ...gameplayInput(0, 0), aim: { x: 250, y: 250 }, cast: { primary: false, quickbar: 0 },
+        } } : {})
+        const runtime = getPlayerProgression(state, victim).hagathaRuntime
+        if (runtime.cheatDeathCharges === 0 && !runtime.reverieActive && !runtime.serendipityActive) break
+      }
+
+      const progression = getPlayerProgression(state, victim)
+      assert.deepEqual(progression.hagathaRuntime, {
+        cheatDeathCharges: 0, reverieActive: false, serendipityActive: false,
+      })
+      assert.equal(progression.lifeState, 'alive')
+      assert.ok(progression.currentHealth > 0)
+      assert.equal(progression.rescueProtection.fraction, selectors.includes(7) ? 1 : 0)
+      assert.equal(state.secondaryAbilities.actors.filter(actor => actor.kind === 'rescue-shockwave'
+        && actor.ownerId === victim).length, selectors.includes(7) ? 1 : 0)
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const events = state.world.enemyEvents.filter(event => event.type === 'player-charm-lost'
+        || event.type === 'player-cheat-death')
+      assert.deepEqual(events.map(event => event.type), [
+        ...(selectors.some(selector => selector === 24 || selector === 25) ? ['player-charm-lost'] : []),
+        ...(selectors.includes(7) ? ['player-cheat-death'] : []),
+      ], 'accepted charm loss and rescue must reach their consumers in receiver order')
+      assert.ok(events.every(event => event.targetPlayerId === victim))
+      assert.equal(events.at(-1)!.tick, state.tick)
+      assert.equal(state.world.enemyEvents.some(event => event.type === 'player-damage-sound'), false)
+      const repeated = stepGameSimulationTick(state, {})
+      if (repeated.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      assert.deepEqual(repeated.world.enemyEvents.filter(event => event.type === 'player-charm-lost'
+        || event.type === 'player-cheat-death'), events)
+      const restored = restoreGameSaveDocument(createGameSaveDocument({
+        integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: victim, state,
+      })).state
+      assert.deepEqual(getPlayerProgression(restored, victim).hagathaRuntime, progression.hagathaRuntime)
+    })
+  }
+}
+
+test('Ether Drain preserves suppressed ordinary hit feedback while still damaging the caster', () => {
+  let state = etherDrainSimulation({ x: 250, y: 250 })
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      currentHealth: 100_000, maximumHealth: 100_000,
+    })),
+  } }
+  for (let tick = 0; tick < 120; tick += 1) state = stepGameSimulationTick(state, {})
+  assert.equal(getPlayerProgression(state).lifeState, 'alive')
+  assert.ok(getPlayerProgression(state).currentHealth < 100_000)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemyEvents.some(event => event.type === 'player-damage-sound'), false)
+  assert.equal(state.world.enemyEvents.some(event => event.type === 'player-cheat-death'), false)
+})
+
 test('Ether Drain consumes eligible Gold and every item carried by a Sack without pickup credit', () => {
   for (const payload of ['gold', 'potion', 'key', 'element-book', 'random-book'] as const) {
     let state = etherDrainSimulation({ x: 400, y: 250 })
