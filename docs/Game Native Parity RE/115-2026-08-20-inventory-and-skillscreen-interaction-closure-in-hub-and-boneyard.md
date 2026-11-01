@@ -13,8 +13,12 @@ participant's accepted economy and namespaced content projection; it owns no
 gameplay, score, persistence, or success/failure rule.
 
 The PixiJS Skills book exposes the same view in Hub and Boneyard. Boasts/Skills
-switches views; Back first returns to learned skills, while Inventory retains
-the existing book replacement. The Skills renderer owns the card art and native
+switches views, and the tome Back control returns to learned skills. Menu,
+Escape and the configured Skills binding close the whole optional book,
+including its Boasts view, as required by Report 22's accepted policy in ledger
+299. This close policy supersedes the earlier Boasts Escape-to-Skills behavior
+in both maintained clients. Inventory retains the existing book replacement.
+The Skills renderer owns the card art and native
 bitmap text; React supplies semantic state and ordinary input controls. Focused
 projection/render-plan and live model-store tests cover all five stock selections,
 each status, authored identity, empty/unavailable content, and content arrival.

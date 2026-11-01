@@ -278,8 +278,7 @@ function SkillBookSurface({
     if (action?.type === 'close') {
       event.preventDefault()
       event.stopPropagation()
-      if (boastsOpen) setBoastsOpen(false)
-      else beginClose()
+      beginClose()
       return
     }
     if (action?.type === 'replace' && action.target === 'inventory') {

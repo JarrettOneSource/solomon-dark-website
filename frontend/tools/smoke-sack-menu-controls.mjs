@@ -308,11 +308,18 @@ async function journey(scenario) {
       await page.keyboard.press(scenario.menu)
       await skills.waitFor({ state: 'hidden' })
       await ready(page)
-      await page.keyboard.press(scenario.skills)
-      await skills.waitFor()
-      await page.keyboard.press('Escape')
-      await skills.waitFor({ state: 'hidden' })
-      await ready(page)
+      for (const closeKey of ['Escape', scenario.menu, scenario.skills]) {
+        await page.keyboard.press(scenario.skills)
+        await skills.waitFor()
+        await activate(skills.getByRole('button', { name: 'Boasts', exact: true }), scenario)
+        const boasts = page.getByRole('dialog', { name: 'Boasts', exact: true })
+        await boasts.waitFor()
+        // Report 22 closes the whole optional interface from this view too.
+        await page.keyboard.press(closeKey)
+        await boasts.waitFor({ state: 'hidden' })
+        await skills.waitFor({ state: 'hidden' })
+        await ready(page)
+      }
       inventory = await openInventory(page, scenario)
       await doubleActivate(inventory.locator(`[data-inventory-item-id="${ids.book}"]`).first(), scenario)
       const picker = page.getByRole('dialog', { name: /Select a skill/ })
