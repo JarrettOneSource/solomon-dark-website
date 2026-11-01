@@ -1060,6 +1060,101 @@ the final gate; publication and cleanup receipts belong to the report archive.
 
 ## Report38 reopening: complete Enhanced Effects mode, 2026-09-29
 
+### 2026-11-01 — Rust Stoneskin material consumer reopening
+
+Report125's historical PixiJS screenshot shows a pale wizard perimeter and a
+bright weapon. Its text proposes no definite replacement contract, and has no
+matched retail frame. It does not justify removing a native material pass or
+adding the suggested rock-texture redesign. Current report originals and their
+nearby discussion were re-read unchanged on November1.
+
+The complete Stoneskin painter is the owning boundary: accepted modifier and
+shared born grid, full articulated diffuse capture, Clothes record3 material,
+live Enhanced Effects selection, normal world body, independent Shield shell,
+effect precedence and retirement. The existing reader77 below is still the
+native contract. Fresh disassembly of retail0.72.5 (4,723,200bytes,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`) independently confirms:
+
+- `0x00546999` selects actor material bit1. `0x00546B2A` captures its articulated
+  virtual draw, and `0x00546CF5` draws the Clothes record3 stone material in
+  multiply mode. The ordinary material's half-intensity tint remains applied
+  once inside the diffuse capture; the final composite does not tint it again.
+- `0x00546D99` reads the live quality byte. Off calls the captured sprite twice
+  at `0x00546DAD`/`0x00546DC3`; On calls the10-by10 grid twice at
+  `0x00546DE4`/`0x00546E03`, with position bank `0x0081AD98`, UV bank
+  `0x0081A438` and a null optional color bank.
+- `Game::MakeStoneCoords`, `0x005A7A70..0x005A7C51`, builds the complete shared
+  grid and unused gray bank. Both quality modes consume its activation/refresh
+  RNG. A live toggle selects geometry without rebuilding that birth state.
+- `0x00546E49` jumps to the independent Shield shell at
+  `0x00547FC6..0x0054812D`, after the two composites. It uses Clothes record2
+  through singleton `+0x1C0`, not the unrelated BadGuys record49. The material
+  bit precedes Harden, Planewalker and Webbed branches;
+  dead/dying body presentation and ground/shadow ownership remain separate.
+- `0x0053B1E5` returns from the complete selected-element/Damage x4 helper
+  while the Stone body flag `0x00819E5D` is set. `0x00546E44` then calls it
+  once, after the material and outside the body translation. Staff uses its
+  virtual point1; Wand uses the three authored Clothes796 pose rows with
+  factor float32 .6. Neither borrows the ordinary socket-angle copy gate.
+- Bare hands have their own Clothes484/676 depth and point1 program at
+  `0x0053B431..0x0053B66B`, deterministic clock bob and factor float32 .8.
+  The Stone outer call retains that helper's front-depth predicate. The born
+  HandCast1 action consumes one shared gameplay `Integer(4)` at
+  `0x0044B47D..0x0044B48A`; render-time sampling cannot replace it.
+- Its primary action owns the born rate, opening pose, current pose and terminal
+  frame. The class query is rounded at each native float store before the
+  profile multiplier; later updates sample the existing Puppet time scale.
+  Bare Constant begins directly and writes K2 even on a zero-time update.
+  Bare Cast2 has fixed float32 .095 rate and retains its terminal frame.
+  Cast2's pulse marker is0 for Staff and1 for Wand/bare; the positive crossing
+  predicate includes both endpoints, so exact landing and departure can both
+  deliver. The .45 pulse magnitude is unchanged.
+- Enchant Staff remains part of the articulated capture. Its Stone branch
+  bypasses the additive shaft redraw at `0x0057909D`, restores texture RGB at
+  `0x005790A4` for the learned gradient through `0x00579488`, then restores
+  diffuse hand RGB at `0x0057948D`. A global alpha-mask override must respect
+  this bounded texture-color exception.
+
+| Member | Current disposition | Required proof |
+| --- | --- | --- |
+| Modifier activation/refresh, half tint, audio, chips, flash, shared grid and expiry | verified-already-at-parity in Rust simulation | existing current-Stoneskin and material recordings; no simulation change |
+| Full robe/body/head, native or authored weapon/garment diffuse capture and Clothes3 multiply | exact-ported in the isolated Rust candidate; acceptance pending | real native GPU actual WizardView versus independently submitted Stone composition; 168 full compositions have identical pixels |
+| On born grid, Off full quad and On/Off/On without reroll | exact-ported in the isolated Rust candidate; acceptance pending | same 168 cases retain one accepted grid across the live mode sequence |
+| Alive/dead gate, Harden/Planewalker/Webbed precedence, Shield exclusion and one later shell | ported in the isolated Rust candidate; acceptance pending | composed Stone+Harden precedence and independent Shield controls; actual retirement and sibling journeys still required |
+| Staff/Wand selected-element and Damage x4 outside Stone, one untranslated outer helper | ported in the isolated Rust candidate; acceptance pending | composed actual Staff/Wand sockets, high phase and Shield; focused socket-admission, scale and spin regressions |
+| Bare-hand accepted action, helper, body banks and native ordinary callers | ported in the isolated Rust candidate; acceptance pending | six independent action/rate/RNG/marker tests; Website five-field handCast1 import/re-export and 80-tick continuation; full/delta/reconnect state preservation; 192 real GPU depth/socket and 96 hand-bank cases |
+| Enchant shaft/gradient/hands and bounded Stone RGB mode | ported in the isolated Rust candidate; acceptance pending | 24 independent real GPU attachment sequences and one texture-mode restoration case, identical pixels |
+| College courtyard, four private rooms, Tutorial and Boneyard; every participant | forwarded through the canonical Rust owner; acceptance pending | source caller sweep complete; actual both-client scene acceptance remains required |
+| Historical white-outline cause and matched retail pixels | unresolved allegation | current both-client observation and equivalent retail witness; no cosmetic fix claimed |
+
+Before this reopening Rust generated and persisted the correct grid while its
+wizard material consumer handled only Harden and Webbed. The earlier gray
+screenshots therefore do not establish completion of the native Stone painter.
+The candidate now consumes the retained grid and complete two-pass material;
+its 483-case composed native regression passes with zero differing channels.
+The earlier unshielded actual-renderer preimage fails the independently recovered
+Stone composition. This proves a concrete Rust material omission; it does not
+identify the cause of the historical PixiJS outline. No arbitrary perimeter-color
+change is justified by Report125 alone.
+
+Rust gameplay protocol3 requires the authoritative hand record and bare
+secondary pose/terminal state; deployment protocol2 is unchanged. Old saves
+without the optional record remain readable without an opening RNG draw.
+The historical Website secondary fixture is preserved byte-for-byte. Its eight
+equipped clock trajectories and all rank/mana/cooldown/focus fields remain
+covered; only four obsolete bare-clock trajectories and their embedded cooldown
+journey action projections are superseded by the independently recovered native
+rate/status/terminal tests. Existing Staff/Wand cadence is preserved. Their
+broader float-store precision difference remains a follow-up, outside this
+bounded bare-action correction.
+
+Final combined gates and quiet actual browser/native scene acceptance remain
+pending. Required scene checks include activation, refresh, live quality toggle,
+expiry, death, Shield, Harden, Webbed/cocoon, all College rooms/courtyard and
+Boneyard participants. A matched retail witness remains necessary before
+attributing Report125's original outline to a specific pass.
+
 The user now authorizes finishing Enhanced Effects Off. The earlier deferral
 above is historical, not a current acceptance boundary. This reopening begins
 from accepted `d91a3ea8576003c7f991c3e10d7e2a3640f54779` and preserves the
