@@ -22,7 +22,7 @@ import { createGameSnapshotFrame, createGameSnapshotProjection, createReplicated
 import type { GameChatActivity, GameChatChannel, GameOnlinePreferences, GamePlayerCardProfile } from '../protocol/game-chat.ts'
 import { gameChatActivityText } from '../protocol/game-chat.ts'
 import type { GameContentManifest, GameSessionKind, GameplayPauseState, GameplayResumeGraceReason, GameplayResumeGraceState } from '../protocol/game-protocol-contract.ts'
-import { EMPTY_CONTENT_MANIFEST_SHA256, GAMEPLAY_RESUME_GRACE_DURATION_MS, GAME_CONNECTION_TIMEOUT_CLOSE_CODE, GAME_HOST_ENDED_SESSION_CLOSE_CODE, GAME_PROTOCOL_VERSION, GAME_SESSION_REPLACED_CLOSE_CODE, GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from '../protocol/game-protocol-contract.ts'
+import { EMPTY_CONTENT_MANIFEST_SHA256, GAMEPLAY_RESUME_GRACE_DURATION_MS, GAME_CONNECTION_TIMEOUT_CLOSE_CODE, GAME_HOST_ENDED_SESSION_CLOSE_CODE, GAME_PROTOCOL_VERSION, GAME_RECONNECT_LEASE_MS, GAME_RECONNECT_MAX_ATTEMPTS, GAME_SESSION_REPLACED_CLOSE_CODE, GAME_WEBSOCKET_MAX_PAYLOAD_BYTES } from '../protocol/game-protocol-contract.ts'
 import { decodeClientGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import type { PartyAction, PartyActionRejection as ProtocolPartyActionRejection, ServerDisconnectMessage } from '../protocol/game-server-messages.ts'
 import { PARTY_ACTION_REJECTIONS } from '../protocol/game-server-messages.ts'
@@ -91,6 +91,7 @@ export type GameHostAuthentication =
     }
 
 export interface GameHostAdmission {
+  readonly reconnect?: { readonly playerId: string; readonly requestId: string }
   readonly editorTest?: import('./boneyard-catalog.ts').ModBoneyardEntry
   readonly content: MaterializedWebSessionContent
   readonly developerAccess?: boolean
@@ -111,6 +112,7 @@ export interface GameHostObserverAdmission {
 type GameHostRole = 'shared'
 
 interface AuthenticatedGameHostRole {
+  readonly reconnect: GameHostAdmission['reconnect'] | null
   readonly content: MaterializedWebSessionContent | null
   readonly developerAccess: boolean
   readonly leaderboardUserId: number | null
@@ -185,10 +187,12 @@ export interface GameHost {
   close(reason?: GameHostCloseReason): Promise<void>
   hubPlayerCount(): number
   humanPlayerCount(): number
+  recoveringPlayerCount(): number
   hostPlayerId(): string | null
   loadedBoneyard(): LoadedBoneyard | null
   observationTargets(): readonly GameHostObservationTarget[]
   modCatalog(): readonly ModConsumableCatalogEntry[]
+  reserveReconnect(playerId: string, resumeToken: string, userId: number | null, requestId: string): { readonly admission: GameHostAdmission; readonly expiresAt: number } | null
   cancelPartyReservation(reservationId: string): void
   createPartyJoinRequest(input: GameHostPartyJoinRequestInput): GameHostPartyJoinRequestResult
   partyCount(): number
@@ -298,6 +302,7 @@ interface HostGameplayResumeGrace {
 }
 
 interface HostClient {
+  reconnectRequestIds: Set<string>
   saveCheckpointSender: GameSaveCheckpointSender
   acknowledgedSequence: number
   acknowledgedSnapshotSequence: number
@@ -613,6 +618,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   let lastTickLagWarningAt = Number.NEGATIVE_INFINITY
   let nextTickAt = performance.now() + GAME_FIXED_TICK_SECONDS * 1000
   const clients = new Map<WebSocket, HostClient>()
+  const retireConnections = new WeakMap<WebSocket, () => void>()
+  const reconnects = new Map<string, {
+    client: HostClient
+    readonly expiresAt: number
+    requestId: string | null
+    attempts: number
+    admitting: boolean
+    welcomed: boolean
+    rendererReady: boolean
+  }>()
   const playerReferences = new Map<PlayerId, string>()
   const collegeIntroReadyPlayerIds = new Set<PlayerId>()
   const observers = new Map<WebSocket, HostObserver>()
@@ -683,7 +698,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       const client = [...clients.values()].find(candidate => candidate.playerId === playerId)
       if (!client) return { documentBytes: 0, published: false }
       const previousSequence = saveSequences.get(playerId) ?? 0
-      const sequence = publishSaveCheckpointForClient(client, source)
+      const sequence = publishSaveCheckpointForClient(client, source, source === 'reconnected', source === 'reconnected')
       const published = sequence > previousSequence
       return {
         documentBytes: published
@@ -1054,6 +1069,50 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         const authenticated = authenticate(message.credential, options.authentication)
         if (!authenticated) {
           disconnect(socket, 'authentication-failed', 'The session credential is invalid.')
+          return
+        }
+        if (authenticated.reconnect) {
+          const reconnect = reconnects.get(authenticated.reconnect.playerId)
+          if (!reconnect || reconnect.expiresAt <= performance.now()
+            || reconnect.requestId !== authenticated.reconnect.requestId || reconnect.admitting
+            || message.save !== undefined || message.saveIntent !== undefined || message.beginCollegeIntro || message.declineTutorial
+            || message.resumeToken === undefined
+            || !credentialsEqual(message.resumeToken, reconnect.client.resumeToken)) {
+            disconnect(socket, 'authentication-failed', 'That reconnect admission is no longer current.')
+            return
+          }
+          clearTimeout(helloDeadline)
+          pending.delete(socket)
+          const retained = reconnect.client
+          const previous = retained.socket
+          clients.delete(previous)
+          supersededClients.add(previous)
+          cancelWelcome(previous)
+          retained.saveCheckpointSender.close()
+          if (previous.readyState === WebSocket.OPEN) previous.close(1001, 'transport replaced')
+          retained.socket = socket
+          retained.saveCheckpointSender = new GameSaveCheckpointSender(checkpoint => {
+            if (socket.readyState === WebSocket.OPEN) sendGamePayload(socket, encodeGameMessage(checkpoint))
+          })
+          retained.activeInput = createIdlePlayerCharacterInput()
+          retained.queuedInputs.clear()
+          retained.pendingLuaRequestIds.clear()
+          retained.lastReceivedSequence = 0
+          retained.acknowledgedSequence = 0
+          retained.lastModRequestId = 0
+          retained.replicationRecovery = null
+          retained.replicationFlowControl = null
+          retained.reconnectRequestIds.add(authenticated.reconnect.requestId)
+          clients.set(socket, retained)
+          reconnect.admitting = true
+          const snapshot = createGameSnapshot(stateForClient(retained), authorityForPlayer(retained.playerId),
+            hubActivitiesForSnapshot(stateForClient(retained)))
+          const sequence = nextSnapshotSequence++
+          retained.acknowledgedSnapshotSequence = sequence
+          retained.lastSentSnapshotSequence = sequence
+          retained.sentReplicationBaselines = new Map([[sequence, createReplicatedEntityBaseline(snapshot)]])
+          sendClientWelcome(retained, snapshot, sequence)
+          broadcastPartyState()
           return
         }
         if (options.editorTest && (message.save !== undefined || message.resumeToken !== undefined
@@ -1717,6 +1776,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           ?? playerReferences.get(playerId)
           ?? createPlayerReference()
         const joinedClient: HostClient = {
+          reconnectRequestIds: new Set(),
           saveCheckpointSender: new GameSaveCheckpointSender(checkpoint => {
             if (socket.readyState === WebSocket.OPEN) sendGamePayload(socket, encodeGameMessage(checkpoint))
           }),
@@ -1781,7 +1841,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
             hostId: socialHostId,
             localPlayerId: playerId,
             canReceiveCollegeInvitation: () => (
-              clients.get(socket) === joinedClient
+              clients.get(joinedClient.socket) === joinedClient
               && !joinedClient.partyRejoinSlot
               && stateForPlayer(playerId).world.kind === 'hub'
             ),
@@ -1855,60 +1915,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           connectedDetails,
         )
         options.onPlayerCountChanged?.(clients.size)
-        sendWelcomePayload(socket, encodeGameMessage({
-          type: 'server-welcome',
-          cheatsEnabled: joinedClient.cheatsEnabled,
-          developerAccess: joinedClient.developerAccess,
-          protocolVersion: GAME_PROTOCOL_VERSION,
-          playerId,
-          resumeToken,
-          serverTickRate: GAME_TICK_RATE,
-          snapshotRate,
-          sessionKind,
-          kernelParameters: {
-            fixedTickSeconds: GAME_FIXED_TICK_SECONDS,
-            movementAcceleration: PLAYER_CHARACTER_INPUT_ACCELERATION,
-            movementLaneCap: PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
-            movementRetention: PLAYER_CHARACTER_MOVEMENT_RETENTION,
-            movementThresholdSquared: PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
-            playerRadius: PLAYER_CHARACTER_RADIUS,
-          },
-          content: authenticated.content?.manifest ?? content,
-          modAssets: authenticated.content?.assets ?? options.modAssets ?? [],
-          modCatalog: sharedHub ? [] : privateModHost?.content.consumables() ?? [],
-          boneyards: boneyardCatalogForPlayer(playerId).choices,
-          gameplayPause: stagedPartyRejoin
-            ? gameplayPauseForPartyRejoin(stagedPartyRejoin)
-            : gameplayPauseForPlayer(playerId),
-          gameplayResumeGrace: stagedPartyRejoin
-            ? gameplayResumeGraceForPartyRejoin(stagedPartyRejoin)
-            : gameplayResumeGraceForPlayer(playerId),
-          snapshot: welcomeSnapshot,
-          snapshotSequence,
-        }))
-        joinedClient.socialConnection?.activate()
-        sendPreparedModProjection(
-          socket,
-          (stagedPartyRejoin
-            ? partyModRuntimes.get(stagedPartyRejoin.partyId)
-            : modRuntimeScopeForPlayer(playerId))?.runtime ?? privateModHost,
-        )
-        sendPreparedModRuntime(
-          socket,
-          (stagedPartyRejoin
-            ? partyModRuntimes.get(stagedPartyRejoin.partyId)
-            : modRuntimeScopeForPlayer(playerId))?.runtime ?? privateModHost,
-          playerId,
-        )
-        const playerBoneyard = stagedPartyRejoin
-          ? loadedBoneyardForPartyRejoin(stagedPartyRejoin)
-          : loadedBoneyardForPlayer(playerId)
-        if (playerBoneyard) {
-          sendGamePayload(socket, encodeGameMessage({
-            type: 'server-boneyard-loaded',
-            boneyard: playerBoneyard,
-          }))
-        }
+        sendClientWelcome(joinedClient, welcomeSnapshot, snapshotSequence)
         if (replacedClient === null && connectedState.world.kind === 'hub') {
           publishPlayerActivity(joinedClient, 'entered-college')
         }
@@ -1932,6 +1939,13 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         return
       }
 
+      const reconnecting = reconnects.get(client.playerId)
+      if (reconnecting && !reconnecting.admitting) return
+      if (reconnecting) {
+        if (message.type === 'client-ping') reconnecting.welcomed = true
+        if (message.type === 'client-ready-boneyard'
+          && stateForClient(client).run.runId === message.runId) reconnecting.rendererReady = true
+      }
       if (message.type === 'client-deployment-ready') {
         const restart = deploymentRestart
         const checkpointSequence = restart?.checkpointSequences.get(socket)
@@ -3123,7 +3137,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           taintActiveRun(client)
         }
         const completeRequest = (result: Parameters<typeof sendLuaResult>[0]) => {
-          client.pendingLuaRequestIds.delete(message.requestId)
+          if (client.socket === socket) client.pendingLuaRequestIds.delete(message.requestId)
           sendLuaResult(result)
         }
         void ensureLuaRuntime(client.playerId).then((runtime) => {
@@ -3399,8 +3413,9 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
       closeCode: number | null,
       closeReason: string,
       socketError?: Error,
+      terminal = false,
     ) => {
-      if (released) return
+      if (released && !terminal) return
       released = true
       clearTimeout(helloDeadline)
       cancelWelcome(socket)
@@ -3465,6 +3480,18 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         )
         return
       }
+      if (!terminal && !closed && !deploymentRestart && !planned && !options.editorTest
+        && options.authentication.kind === 'tickets' && !client.partyRejoinSlot
+        && (closeCode === 1001 || closeCode === 1006 || closeCode === null)) {
+        beginReconnect(client)
+        const record = reconnects.get(client.playerId)!
+        if (record.admitting) record.requestId = null
+        record.admitting = false
+        record.welcomed = false
+        record.rendererReady = stateForClient(client).world.kind !== 'boneyard'
+        return
+      }
+      reconnects.delete(client.playerId)
       publishPlayerActivity(client, 'left-game')
       closeClientInventoryDyeSession(client)
       client.socialConnection?.close()
@@ -3609,6 +3636,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         scheduleSaveCheckpoint('participant-disconnected')
       }
     }
+    retireConnections.set(socket, () => release(null, '', undefined, true))
     socket.once('close', (code, reason) => release(code, reason.toString()))
     socket.once('error', (error) => release(null, '', error))
   })
@@ -3617,6 +3645,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
   const timer = setInterval(() => {
     if (closed || ticking) return
     const now = performance.now()
+    pollReconnects(now)
     expireGameplayResumeGraces(now)
     if (deploymentRestart) {
       resetNextTickDeadline()
@@ -3629,7 +3658,8 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (
       !sharedWorlds
       && (
-        gameplayPause !== null
+        reconnects.size > 0
+        || gameplayPause !== null
         || gameplayResumeGrace !== null
         || privateNavigationPreparation !== null
       )
@@ -3702,6 +3732,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
           const statesBeforeMods = new Map(
             sharedWorlds.runs.map(run => [run.partyId, run.state]),
           )
+          const reconnectingPartyIds = new Set([...reconnects.values()].flatMap(({ client }) => {
+            const scope = sharedGameplayPauseScope(client.playerId)
+            return scope ? [scope.partyId] : []
+          }))
           const rendererWaitingPartyIds = new Set(sharedWorlds.runs.flatMap(run => (
             partyModRuntimes.has(run.partyId)
             && run.state.run.runId
@@ -3714,7 +3748,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               candidate => candidate.partyId === partyId,
             )
             if (!run) continue
-            if (rendererWaitingPartyIds.has(partyId)) continue
+            if (rendererWaitingPartyIds.has(partyId) || reconnectingPartyIds.has(partyId)) continue
             if (run.state.run.runId && scope.runtime.activeScene(run.state.run.runId)) continue
             if (sharedGameplayPauses.has(partyId) || sharedGameplayResumeGraces.has(partyId)
               || startingPartyIds.has(partyId)) continue
@@ -3753,6 +3787,7 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
               ...startingPartyIds,
               ...modScenePartyIds,
               ...rendererWaitingPartyIds,
+              ...reconnectingPartyIds,
             ]),
             enemySpawnIntents,
             new Map([...partyModRuntimes].map(([partyId, scope]) => [
@@ -6307,6 +6342,117 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     }
   }
 
+  function sendClientWelcome(client: HostClient, welcomeSnapshot: ReturnType<typeof createGameSnapshot>, snapshotSequence: number): void {
+    const socket = client.socket
+    sendWelcomePayload(socket, encodeGameMessage({
+      type: 'server-welcome',
+      cheatsEnabled: client.cheatsEnabled,
+      developerAccess: client.developerAccess,
+      protocolVersion: GAME_PROTOCOL_VERSION,
+      playerId: client.playerId,
+      resumeToken: client.resumeToken,
+      serverTickRate: GAME_TICK_RATE,
+      snapshotRate,
+      sessionKind,
+      kernelParameters: {
+        fixedTickSeconds: GAME_FIXED_TICK_SECONDS,
+        movementAcceleration: PLAYER_CHARACTER_INPUT_ACCELERATION,
+        movementLaneCap: PLAYER_CHARACTER_MOVEMENT_LANE_CAP,
+        movementRetention: PLAYER_CHARACTER_MOVEMENT_RETENTION,
+        movementThresholdSquared: PLAYER_CHARACTER_MOVEMENT_THRESHOLD_SQUARED,
+        playerRadius: PLAYER_CHARACTER_RADIUS,
+      },
+      content: client.content?.manifest ?? content,
+      modAssets: client.content?.assets ?? options.modAssets ?? [],
+      modCatalog: sharedHub ? [] : privateModHost?.content.consumables() ?? [],
+      boneyards: boneyardCatalogForPlayer(client.playerId).choices,
+      gameplayPause: client.partyRejoinSlot
+        ? gameplayPauseForPartyRejoin(client.partyRejoinSlot)
+        : gameplayPauseForPlayer(client.playerId),
+      gameplayResumeGrace: client.partyRejoinSlot
+        ? gameplayResumeGraceForPartyRejoin(client.partyRejoinSlot)
+        : gameplayResumeGraceForPlayer(client.playerId),
+      snapshot: welcomeSnapshot,
+      snapshotSequence,
+    }))
+    client.socialConnection?.activate()
+    sendPreparedModProjection(
+      socket,
+      (client.partyRejoinSlot
+        ? partyModRuntimes.get(client.partyRejoinSlot.partyId)
+        : modRuntimeScopeForPlayer(client.playerId))?.runtime ?? privateModHost,
+    )
+    sendPreparedModRuntime(
+      socket,
+      (client.partyRejoinSlot
+        ? partyModRuntimes.get(client.partyRejoinSlot.partyId)
+        : modRuntimeScopeForPlayer(client.playerId))?.runtime ?? privateModHost,
+      client.playerId,
+    )
+    const playerBoneyard = client.partyRejoinSlot
+      ? loadedBoneyardForPartyRejoin(client.partyRejoinSlot)
+      : loadedBoneyardForPlayer(client.playerId)
+    if (playerBoneyard) {
+      sendGamePayload(socket, encodeGameMessage({
+        type: 'server-boneyard-loaded',
+        boneyard: playerBoneyard,
+      }))
+    }
+  }
+
+  function beginReconnect(client: HostClient): void {
+    if (reconnects.has(client.playerId)) return
+    const active = stateForClient(client)
+    client.activeInput = createIdlePlayerCharacterInput()
+    client.queuedInputs.clear()
+    reconnects.set(client.playerId, {
+      client, expiresAt: performance.now() + GAME_RECONNECT_LEASE_MS,
+      requestId: null, attempts: 0, admitting: false, welcomed: false,
+      rendererReady: active.world.kind !== 'boneyard',
+    })
+    beginRunLoadingResumeGrace(client.playerId, 'game-rejoined',
+      activePartySystem() ? partyForPlayer(activePartySystem()!, client.playerId)?.id ?? null : null)
+    resetNextTickDeadline()
+    logGameServerEvent(options.log, 'game-host', 'warning', 'connection.awaiting_reconnect',
+      'The live wizard is awaiting transport recovery.', logDetails({ playerId: client.playerId, leaseMs: GAME_RECONNECT_LEASE_MS }))
+  }
+
+  function reserveReconnect(playerId: string, resumeToken: string, userId: number | null, requestId: string) {
+    const client = [...clients.values()].find(candidate => candidate.playerId === playerId)
+    if (closed || deploymentRestart || options.editorTest || options.authentication.kind !== 'tickets'
+      || !client?.content || client.partyRejoinSlot || client.leaderboardUserId !== userId
+      || !credentialsEqual(client.resumeToken, resumeToken) || client.reconnectRequestIds.has(requestId)) return null
+    beginReconnect(client)
+    const record = reconnects.get(playerId)!
+    if (record.expiresAt <= performance.now()) return null
+    if (record.requestId !== requestId) {
+      if (record.attempts >= GAME_RECONNECT_MAX_ATTEMPTS) return null
+      record.admitting = false
+      record.welcomed = false
+      record.rendererReady = stateForClient(client).world.kind !== 'boneyard'
+      record.requestId = requestId
+      record.attempts += 1
+    }
+    return { admission: { content: client.content, developerAccess: client.developerAccess,
+      leaderboardUserId: client.leaderboardUserId, reconnect: { playerId, requestId } }, expiresAt: record.expiresAt }
+  }
+
+  function pollReconnects(now: number): void {
+    for (const [playerId, record] of reconnects) {
+      if (now >= record.expiresAt) {
+        reconnects.delete(playerId)
+        disconnectCauses.set(record.client.socket, { reason: 'transport recovery expired', source: 'reconnect-expired' })
+        retireConnections.get(record.client.socket)?.()
+        record.client.socket.close(1000, 'transport recovery expired')
+      } else if (record.admitting && record.welcomed && record.rendererReady) {
+        reconnects.delete(playerId)
+        saveDocuments.delete(playerId)
+        scheduleSaveCheckpointForClient(record.client, 'reconnected')
+        resetNextTickDeadline()
+      }
+    }
+  }
+
   function participantCount(): number {
     return clients.size + bots.size
   }
@@ -6340,6 +6486,16 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     if (closed) throw new Error('game host is closed')
     if (deploymentRestart) throw new Error('game host is already restarting for deployment')
 
+    for (const [playerId, record] of reconnects) {
+      if (record.admitting && record.client.socket.readyState === WebSocket.OPEN) {
+        // A live replacement belongs to the final checkpoint/ACK barrier even if
+        // its renderer has not completed the independent transport lease yet.
+        reconnects.delete(playerId)
+      } else {
+        record.client.socket.close(1012, 'server shutdown')
+        retireConnections.get(record.client.socket)?.()
+      }
+    }
     stopAllClientInputs()
     resetNextTickDeadline()
     const connected = [...clients.values()]
@@ -7588,6 +7744,10 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     async close(reason: GameHostCloseReason = 'server-shutdown') {
       if (closed) return
       closed = true
+      for (const record of [...reconnects.values()]) {
+        record.client.socket.close(1012, 'server shutdown')
+        retireConnections.get(record.client.socket)?.()
+      }
       if (sharedWorlds) {
         for (const run of sharedWorlds.runs) runArchives?.checkpoint(run.state, run.loadedBoneyard)
       } else if (loadedBoneyard) runArchives?.checkpoint(state, loadedBoneyard)
@@ -7633,11 +7793,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     hostPlayerId: () => hostPlayerId,
     hubPlayerCount: () => sharedWorlds?.hub.playerEntities.identities.length
       ?? Number(state.world.kind === 'hub') * clients.size,
-    humanPlayerCount: () => clients.size,
+    humanPlayerCount: () => [...clients.values()].filter(client => client.socket.readyState === WebSocket.OPEN
+      && !reconnects.has(client.playerId)).length,
+    recoveringPlayerCount: () => reconnects.size,
     capacityParticipantCount,
     loadedBoneyard: () => loadedBoneyard,
     modCatalog: () => privateModHost?.content.consumables() ?? [],
     observationTargets,
+    reserveReconnect,
     cancelPartyReservation(reservationId) {
       partyJoinReservations.delete(reservationId)
       cancelPartyRejoinReservation(reservationId)
@@ -8063,6 +8226,7 @@ function authenticate(
   if (authentication.kind === 'shared') {
     return credentialsEqual(credential, authentication.credential)
       ? {
+          reconnect: null,
           content: null,
           developerAccess: false,
           leaderboardUserId: authentication.leaderboardUserId ?? null,
@@ -8083,6 +8247,7 @@ function authenticate(
       && (claimed.partyRecoverySeed === undefined || typeof claimed.partyRecoverySeed === 'boolean')
       && validPartyRejoinToken(claimed.partyRejoinToken)
       ? {
+      reconnect: claimed.reconnect ?? null,
       content: claimed.content,
       developerAccess: claimed.developerAccess === true,
       leaderboardUserId: claimed.leaderboardUserId,

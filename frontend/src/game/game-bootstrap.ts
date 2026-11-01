@@ -1,5 +1,6 @@
 import type { GameEndpoint, GameObserverEndpoint } from './engine.ts'
 import './desktop-runtime.ts'
+import { websiteBase, websiteUrl } from '../lib/website-mount.ts'
 
 export type BrowserGameAdmission =
   | { readonly kind: 'global-hub' }
@@ -11,6 +12,43 @@ export type BrowserGameAdmission =
       readonly partyRejoinToken: string | null
       readonly saveDocument: string
     }
+
+/** Replace transport only: the selected authority and account are already admitted. */
+export async function reconnectBrowserGame(
+  endpoint: GameEndpoint,
+  identity: { readonly playerId: string; readonly resumeToken: string; readonly requestId: string },
+  token: string | null,
+  signal: AbortSignal,
+  request: typeof fetch = fetch,
+): Promise<GameEndpoint> {
+  if (endpoint.kind !== 'remote') throw new Error('Only hosted games can restore their transport.')
+  const original = new URL(endpoint.url)
+  const originalPath = websiteBase && original.pathname.startsWith(`${websiteBase}/`)
+    ? original.pathname.slice(websiteBase.length) : original.pathname
+  const sessionId = endpoint.sessionKind === 'global-hub' ? null
+    : /^\/game-sessions\/([A-Za-z0-9_-]{32})$/.exec(originalPath)?.[1]
+  if (sessionId === undefined || endpoint.sessionKind === 'global-hub' && originalPath !== '/game-hub') {
+    throw new Error('The original game endpoint is invalid.')
+  }
+  const headers = new Headers({ accept: 'application/json', 'content-type': 'application/json',
+    'x-solomon-dark-session': 'reconnect' })
+  if (token) headers.set('authorization', `Bearer ${token}`)
+  const response = await request(websiteUrl('/api/game/reconnect'), { method: 'POST', credentials: 'same-origin',
+    signal, headers, body: JSON.stringify({ ...identity, sessionId }) })
+  const payload = await readJson(response)
+  if (!response.ok) throw new Error(apiError(payload, 'The original game connection could not be restored.'))
+  const replacement = decodeProvisionedGameEndpoint(payload)
+  const replacementUrl = new URL(replacement.url)
+  if (websiteBase && original.pathname !== originalPath && replacementUrl.origin === original.origin
+    && replacementUrl.pathname === originalPath) {
+    replacementUrl.pathname = websiteUrl(originalPath)
+    replacement.url = replacementUrl.toString()
+  }
+  if (replacement.url !== endpoint.url || replacement.sessionKind !== endpoint.sessionKind) {
+    throw new Error('The reconnect admission selected a different game authority.')
+  }
+  return replacement
+}
 
 export async function admitBrowserGame(
   admission: BrowserGameAdmission,

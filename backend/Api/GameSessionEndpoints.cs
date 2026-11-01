@@ -36,9 +36,40 @@ public static class GameSessionEndpoints
             .RequireRateLimiting("party-join-status");
         sessions.MapPost("/join/admit", AdmitPartyJoinAsync)
             .RequireRateLimiting("party-joins");
+        sessions.MapPost("/reconnect", ReconnectAsync)
+            .RequireRateLimiting("game-sessions");
         sessions.MapPost("/rejoin", RejoinPartyAsync)
             .RequireRateLimiting("party-joins")
             .WithMetadata(new RequestSizeLimitAttribute(WebGameSaveInspector.MaxRequestBytes));
+    }
+
+    private static async Task<IResult> ReconnectAsync(
+        ReconnectRequest request,
+        HttpContext context,
+        GameSessionProvisioner provisioner,
+        CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!HeaderMatches(context, "reconnect"))
+        {
+            return ApiErrors.BadRequest("The reconnect request is invalid.");
+        }
+        try
+        {
+            var endpoint = await provisioner.ReconnectAsync(request.SessionId, request.PlayerId,
+                request.ResumeToken, request.RequestId, TokenService.GetUserId(context.User), cancellationToken);
+            return Results.Ok(new { kind = "remote", endpoint.Url, endpoint.Credential, endpoint.SessionKind });
+        }
+        catch (GamePartyJoinException exception)
+        {
+            return Results.Json(new { error = exception.Message }, statusCode:
+                exception.StatusCode is 400 or 403 or 404 or 409 or 429 ? exception.StatusCode : 503);
+        }
+        catch (Exception exception) when (exception is
+            GameSessionUnavailableException or HttpRequestException or OperationCanceledException)
+        {
+            return Results.Json(new { error = "The original game connection could not be restored." }, statusCode: 503);
+        }
     }
 
     private static async ValueTask<object?> RequireReadyPublicationAsync(
@@ -560,6 +591,7 @@ public static class GameSessionEndpoints
         string? DisplayName,
         string? RequesterId);
     public sealed record AdmitPartyJoinRequest(string? IntentId);
+    public sealed record ReconnectRequest(string? SessionId, string? PlayerId, string? ResumeToken, string? RequestId);
     public sealed record RejoinPartyRequest(string? Token, string? Save);
     public sealed record ObserveMatchRequest(string? MatchId);
 }

@@ -20,6 +20,7 @@ export interface GameTransport {
 export function connectWebSocketTransport(
   url: string,
   diagnostics?: GameClientDiagnostics,
+  signal?: AbortSignal,
 ): Promise<GameTransport> {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(url)
@@ -37,6 +38,14 @@ export function connectWebSocketTransport(
       window.clearTimeout(timeout)
       socket.removeEventListener('error', noteError)
       socket.removeEventListener('close', failClosed)
+      signal?.removeEventListener('abort', abort)
+    }
+    const abort = () => {
+      if (settled) return
+      settled = true
+      cleanup()
+      if (socket.readyState < WebSocket.CLOSING) socket.close(1000, 'recovery cancelled')
+      reject(new DOMException('The game connection was cancelled.', 'AbortError'))
     }
     const noteError = () => {
       diagnostics?.warning(
@@ -53,6 +62,8 @@ export function connectWebSocketTransport(
       diagnostics?.error('connection.open_failed', failure.message, failure.technicalDetail)
       reject(failure)
     }
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted) { abort(); return }
     socket.addEventListener('error', noteError, { once: true })
     socket.addEventListener('close', failClosed, { once: true })
     socket.addEventListener('open', () => {

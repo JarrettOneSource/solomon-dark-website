@@ -24,6 +24,36 @@ public sealed partial class GameSessionProvisioner
             "wss");
     }
 
+    public async Task<ProvisionedGameEndpoint> ReconnectAsync(
+        string? sessionId, string? playerId, string? resumeToken, string? requestId,
+        int? leaderboardUserId, CancellationToken cancellationToken)
+    {
+        if ((sessionId is not null && !ReconnectSessionRegex().IsMatch(sessionId))
+            || playerId is null || !ReconnectPlayerRegex().IsMatch(playerId)
+            || resumeToken is null || !ReconnectTokenRegex().IsMatch(resumeToken)
+            || requestId is null || !ReconnectRequestRegex().IsMatch(requestId))
+        {
+            throw new GamePartyJoinException("The reconnect capability is invalid.", 400);
+        }
+        var provisioned = await PostPartyAsync<SupervisorProvisionResponse>("/admin/reconnect",
+            new { sessionId, playerId, resumeToken, requestId, leaderboardUserId },
+            value => sessionId is null
+                ? value.SessionKind == "global-hub" && value.Path == "/game-hub"
+                : value.SessionKind == "private-college" && value.Path == $"/game-sessions/{sessionId}",
+            cancellationToken);
+        return BuildEndpoint(provisioned.Path, provisioned.Credential, provisioned.SessionKind,
+            sessionId is null ? GameHubPath() : GameSessionPath());
+    }
+
+    [GeneratedRegex(@"\A[A-Za-z0-9_-]{32}\z")]
+    private static partial Regex ReconnectSessionRegex();
+    [GeneratedRegex(@"\A[A-Za-z0-9_-]{1,128}\z")]
+    private static partial Regex ReconnectPlayerRegex();
+    [GeneratedRegex(@"\A[A-Za-z0-9_-]{43}\z")]
+    private static partial Regex ReconnectTokenRegex();
+    [GeneratedRegex(@"\A[A-Za-z0-9_-]{32,128}\z")]
+    private static partial Regex ReconnectRequestRegex();
+
     public async Task<ProvisionedGameEndpoint> ProvisionAsync(
         WebSessionContent content,
         int? leaderboardUserId,

@@ -21,16 +21,73 @@ route drift before an admission closes or Caddy reloads. A new Website revision
 can use the ordinary two-authority checkpoint/ACK and publication path. Removing
 the guard would strand PixiJS clients waiting for a different game revision.
 
-This boundary does not coordinate reloads initiated by another application on
-the shared Caddy service. Those reloads can still interrupt both clients.
-Browser admission tickets are single-use; a saved wizard's resume token is
-not a reusable transport ticket. The signed active-run rejoin API validates
-the complete save, account and content before issuing a new admission, and
-can restore an ordinary current-revision checkpoint after a private host has
-retired. That durable recovery contract does not preserve unsaved authority
-state or provide a general automatic Hub/private socket reattach operation.
-Private-host empty-after-use teardown remains unchanged. Report 74's complete
-proxy interruption and deployed induced-1001 acceptance therefore remain open.
+Reloads initiated by another application on the shared Caddy service remain
+outside the game deployment save barrier. Their unexpected `1001`/transport-loss
+path now has a separate retained-authority contract in both maintained clients.
+It does not promise an uninterrupted socket or treat a proxy close as a saved
+restart. An unannounced `1012` says that the game is updating without claiming
+that a final save was accepted; announced deployments retain their existing
+checkpoint, storage ACK, publication and reload owner.
+
+### Retained authority after an unexpected proxy close
+
+After a playable hosted Welcome, an unplanned `1001` or abnormal transport loss
+starts one absolute **30-second monotonic lease** on the existing participant.
+An authenticated replacement request can start the same lease before the old
+Close arrives. Reservations, HTTP redelivery and partial Welcome progress cannot
+renew it. Thirty seconds is an explicit operational policy, longer than the
+ordinary open/progress intervals but shorter than an unclaimed admission's
+120-second lifetime; large valid Welcome and actual renderer readiness must fit
+it on M2. The client allows at most two attempts, with one bounded one-second
+pause before the second. This is a transport operation, not ordinary saved-run
+rejoin or fresh provisioning.
+
+`game-host.ts` and Rust `hosted/reconnect.rs` keep their canonical actor, current
+world, party, accepted actions, RNG, transient effects, mod scope, bots and save
+sequence. They neutralize stale input and hold the affected private/party world
+through its existing renderer/loading controls. An unrelated shared Hub continues.
+Recovering participants retain capacity, separately from connected human counts;
+private empty-after-use retirement waits for the lease. Late input, Lua callbacks
+and Close events from an old transport cannot mutate the replacement generation.
+Expiry retires the record through normal cleanup exactly once. An open
+replacement awaiting renderer readiness enters deployment's existing final
+checkpoint/storage ACK barrier; a truly absent peer cannot acknowledge storage.
+
+The shared Website `POST /api/game/reconnect` operation accepts only a logical
+Hub/private selector, player ID, resume capability and request ID. It supplies
+the current account ID from the existing JWT owner. The configured supervisor
+resolves only its still-live authority, checks the original anonymous/signed-in
+binding and capability, and issues a fresh one-use ticket bound to that record,
+request and generation. The old ticket stays consumed; redelivery returns the
+same outstanding ticket and replay cannot create another actor. Browser content,
+permissions, profiles, saves and arbitrary endpoint URLs cannot select or replace
+authority state. Root PixiJS and `/game-rust` admission/storage owners stay separate.
+
+The browser keeps its logical session and existing serialized save coordinator,
+shows `Reconnecting…`, retains the last frame and stops input/prediction. A fresh
+ordinary Hello carries only the new ticket and retained resume capability; it
+imports no saved document or New Game intent. Full Welcome reseeds transport
+replication and input lanes from the same actor, without replaying commands whose
+ACK may have been lost. Accepted Welcome plus actual renderer readiness finishes
+the transport lease and requests a complete current checkpoint with the same
+monotonic save owner. A partial old checkpoint is discarded. Existing skill
+selection, pause and gameplay resume controls can remain held after transport
+recovery; Report103 still requires actual solo readiness without a multiplayer
+countdown.
+
+Explicit Leave/destruction, account change, observer/editor/standalone sessions,
+authentication/protocol failure, server-ended/retired authority, and announced
+deployment do not enter automatic recovery. A replaced/dead host, unavailable
+browser or expired lease reports failure and preserves the previous durable save;
+it never silently imports that save or provisions another game. Durable active-run
+rejoin remains an explicit, separately validated operation and may restore only
+its last completed checkpoint, which can lag accepted live state.
+
+Focused public HTTP/WebSocket/client regressions cover the causal path. Report74
+acceptance additionally requires exact integrated M2 builds and actual local
+Caddy-reload browser journeys for both maintained clients, including accepted
+state ahead of durable storage and a large valid Welcome. Source checks alone do
+not establish those journeys or installed production behavior.
 
 ## 2026-09-22 — Report 11: lazy-module failure recovery reopened
 
