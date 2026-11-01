@@ -184,6 +184,37 @@ test('prepared shop purchases dispatch profile rules after the atomic grant', as
   }
 })
 
+test('an admitted mod skill preserves its authored random Boast on the next queued offer', async () => {
+  const content = await materialized(SCRIPT.replace('stock_icon = 6,',
+    'stock_icon = 6, random_skill_choices = true,'))
+  let state = createGameSimulation({ wizard: {
+    discipline: 'arcane', displayName: 'Tester', element: 'ether',
+  } })
+  const host = await prepareModHost({
+    content, state: { read: () => state, write: candidate => { state = candidate } }, wasmPath,
+  })
+  try {
+    state = applyGameSimulationHubAction(state, 'wizard', {
+      boastId: host.content.boasts()[0]!.selection, type: 'select-boast',
+    }, host.extensions).state
+    state = grantGameSimulationPlayerExperience(state, 'wizard', 801, host.extensions.resolveBoast)
+    const offer = getPlayerProgression(state, 'wizard').pendingOffer
+    assert.ok(offer)
+    assert.notEqual(offer.automaticChoiceIndex, undefined)
+    host.step([{ name: 'level.up', payload: {
+      level: getPlayerProgression(state, 'wizard').level, player_id: 'wizard',
+    } }], state.tick, 'profile')
+    const skill = host.content.skills()[0]!
+    const modOffer = host.checkpoint().skills.offers[0]!
+    host.chooseSkill('wizard', skill.contentId, modOffer.sequence, offer.sequence)
+    assert.equal(host.checkpoint().skills.ranks[0]?.rank, 1)
+    const next = getPlayerProgression(state, 'wizard').pendingOffer
+    assert.ok(next)
+    assert.notEqual(next.automaticChoiceIndex, undefined)
+    assert.notEqual(next.sequence, offer.sequence)
+  } finally { host.close() }
+})
+
 test('prepared host consumes a 1.0 potion atomically and owns status filters and expiry', async () => {
   const content = await materialized()
   let state = createGameSimulation({
@@ -371,7 +402,7 @@ test('an authored damage intent propagates one accepted rescue through the share
   } finally { host.close() }
 })
 
-async function materialized(): Promise<MaterializedWebSessionContent> {
+async function materialized(source = SCRIPT): Promise<MaterializedWebSessionContent> {
   const runtime = await WebLuaDefinitionRuntime.create({
     entryScript: 'scripts/main.lua',
     identity,
@@ -379,7 +410,7 @@ async function materialized(): Promise<MaterializedWebSessionContent> {
   })
   const compiled = (() => {
     try {
-      return compileWebLuaDefinition(identity, runtime.run(SCRIPT))
+      return compileWebLuaDefinition(identity, runtime.run(source))
     } finally {
       runtime.close()
     }
@@ -402,7 +433,7 @@ async function materialized(): Promise<MaterializedWebSessionContent> {
       mods: [{ contentSha256: '2'.repeat(64), id: identity.id, version: identity.version }],
     },
     modSources: [{
-      entryScript: SCRIPT,
+      entryScript: source,
       files: { 'art/icon.png': bytes },
       identity,
     }],

@@ -1,4 +1,5 @@
 import type { PlayerCharacterInput } from '../core-kernels/player-character.ts'
+import type { BoastResolver } from '../core-kernels/boast.ts'
 import { NATIVE_SKILL_CATALOG, nativeSkillCategory } from '../core-kernels/player-progression.ts'
 import {
   getPlayerBelt, getPlayerCharacter, getPlayerProgression, getPlayerSkillBook,
@@ -121,6 +122,7 @@ export function selectModPlayerSkill(
   state: GameSimulationState,
   fields: LuaConsoleObject,
   context: ModIntentExecutionContext,
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState {
   onlyFields(fields, ['choice_index', 'offer_sequence', 'skill_id'])
   const playerId = controlParticipant(state, context)
@@ -128,7 +130,7 @@ export function selectModPlayerSkill(
     choiceIndex: integer(fields.choice_index, 'choice_index'),
     offerSequence: integer(fields.offer_sequence, 'offer_sequence'),
     skillId: integer(fields.skill_id, 'skill_id'),
-  })
+  }, resolveModBoast)
   if (!selected) throw new Error('Lua skill choice does not match the current player offer')
   return selected
 }

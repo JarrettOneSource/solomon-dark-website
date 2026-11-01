@@ -674,7 +674,7 @@ export function selectDetachedGameSimulationPlayerSkill(
     null,
     resolveModBoast,
   )
-  const selected = selectGameSimulationPlayerSkill(staged, detached.playerId, selection)
+  const selected = selectGameSimulationPlayerSkill(staged, detached.playerId, selection, resolveModBoast)
   return selected === null
     ? null
     : commitDetachedGameSimulationPlayerTransaction(target, selected, detached.playerId)
@@ -1854,6 +1854,7 @@ export function selectGameSimulationPlayerSkill(
   state: GameSimulationState,
   playerId: PlayerId,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState | null {
   const applied = applyPlayerEntitySkillChoice(
     state.playerEntities,
@@ -1862,22 +1863,23 @@ export function selectGameSimulationPlayerSkill(
     state.gameRng,
   )
   if (!applied) return null
+  const automatic = assignAutomaticSkillChoices(applied.store, [playerId], applied.rng, resolveModBoast)
   const barrier = state.levelUpBarrier
   if (barrier === null || !barrier.participantIds.includes(playerId)) {
     return {
       ...state,
-      gameRng: applied.rng,
-      playerEntities: applied.store,
+      gameRng: automatic.rng,
+      playerEntities: automatic.store,
     }
   }
-  const pendingPlayerIds = pendingOfferPlayerIds(applied.store, barrier.participantIds)
+  const pendingPlayerIds = pendingOfferPlayerIds(automatic.store, barrier.participantIds)
   return {
     ...state,
-    gameRng: applied.rng,
+    gameRng: automatic.rng,
     levelUpBarrier: pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities: applied.store,
+    playerEntities: automatic.store,
   }
 }
 
@@ -1885,6 +1887,7 @@ export function replaceGameSimulationPlayerSkillWithMod(
   state: GameSimulationState,
   playerId: PlayerId,
   offerSequence: number,
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState | null {
   const applied = replacePlayerEntitySkillChoiceWithMod(
     state.playerEntities,
@@ -1893,17 +1896,18 @@ export function replaceGameSimulationPlayerSkillWithMod(
     state.gameRng,
   )
   if (!applied) return null
+  const automatic = assignAutomaticSkillChoices(applied.store, [playerId], applied.rng, resolveModBoast)
   const barrier = state.levelUpBarrier
   const pendingPlayerIds = barrier === null
     ? []
-    : pendingOfferPlayerIds(applied.store, barrier.participantIds)
+    : pendingOfferPlayerIds(automatic.store, barrier.participantIds)
   return {
     ...state,
-    gameRng: applied.rng,
+    gameRng: automatic.rng,
     levelUpBarrier: barrier === null || pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities: applied.store,
+    playerEntities: automatic.store,
   }
 }
 

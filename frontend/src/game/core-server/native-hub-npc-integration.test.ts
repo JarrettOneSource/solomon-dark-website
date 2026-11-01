@@ -14,15 +14,21 @@ import {
   type BoastSelection,
 } from '../core-kernels/boast.ts'
 import { nativeSkillCategory } from '../core-kernels/player-progression.ts'
+import { drawNativeInteger } from '../core-kernels/native-rng.ts'
 import {
   applyGameSimulationHubAction,
   createGameSimulation,
+  detachGameSimulationPlayer,
   enterBoneyardWorld,
   getPlayerBelt,
   getPlayerEconomy,
   getPlayerProgression,
   getPlayerSkillBook,
   grantGameSimulationPlayerExperience,
+  removePlayerCharacter,
+  replaceGameSimulationPlayerSkillWithMod,
+  selectDetachedGameSimulationPlayerSkill,
+  selectGameSimulationPlayerSkill,
   stepGameSimulationTick,
   type GameSimulationState,
   type GameSimulationExtensions,
@@ -116,7 +122,7 @@ const MOD_BOAST_SELECTION = createModBoastSelection(
   'example.boasts',
 )
 const MOD_BOAST: BoastDefinition = Object.freeze({
-  failureProducers: Object.freeze(['potion-use']),
+  failureProducers: Object.freeze(['potion-use'] as const),
   instruction: 'Survive through Wave 25.',
   label: 'EMPTY HANDS, FULL GLORY!',
   randomSkillChoices: true,
@@ -266,6 +272,147 @@ test('random-choice Boast writes one host RNG choice onto every new skill offer'
   assert.ok(offer.automaticChoiceIndex !== undefined)
   assert.ok(offer.automaticChoiceIndex >= 0 && offer.automaticChoiceIndex < offer.options.length)
   assert.notDeepEqual(state.gameRng, beforeRng)
+})
+
+for (const selection of [3, MOD_BOAST_SELECTION] as const) {
+  const label = typeof selection === 'number' ? 'stock' : 'authored'
+  const extensions = typeof selection === 'number' ? undefined : MOD_EXTENSIONS
+  const resolve = extensions?.resolveBoast
+
+  test(`${label} random Boast retains automatic choices across every bulk-granted level`, () => {
+    let state = selectBoast(createGameSimulation({ [PLAYER_ID]: CHARACTER }, {
+      gameRngSeed: 73,
+    }), selection, extensions)
+    state = grantGameSimulationPlayerExperience(state, PLAYER_ID, 801, resolve)
+    const queued = getPlayerProgression(state, PLAYER_ID).pendingLevels.length
+    assert.ok(queued >= 3)
+    for (let index = 0; index < queued; index += 1) {
+      const offer = getPlayerProgression(state, PLAYER_ID).pendingOffer
+      assert.ok(offer)
+      const choiceIndex = offer.automaticChoiceIndex
+      assert.ok(choiceIndex !== undefined, `queued offer ${index + 1}`)
+      const option = offer.options[choiceIndex]
+      assert.ok(option)
+      const selected = selectGameSimulationPlayerSkill(state, PLAYER_ID, {
+        choiceIndex, offerSequence: offer.sequence, skillId: option.skillId,
+      }, resolve)
+      assert.ok(selected)
+      state = selected
+    }
+    assert.equal(getPlayerProgression(state, PLAYER_ID).pendingOffer, null)
+    assert.deepEqual(getPlayerProgression(state, PLAYER_ID).pendingLevels, [])
+    assert.equal(state.levelUpBarrier, null)
+    assert.deepEqual(getPlayerEconomy(state, PLAYER_ID).npc.boast.selected, selection)
+  })
+
+  test(`${label} random Boast survives admitted mod-skill replacement of queued offers`, () => {
+    let state = selectBoast(createGameSimulation({ [PLAYER_ID]: CHARACTER }), selection, extensions)
+    state = grantGameSimulationPlayerExperience(state, PLAYER_ID, 801, resolve)
+    const queued = getPlayerProgression(state, PLAYER_ID).pendingLevels.length
+    assert.ok(queued >= 3)
+    for (let index = 0; index < queued; index += 1) {
+      const offer = getPlayerProgression(state, PLAYER_ID).pendingOffer
+      assert.ok(offer)
+      assert.notEqual(offer.automaticChoiceIndex, undefined, `queued mod offer ${index + 1}`)
+      const selected = replaceGameSimulationPlayerSkillWithMod(state, PLAYER_ID, offer.sequence, resolve)
+      assert.ok(selected)
+      state = selected
+    }
+    assert.equal(getPlayerProgression(state, PLAYER_ID).pendingOffer, null)
+    assert.equal(state.levelUpBarrier, null)
+  })
+
+  test(`${label} detached random Boast assigns the next choice before committing catch-up`, () => {
+    let state = selectBoast(createGameSimulation({ [PLAYER_ID]: CHARACTER, peer: CHARACTER }), selection, extensions)
+    state = enterBoneyardWorld(state, boneyard())
+    state = grantGameSimulationPlayerExperience(state, PLAYER_ID, 801, resolve)
+    let detached = detachGameSimulationPlayer(state, PLAYER_ID)
+    state = removePlayerCharacter(state, PLAYER_ID)
+    const peer = getPlayerProgression(state, 'peer')
+    const queued = detached.playerEntities.progressions[0]!.pendingLevels.length
+    for (let index = 0; index < queued; index += 1) {
+      const offer = detached.playerEntities.progressions[0]!.pendingOffer
+      assert.ok(offer)
+      const choiceIndex = offer.automaticChoiceIndex
+      assert.ok(choiceIndex !== undefined, `detached offer ${index + 1}`)
+      const selected = selectDetachedGameSimulationPlayerSkill(state, detached, {
+        choiceIndex, offerSequence: offer.sequence,
+        skillId: offer.options[choiceIndex]!.skillId,
+      }, resolve)
+      assert.ok(selected)
+      state = selected.state
+      detached = selected.detached
+    }
+    assert.equal(detached.playerEntities.progressions[0]!.pendingOffer, null)
+    assert.deepEqual(getPlayerProgression(state, 'peer'), peer)
+    assert.deepEqual(state.levelUpBarrier?.pendingPlayerIds, ['peer'])
+  })
+}
+
+test('queued random choices consume one host draw after offer construction and preserve other draws', () => {
+  let manual = createGameSimulation({ [PLAYER_ID]: CHARACTER }, { gameRngSeed: 73 })
+  let automatic = selectBoast(manual, 3)
+  manual = grantGameSimulationPlayerExperience(manual, PLAYER_ID, 801)
+  automatic = grantGameSimulationPlayerExperience(automatic, PLAYER_ID, 801)
+  while (getPlayerProgression(manual, PLAYER_ID).pendingOffer) {
+    const offer = getPlayerProgression(manual, PLAYER_ID).pendingOffer!
+    const draw = drawNativeInteger(manual.gameRng, offer.options.length)
+    manual = { ...manual, gameRng: draw.state }
+    const automaticOffer = getPlayerProgression(automatic, PLAYER_ID).pendingOffer
+    assert.ok(automaticOffer)
+    assert.deepEqual(automaticOffer.options, offer.options)
+    assert.equal(automaticOffer.level, offer.level)
+    assert.equal(automaticOffer.automaticChoiceIndex, draw.value)
+    assert.deepEqual(automatic.gameRng, manual.gameRng)
+    const choice = {
+      choiceIndex: draw.value, offerSequence: offer.sequence, skillId: offer.options[draw.value]!.skillId,
+    }
+    automatic = selectGameSimulationPlayerSkill(automatic, PLAYER_ID, {
+      ...choice, offerSequence: automaticOffer.sequence,
+    })!
+    manual = selectGameSimulationPlayerSkill(manual, PLAYER_ID, choice)!
+  }
+  assert.deepEqual(automatic.gameRng, manual.gameRng)
+  assert.deepEqual(getPlayerSkillBook(automatic, PLAYER_ID), getPlayerSkillBook(manual, PLAYER_ID))
+})
+
+test('nonrandom and failed Boasts keep every queued choice interactive', () => {
+  for (const selection of [null, 0, 1, 2, 4, 3] as const) {
+    let state = createGameSimulation({ [PLAYER_ID]: CHARACTER })
+    if (selection !== null) state = selectBoast(state, selection)
+    if (selection === 3) {
+      const economy = getPlayerEconomy(state, PLAYER_ID)
+      state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, PLAYER_ID, {
+        ...economy, npc: { ...economy.npc, boast: { ...economy.npc.boast, failed: true } },
+      }) }
+    }
+    state = grantGameSimulationPlayerExperience(state, PLAYER_ID, 801)
+    while (getPlayerProgression(state, PLAYER_ID).pendingOffer) {
+      const offer = getPlayerProgression(state, PLAYER_ID).pendingOffer!
+      assert.equal(offer.automaticChoiceIndex, undefined)
+      state = selectGameSimulationPlayerSkill(state, PLAYER_ID, {
+        choiceIndex: 0, offerSequence: offer.sequence, skillId: offer.options[0]!.skillId,
+      })!
+    }
+    assert.equal(state.levelUpBarrier, null)
+  }
+})
+
+test('rejected queued choices leave the offer, barrier, and random stream unchanged', () => {
+  const state = grantGameSimulationPlayerExperience(selectBoast(createGameSimulation({
+    [PLAYER_ID]: CHARACTER,
+  }), 3), PLAYER_ID, 801)
+  const offer = getPlayerProgression(state, PLAYER_ID).pendingOffer!
+  const before = structuredClone({
+    progression: getPlayerProgression(state, PLAYER_ID), rng: state.gameRng, barrier: state.levelUpBarrier,
+  })
+  assert.equal(selectGameSimulationPlayerSkill(state, PLAYER_ID, {
+    choiceIndex: 0, offerSequence: offer.sequence + 1, skillId: offer.options[0]!.skillId,
+  }), null)
+  assert.equal(replaceGameSimulationPlayerSkillWithMod(state, PLAYER_ID, offer.sequence + 1), null)
+  assert.deepEqual({
+    progression: getPlayerProgression(state, PLAYER_ID), rng: state.gameRng, barrier: state.levelUpBarrier,
+  }, before)
 })
 
 test('surviving into Wave 30 succeeds the Boast and the terminal archive applies 1.1 once', () => {

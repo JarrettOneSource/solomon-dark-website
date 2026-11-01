@@ -10,6 +10,7 @@ import {
   createGameSimulation, enterBoneyardWorld, getPlayerCharacter, getPlayerEconomy, getPlayerProgression,
   grantGameSimulationPlayerExperience, stepGameSimulationTick,
 } from '../core-server/game-simulation.ts'
+import { replacePlayerEconomy } from '../core-server/player-entity-store.ts'
 import { compileWebLuaDefinition, WebLuaDefinitionRuntime } from '../modding/definition/index.ts'
 import { prepareModHost } from './prepared-mod-host.ts'
 import { modPlayerControlObservation } from './mod-player-control.ts'
@@ -115,6 +116,37 @@ test('Lua selects a real offered skill while the simulation tick is frozen', asy
     assert.equal(fixture.state.levelUpBarrier, null)
     assert.equal(fixture.state.playerEntities.skillBooks[0]!.permanentRanks[offered.options[0]!.skillId],
       offered.options[0]!.targetRank)
+  } finally { host.close() }
+})
+
+test('Lua native skill acceptance retains the current authored random Boast across a bulk queue', async () => {
+  const fixture = await createFixture(script + `
+sd.boast({key = "random", name = "FATE CHOOSES!", statement = [["Fate chooses my knowledge!"]],
+  response = "Agreed.", instruction = "Accept the offered knowledge.", fail_on = {"potion-use"},
+  random_skill_choices = true, success_wave = 25, score_multiplier = 1.1, stock_icon = 3})
+`)
+  const { host } = fixture
+  try {
+    const economy = getPlayerEconomy(fixture.state, 'wizard')
+    fixture.state = { ...fixture.state, playerEntities: replacePlayerEconomy(
+      fixture.state.playerEntities, 'wizard', {
+        ...economy, npc: { ...economy.npc, boast: {
+          ...economy.npc.boast, selected: host.content.boasts()[0]!.selection,
+        } },
+      },
+    ) }
+    fixture.state = grantGameSimulationPlayerExperience(fixture.state, 'wizard', 801, host.extensions.resolveBoast)
+    const queued = getPlayerProgression(fixture.state, 'wizard').pendingLevels.length
+    assert.ok(queued >= 3)
+    for (let index = 0; index < queued; index += 1) {
+      const offer = getPlayerProgression(fixture.state, 'wizard').pendingOffer
+      assert.ok(offer)
+      assert.notEqual(offer.automaticChoiceIndex, undefined, `Lua offer ${index + 1}`)
+      host.applyPlayerControls(humanInputs(), index * 100)
+    }
+    assert.equal(getPlayerProgression(fixture.state, 'wizard').pendingOffer, null)
+    assert.equal(fixture.state.levelUpBarrier, null)
+    assert.deepEqual(fixture.errors, [])
   } finally { host.close() }
 })
 
