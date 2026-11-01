@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Texture, TextureSource, type Sprite } from 'pixi.js'
+import { DOMAdapter, MeshSimple, Texture, TextureSource, type GlProgram, type Sprite } from 'pixi.js'
 
 import type { NativeEnchantStaffDrawInput } from '../player-enchant-staff-presentation.ts'
 import { PlayerEnchantStaffView } from './player-enchant-staff-view.ts'
@@ -77,6 +77,50 @@ test('rank zero keeps the split ordinary Staff while selectors 2 through 5 stay 
   assert.equal(view.active, true)
   assert.equal(view.auraRecord, null)
   view.destroy()
+})
+
+test('diffuse attachment capture restores the ordinary shaft and borrowed aura shader after failure', (t) => {
+  t.mock.method(DOMAdapter.get(), 'createCanvas', () => ({ getContext: () => null }))
+  const view = new PlayerEnchantStaffView(textures())
+  view.update(input(), true)
+  const additive = view.container.children[1]!
+  const aura = view.container.children[2]!
+  assert.equal(additive.visible, true)
+  const previousShader = 'shader' in aura ? aura.shader : undefined
+  let captureShader: unknown
+  let captureProgram: GlProgram | null = null
+  view.withDiffuseCapture(() => {
+    assert.equal(additive.visible, false)
+    assert.ok('shader' in aura && aura.shader !== previousShader)
+    captureShader = aura.shader
+    assert.ok(aura instanceof MeshSimple)
+    captureProgram = aura.shader!.glProgram
+  })
+  assert.equal(additive.visible, true)
+  assert.ok('shader' in aura && aura.shader === previousShader)
+  assert.throws(() => view.withDiffuseCapture(() => {
+    assert.equal(additive.visible, false)
+    assert.ok('shader' in aura && aura.shader === captureShader, 'the retained texture reuses its owned shader')
+    throw new Error('capture failed')
+  }), /capture failed/)
+  assert.equal(additive.visible, true)
+  assert.ok('shader' in aura && aura.shader === previousShader)
+  view.update(input({ learnedSkills: [] }), true)
+  view.withDiffuseCapture(() => assert.equal(additive.visible, false))
+  const other = new PlayerEnchantStaffView(textures())
+  other.update(input(), true)
+  const otherAura = other.container.children[2]!
+  other.withDiffuseCapture(() => {
+    assert.ok(otherAura instanceof MeshSimple)
+    assert.equal(otherAura.shader!.glProgram, captureProgram)
+  })
+  view.destroy()
+  other.withDiffuseCapture(() => {
+    assert.ok(otherAura instanceof MeshSimple)
+    assert.equal(typeof otherAura.shader!.glProgram!.fragment, 'string')
+  })
+  other.destroy()
+  assert.equal(Texture.EMPTY.destroyed, false)
 })
 
 test('non-Staff, unselected, and nonliving owners hide the retained attachment without stale glow', () => {

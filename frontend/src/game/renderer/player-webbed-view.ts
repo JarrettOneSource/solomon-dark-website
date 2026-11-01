@@ -6,6 +6,7 @@ import { NativePlayerDiffuseCapture } from './native-player-diffuse-capture.ts'
 
 export class PlayerWebbedView {
   readonly container = new Container({ label: 'player-webbed', eventMode: 'none', zIndex: 8 })
+  readonly foreground = new Container({ label: 'player-webbed-cocoon', eventMode: 'none', zIndex: 9.5 })
   private readonly capture: NativePlayerDiffuseCapture
   private readonly composites: Sprite[] = []
   private readonly cocoon: Sprite
@@ -15,12 +16,13 @@ export class PlayerWebbedView {
   constructor(cocoon: Texture, renderer: Pick<Renderer, 'render'>) {
     this.capture = new NativePlayerDiffuseCapture(renderer)
     this.container.visible = false
+    this.foreground.visible = false
     this.cocoon = new Sprite({ texture: cocoon, label: 'player-cocoon', eventMode: 'none' })
     this.hit = new Sprite({ texture: cocoon, label: 'player-cocoon-hit', tint: 0xff0000, eventMode: 'none' })
     for (const sprite of [this.cocoon, this.hit]) {
       sprite.anchor.set(this.record.anchorX / this.record.width, this.record.anchorY / this.record.height)
       sprite.visible = false
-      this.container.addChild(sprite)
+      this.foreground.addChild(sprite)
     }
   }
 
@@ -32,6 +34,7 @@ export class PlayerWebbedView {
     higherPriorityMaterial: boolean,
   ): void {
     this.container.visible = false
+    this.foreground.visible = false
     if (web === undefined || higherPriorityMaterial || player.progression.lifeState === 'dying'
       || player.progression.lifeState === 'spectating') return
     const target = this.capture.render(source, excluded)
@@ -52,6 +55,7 @@ export class PlayerWebbedView {
       this.composites[index].visible = index < web.severity
     }
     this.cocoon.visible = web.severity >= 3
+    this.foreground.visible = this.cocoon.visible
     this.hit.visible = this.cocoon.visible && web.hitPulse > 0
     if (this.cocoon.visible) {
       const tilt = nativeCocoonTilt(player.headingDegrees)
@@ -69,6 +73,7 @@ export class PlayerWebbedView {
 
   destroy(): void {
     this.container.destroy({ children: true })
+    this.foreground.destroy({ children: true })
     this.capture.destroy()
     this.composites.length = 0
   }

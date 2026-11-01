@@ -21,7 +21,7 @@ test('webbing captures the current wizard, adds each admitted layer, and release
     },
   }
   const view = new PlayerWebbedView(Texture.EMPTY, renderer)
-  source.addChild(view.container)
+  source.addChild(view.container, view.foreground)
   const player = createGameSnapshot(createGameSimulation(), 'local-player').players['local-player']!
   view.update(player, undefined, source, [shadow], false)
   assert.equal(captures, 0)
@@ -41,8 +41,8 @@ test('webbing captures the current wizard, adds each admitted layer, and release
   assert.deepEqual(layers.map((layer) => layer.alpha), [1, 0.5, 0])
   const full = applyNativeWebbed(applyNativeWebbed(first, 50), 10)
   view.update({ ...player, headingDegrees: 0, headingIndex: 0 }, { ...full, hitPulse: 0.75 }, source, [shadow], false)
-  const cocoon = view.container.children.find((child) => child.label === 'player-cocoon')!
-  const hit = view.container.children.find((child) => child.label === 'player-cocoon-hit')!
+  const cocoon = view.foreground.children.find((child) => child.label === 'player-cocoon')!
+  const hit = view.foreground.children.find((child) => child.label === 'player-cocoon-hit')!
   assert.ok(cocoon instanceof Sprite)
   assert.ok(hit instanceof Sprite)
   assert.equal(cocoon.visible, true)
@@ -56,6 +56,7 @@ test('webbing captures the current wizard, adds each admitted layer, and release
   const beforePriority = captures
   view.update(player, full, source, [shadow], true)
   assert.equal(view.container.visible, false)
+  assert.equal(view.foreground.visible, false)
   assert.equal(captures, beforePriority)
   view.update({ ...player, progression: { ...player.progression, lifeState: 'dying' } }, full, source, [shadow], false)
   assert.equal(view.container.visible, false)
