@@ -2881,23 +2881,43 @@ extracted field rank/config/art rows remain unchanged.
 | Living caster and party peer | verified-already-at-parity | Flags `0x801`; both clients route force/damage without capture; public center-contact checks also inspect the presentation plan. |
 | Gold and every Sack payload, including positive activation delay | verified-already-at-parity | Flag `0x400`, native delay gate, strict radius 10 and callback 1; existing public payload/delay controls. |
 | Eligible dying player corpse | verified-already-at-parity | Maintenance timer 130 and strict radius 10 call callback 2 once; existing corpse/current-save/terminal controls. A spent Cheat Death rescue remains alive and is not this branch. |
-| Supported Skeleton/Archer/Mage, Zombie and Demon capture images | verified-already-at-parity | Existing private capture bank, replacement and retirement program; image retirement calls 1.5. |
+| Supported Skeleton/Archer/Mage, Zombie and Demon capture images | Rust exact-ported; PixiJS verified-already-at-parity | Existing private capture bank, replacement and retirement program; image retirement calls 1.5. Rust now draws all 180 retained records in the canonical plan. |
 | Unsupported captured enemy images | verified-already-at-parity | Clear the existing private manager; no new capture image or crunch cue. Retiring a previous private child keeps its own callback. |
-| Free and Tree SuckDebris | verified-already-at-parity | Callback .5 still pulses the parent while creating no phase flare; existing private-child/RNG/retirement tests. This disproves the proposed mobs/items/Gold-only restriction. |
+| Free and Tree SuckDebris | Rust exact-ported; PixiJS verified-already-at-parity | Callback .5 still pulses the parent while creating no phase flare; existing private-child/RNG/retirement tests. Rust now draws all three retained variants at their independent world position and rotation. This disproves the proposed mobs/items/Gold-only restriction. |
 | Grounded Bouncers, Hail, secondary chips, Golem fragments and dropped weapons | verified-already-at-parity | Separate world-animation list; strict radius 10 retirement writes pulse 2 without a phase flare. Existing owner/save/retirement tests remain unchanged. |
 | SuckCloud, floating Orb/Bonus and ordinary collection | verified-already-at-parity | Cloud expiry has no callback; Orb/Bonus are outside the field query. Normal pickup/Telekinesis ownership remains separate. |
-| Parent galaxy, shimmer, capture pulse and private draw opacity | verified-already-at-parity | Both plans retain the independent draws and native pulse input; existing parent/captured-image controls. No player-visibility or brightness override. |
+| Parent galaxy, shimmer and capture pulse | verified-already-at-parity | Both plans retain the independent draws and native pulse input; existing parent controls. No player-visibility or brightness override. |
+| Private draw opacity, captured-image descent, rims and clipping | Rust exact-ported; PixiJS verified-already-at-parity | Parent modulation and Anim_Sucked `0x00455370`; the Rust plan now owns image, Demon selection, ordered rims and field-local clipping. |
 | Scale-in, active, scale-out, reset and continuation | verified-already-at-parity | Existing phase/private-owner/current-save tests; the new living-contact check includes save restoration. No new pulse on restore. |
 
 PixiJS retains these owners in `native-ether-drain.ts`,
 `native-secondary-abilities.ts`, `native-ether-drain-world.ts`,
 `boneyard-world-placement.ts`, `game-simulation.ts` and
 `native-secondary-presentation.ts`. The maintained Rust client has equivalent
-simulation/session/presentation owners and an existing public
+simulation/session ownership and an existing public
 `a_living_player_at_the_center_does_not_expand_the_capture_pulse` regression.
-No gameplay, random stream, authored row, sprite, brightness or frozen fixture
-change is justified by this audit. The PixiJS regression closes a missing
-explicit check of the living-contact versus capture distinction.
+Its port retained private animation state but did not consume it in
+`secondary/presentation/plan.rs::ether_drain_draws`; the downstream web view
+has no separate private-child path. Auditing only the living contact and parent
+pulse missed this sibling consumer. The cutover adds every retained
+private debris/image draw to the canonical Rust plan, shares the existing Demon
+atlas, and carries the recovered field-local clip through sprite submission.
+No gameplay, random stream, authored row, brightness or frozen fixture change
+is justified. The PixiJS regression closes a missing explicit check of the
+living-contact versus capture distinction.
+
+Focused M2 validation executes four new PixiJS living caster/peer x quality
+cases and their saved owner continuation; all 50 selected simulation/kernel/
+presentation tests, test TypeScript and focused lint pass. Rust's three new
+public planner tests first execute and fail for missing private draws, then pass
+alongside 12 unchanged Ether Drain/contact/presentation tests. The crop geometry
+test also passes for rotated and mirrored quads. Native and WASM Clippy pass.
+The exact-source native SecondaryView comparison runs 346 cases on Apple M2
+against independent stock-record cropping, with maximum channel difference one
+8-bit level and no failures. All 344 nonempty private cases change pixels from
+the parent-only baseline; the two retired controls do not. Nine original
+actual/reference image pairs are retained and individually reviewed. No frozen
+input was regenerated.
 
 These are source dispositions. Focused checks and final combined game
 acceptance are recorded separately. The exact historical visual cause remains
