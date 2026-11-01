@@ -3,7 +3,7 @@ import test from 'node:test'
 import { build } from 'esbuild'
 
 import { NativeLootMessagePresentation, nativeWorldNotificationsVisible } from './loot-message-presentation.ts'
-import type { BoneyardLootEventSnapshot } from './protocol/game-state.ts'
+import type { BoneyardEnemyEventSnapshot, BoneyardLootEventSnapshot } from './protocol/game-state.ts'
 
 test('empty loot-message samples retain identity across ordinary fixed ticks', () => {
   const presentation = new NativeLootMessagePresentation(0)
@@ -19,6 +19,24 @@ test('notification visibility follows death drive and the combat HUD, not lethal
   assert.equal(nativeWorldNotificationsVisible('spectating'), false)
   assert.equal(nativeWorldNotificationsVisible(null), false)
   assert.equal(nativeWorldNotificationsVisible('alive', false), false)
+})
+
+test('accepted owner charm loss and rescue share the transient combat lane without guessing a charm', () => {
+  const presentation = new NativeLootMessagePresentation(0)
+  const loss: BoneyardEnemyEventSnapshot = {
+    actorId: 0, eventId: 1, runId: 'run', sourcePosition: { x: 0, y: 0 },
+    targetPlayerId: 'owner', tick: 1, type: 'player-charm-lost',
+  }
+  assert.equal(presentation.consumeCombat(loss, 'peer'), false)
+  assert.equal(presentation.consumeCombat({ ...loss, type: 'enemy-spawned' }, 'owner'), false)
+  assert.deepEqual(presentation.sample(1), [])
+  assert.equal(presentation.consumeCombat(loss, 'owner'), true)
+  assert.equal(presentation.consumeCombat({ ...loss, eventId: 2, type: 'player-cheat-death' }, 'owner'), true)
+  assert.deepEqual(presentation.sample(1).map(({ key, text, tint }) => ({ key, text, tint })), [
+    { key: 'combat:1', text: 'CHARM EFFECT LOST!', tint: 0xffffff },
+    { key: 'combat:2', text: 'CHEAT DEATH!', tint: 0xffffff },
+  ])
+  assert.deepEqual(presentation.sample(400), [])
 })
 
 test('native loot messages merge active Gold, rise eighteen ticks, and expire after float32 decay', () => {

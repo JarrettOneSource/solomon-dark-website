@@ -507,11 +507,9 @@ export default function BoneyardScene({
       for (const request of nativePlayerCheatDeathSoundRequests(pointGain)) {
         audio.playSound(request.cue, { playbackRate: request.playbackRate, volume: request.volume })
       }
-      if (event.targetPlayerId === playerId) {
-        lootMessagePresentation.consumeText({ source: 'combat', eventId: event.eventId,
-          tick: event.tick, text: 'CHEAT DEATH!', tint: 0xffffff })
-        setLootMessages(lootMessagePresentation.sample(snapshot.tick))
-      }
+    }
+    if (lootMessagePresentation.consumeCombat(event, playerId)) {
+      setLootMessages(lootMessagePresentation.sample(samplePresentation().tick))
     }
     const sound = nativeEnemyEventSoundRequest(event)
     if (sound || event.stream !== undefined) {
