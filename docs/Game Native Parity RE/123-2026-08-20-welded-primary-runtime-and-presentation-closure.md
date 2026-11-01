@@ -2111,6 +2111,22 @@ All 27 authority/rate/reserve examples pass; the full focused Website invocation
 now passes 341 tests. Scoped TypeScript and changed-test lint also pass. Rust's
 matching matrix is prepared for its queued independent failure-first Cargo run.
 
+
+Both maintained source implementations are now corrected. Rust commit
+`98c2ba6e9906af7771f7c9201745f79022824ab5` preserves the frozen fixture bytes
+and explicitly supersedes only the weak contact permission/clock fields. Its
+unchanged-source run had seven behavioral failures across four targets, including
+real zero-mana enemy HP and the omitted funded rate multiplier. The same tests
+pass after exactly the three runtime owner changes: normal-particle contact,
+Steam debit, and Steam funded emission factor. All 26 focused Rust tests pass,
+including shared receiver/status/lifetime/presentation/audio coverage; focused
+Clippy with warnings denied and changed-file rustfmt also pass. The matching
+Website checks pass 341 tests plus scoped TypeScript/lint. The source portions of
+the pre-port membership rows above are complete; exact combined gates, built and
+installed journeys, and save/reload/live outcomes remain campaign acceptance.
+Original media still lacks authoritative target HP, so these recovered and
+reproduced current defects do not prove the clip's exact historical cause.
+
 ## 2026-11-01 — Report131: EBoulder guidance and flight reopening
 
 The earlier four-rock-ceiling conclusion remains supported. The earlier assertion
