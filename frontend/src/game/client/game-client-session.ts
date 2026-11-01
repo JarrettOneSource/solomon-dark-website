@@ -1684,6 +1684,7 @@ export function connectGameClientSession(
           options.diagnostics?.info('connection.reconnected', 'The live game connection was restored.', `playerId=${welcome.playerId}`)
           return
         } catch (error) {
+          stopPing()
           finalError = error
           if (helloSent) requestId = crypto.randomUUID().replaceAll('-', '')
           recoveryAttempt = null

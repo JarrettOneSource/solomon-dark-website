@@ -241,6 +241,50 @@ test('one absolute recovery deadline cancels pending admission and never provisi
   assert.equal(failures.length, 1)
 })
 
+test('a second recovery Welcome replaces the ping interval and destroy releases every callback', async context => {
+  context.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+  const startInterval = globalThis.setInterval
+  let intervalCallbacks = 0
+  context.mock.method(globalThis, 'setInterval', (...args: Parameters<typeof globalThis.setInterval>) => {
+    const [callback, delay, ...parameters] = args
+    return startInterval(() => { intervalCallbacks += 1; callback(...parameters) }, delay)
+  })
+  const first = new MemoryTransport()
+  const replacements = [new MemoryTransport(), new MemoryTransport()]
+  let attempts = 0
+  const failures: GameConnectionFailure[] = []
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'ticket', transport: first, onFatal: error => failures.push(error),
+    reconnect: async () => ({ credential: 'fresh', transport: replacements[attempts++] }) })
+  const boneyard = loadedBoneyardFixture('ping-owner')
+  const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }), boneyard)
+  const welcome = { ...welcomeMessage(createGameSnapshot(state, 'player-1')), sessionKind: 'private-college' as const }
+  first.receive(encodeGameMessage(welcome))
+  const session = await connecting
+  context.after(() => session.destroy())
+  first.disconnect({ code: 1001, reason: 'proxy reload', wasClean: true })
+  await new Promise(resolve => setImmediate(resolve))
+  replacements[0].receive(encodeGameMessage(welcome))
+  replacements[0].disconnect({ code: 1006, reason: 'lost before renderer readiness', wasClean: false })
+  await new Promise(resolve => setImmediate(resolve))
+  context.mock.timers.tick(1_000)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(attempts, 2)
+  replacements[1].receive(encodeGameMessage(welcome))
+  replacements[1].receive(encodeGameMessage({ type: 'server-boneyard-loaded', boneyard }))
+  session.readyBoneyard(boneyard.runId)
+  await new Promise(resolve => setImmediate(resolve))
+  const previous = replacements[1].sent.filter(payload => decodeClientGameMessage(payload).type === 'client-ping').length
+  context.mock.timers.tick(2_000)
+  const current = replacements[1].sent.filter(payload => decodeClientGameMessage(payload).type === 'client-ping').length
+  assert.equal(current - previous, 1, 'only the current transport owns a ping interval')
+  session.destroy()
+  const afterDestroy = intervalCallbacks
+  context.mock.timers.tick(4_000)
+  assert.equal(intervalCallbacks, afterDestroy, 'destroy releases intervals, including failed replacement attempts')
+  assert.deepEqual(failures, [])
+})
+
 test('a replacement Welcome cannot change the retained admission or wizard', async context => {
   const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
   const original = { ...welcomeMessage(snapshot), sessionKind: 'private-college' as const }
