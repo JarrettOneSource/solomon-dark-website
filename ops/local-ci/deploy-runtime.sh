@@ -211,15 +211,17 @@ current_parallel=0
 if [[ "$current_sha" == "$target_sha" && "$current_parallel" == 1 &&
     "$(sha256sum "$live/game-source-artifact.json" | awk '{print $1}')" == "$expected_game_checksum" &&
     "$(cat /etc/systemd/system/solomon-dark-{game,rust-game,rust-api}.service | sha256sum | awk '{print $1}')" == "$expected_game_unit_checksum" ]] &&
+    cmp --silent "$caddy_candidate" "$caddy_site" &&
     python3 "$stage/Deploy/M5Worker/deployment-publication.py" parallel-ready "$live" "$target_sha" "$target_game_revision"; then
-    install -d -m 0700 "$backup_dir"
-    install_caddy_config
     rm -rf -- "$stage"
-    printf 'Reconciled Caddy for parallel release %s without interrupting games.\n' "$target_sha"
+    printf 'Parallel release %s is already current.\n' "$target_sha"
     exit 0
 fi
 root_changed=1
-if [[ "$current_sha" == "$target_sha" && "$current_parallel" == 1 ]]; then root_changed=0; fi
+# A real shared Caddy reload closes both authorities' upgraded connections.
+# Same-revision legacy PixiJS drains remain rejected by request_game_restart.
+if [[ "$current_sha" == "$target_sha" && "$current_parallel" == 1 ]] &&
+    cmp --silent "$caddy_candidate" "$caddy_site"; then root_changed=0; fi
 publication_tool="$stage/Deploy/M5Worker/deployment-publication.py"
 deployment_sequence="$(python3 "$publication_tool" next "$live/wwwroot/deployment.json")"
 write_deployment_publication "$stage/wwwroot/deployment.json" pending "$target_sha"

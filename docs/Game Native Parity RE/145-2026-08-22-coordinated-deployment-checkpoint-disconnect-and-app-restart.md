@@ -1,5 +1,37 @@
 # 2026-08-22 — Coordinated deployment checkpoint, disconnect, and app restart
 
+## Shared Caddy reload boundary
+
+Report 74's retained diagnostic identifies a Caddy configuration reload, not a
+Solomon or hotbar crash. Website `f87dd326` and the installed site have identical
+game routes without a stream-close delay. A loopback reproduction using the
+installed Caddy version, 2.11.7, preserves six root/Rust/staging hub/private
+WebSockets when the configuration is unchanged, but closes all six with code
+1001 after an unrelated response-header change. A finite stream-close delay
+defers that same close; it does not establish continued game connectivity.
+
+The deployment boundary therefore includes every real Caddy site change.
+Both production authorities must finish the existing saved-restart drain
+before that reload. Byte-identical site content keeps the no-op path; a Rust
+artifact change with identical routes retains the Rust-only cutover.
+
+The restored PixiJS protocol does not advertise publication-aware, same-revision
+restart support. Its existing drain guard must reject same-Website-revision
+route drift before an admission closes or Caddy reloads. A new Website revision
+can use the ordinary two-authority checkpoint/ACK and publication path. Removing
+the guard would strand PixiJS clients waiting for a different game revision.
+
+This boundary does not coordinate reloads initiated by another application on
+the shared Caddy service. Those reloads can still interrupt both clients.
+Browser admission tickets are single-use; a saved wizard's resume token is
+not a reusable transport ticket. The signed active-run rejoin API validates
+the complete save, account and content before issuing a new admission, and
+can restore an ordinary current-revision checkpoint after a private host has
+retired. That durable recovery contract does not preserve unsaved authority
+state or provide a general automatic Hub/private socket reattach operation.
+Private-host empty-after-use teardown remains unchanged. Report 74's complete
+proxy interruption and deployed induced-1001 acceptance therefore remain open.
+
 ## 2026-09-22 — Report 11: lazy-module failure recovery reopened
 
 Evidence recorded before implementation, candidate `e2ca812e8`:
@@ -145,7 +177,7 @@ cutover/rollback, and exact-revision page reload.
 | browser checkpoint storage queue | `GameSaveCoordinator` | `exact-ported` | restart waits for the exact final sequence after all older writes/deletes |
 | coordinated browser disconnect | protocol and client session | `exact-ported` | update-specific signal and close reason do not render the generic failure page |
 | idle Title/Create `/game` tab without a socket | immutable deployment manifest poll | `exact-ported` | target revision change reloads the tab without inventing a game save |
-| Website and game supervisor units | NFO atomic release cutover | `exact-ported` | only `solomon-dark-revived.service` and `solomon-dark-game.service` restart; Caddy reloads gracefully if changed |
+| Website and game supervisor units | NFO parallel atomic release cutover | `exact-ported` | source/route changes drain both authorities; a Rust-only artifact change preserves unchanged PixiJS services and routes; identical Caddy content needs no reload |
 | database/Caddy/runtime rollback | deployment error trap and retained release | `exact-ported` | SQLite backup/integrity and prior release remain authoritative |
 | unresponsive, crashed, or storage-failing browser | browser process/network boundary | `blocked-by-platform` (a dead or nonresponsive browser cannot execute IndexedDB or authenticated HTTP) | bounded grace expires and deployment continues; its last prior owner checkpoint remains resumable if one exists, but a party guest with no prior continuation cannot acquire one after its browser stops responding |
 | desktop-local and native Steam sessions | separate platform shell/runtime | `out-of-system` (the NFO browser deployment does not own those processes) | no desktop/native process command in the worker |
@@ -287,8 +319,8 @@ acknowledge the final exact checkpoint before it is disconnected.
   stages and backs up before drain, restarts only
   `solomon-dark-revived.service` and `solomon-dark-game.service`, recovers a
   drained old service on pre-cutover failure, retains atomic rollback, and no
-  longer branches on active session count. Caddy-only reconciliation remains a
-  graceful reload.
+  longer branches on active session count. The current shared Caddy save
+  boundary is described above.
 - Browser: `GameSaveCoordinator.waitFor(sequence)` exposes the exact cloud or
   IndexedDB result without poisoning later queue work. The page keeps gameplay
   mounted beneath `GameDeploymentUpdate`, displays `Game updating` and the
