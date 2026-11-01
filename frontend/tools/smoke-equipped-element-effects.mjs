@@ -169,7 +169,9 @@ async function exerciseScene(region) {
   await page.waitForFunction(region => {
     const canvas = document.querySelector(`.${region}-world-canvas`)
     const frame = region === 'hub' ? canvas?.__sdrHubFrame : canvas?.__sdrBoneyardFrame
-    return frame?.orbSpriteCount === 0
+    return frame?.playerOrdinaryWeaponVisible === false
+      && frame.playerElementEffectPrimaryId === 8
+      && frame.playerAttachmentPose >= 0 && frame.playerAttachmentPose <= 3
   }, region)
   receipts.push({ region, recipeIndex: null, ...await readFrame(region) })
   equip(13, 8)

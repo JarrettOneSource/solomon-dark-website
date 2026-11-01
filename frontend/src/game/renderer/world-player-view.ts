@@ -18,7 +18,6 @@ import {
   playerCharacterRobeFixedPose,
   playerCharacterStaffIsFront,
   playerDeathEquipmentAppearance,
-  playerEquippedElementEffectScale,
   playerLivingEquipmentAppearance,
 } from '../player-character-presentation.ts'
 import type { ProtocolPlayerState } from '../protocol/game-state.ts'
@@ -65,6 +64,8 @@ export class PlayerWorldView {
   private readonly arena: boolean
   private materialPlayer: ProtocolPlayerState | null = null
   private readonly staffBack: Sprite
+  private readonly damageX4BackBase: PlayerDamageX4VfxView
+  private readonly orbBackBase: NativeElementVfxView
   private readonly damageX4FrontBase: PlayerDamageX4VfxView
   private readonly damageX4FrontOverlay: PlayerDamageX4VfxView
   private readonly orbFrontBase: NativeElementVfxView
@@ -153,6 +154,12 @@ export class PlayerWorldView {
     this.staffFront = actorSprite(playerTextures.staffFront[0][0], 5)
     this.enchantStaff = new PlayerEnchantStaffView(textures.enchantStaff)
     const damageX4Texture = textures.secondary[nativeSecondarySpriteKey('BadGuys', 7)]
+    this.damageX4BackBase = new PlayerDamageX4VfxView(damageX4Texture)
+    this.damageX4BackBase.container.label = 'player-damage-x4-vfx-back-base'
+    this.damageX4BackBase.container.zIndex = .5
+    this.orbBackBase = new NativeElementVfxView(null, textures.elementVfx)
+    this.orbBackBase.container.label = 'native-element-vfx-back-base'
+    this.orbBackBase.container.zIndex = .5
     this.damageX4FrontBase = new PlayerDamageX4VfxView(damageX4Texture)
     this.damageX4FrontBase.container.label = 'player-damage-x4-vfx-front-base'
     this.damageX4FrontBase.container.zIndex = 8.5
@@ -224,12 +231,15 @@ export class PlayerWorldView {
       shieldRecord.anchorY / shieldRecord.height,
     )
     this.magicShield.position.set(0, shield.offsetY)
-    this.magicShield.zIndex = 8
+    // DrawSpecial's shared shell tail follows material and equipment effects.
+    this.magicShield.zIndex = 10
     this.magicShield.blendMode = 'add'
     this.magicShield.eventMode = 'none'
     this.magicShield.visible = false
     this.container.addChild(
       this.staffBack,
+      this.damageX4BackBase.container,
+      this.orbBackBase.container,
       this.enchantStaff.container,
       this.robe,
       this.robeSecondary,
@@ -250,6 +260,7 @@ export class PlayerWorldView {
       this.harden.container,
       this.stoneskin.container,
       this.webbed.container,
+      this.webbed.foreground,
       this.damageX4HardenOverlay.container,
       this.orbHardenOverlay.container,
     )
@@ -267,7 +278,8 @@ export class PlayerWorldView {
     this.statusMaterial = player.progression
     const playerTextures = this.textures.players[player.config.element]
     const elementEffectPhase = player.lighting.overlayEffectPhase
-    const weaponKind = player.economy.equipment.weapon?.equipmentType === 'wand' ? 'wand' : 'staff'
+    const weaponKind = player.economy.equipment.weapon === null ? null
+      : player.economy.equipment.weapon.equipmentType === 'wand' ? 'wand' : 'staff'
     const heading = spriteFrameIndex(
       Math.round(this.resolveHeadingIndex(player, movementFacing)),
       24,
@@ -280,6 +292,7 @@ export class PlayerWorldView {
         ?? ((this.secondaryState?.castSpinTicksRemaining ?? 0) > 0 ? 'spin' : null),
       elementEffectPhase,
       weaponKind,
+      tick,
     )
     this.currentHeadingIndex = heading
     const pose = spriteFrameIndex(plan.robePose, 5)
@@ -351,6 +364,7 @@ export class PlayerWorldView {
     const fallbackAttachmentVisible = plan.unselectedPrimaryAttachment
       || bareAttachmentVisible
     const ordinaryWeaponVisible = !plan.unselectedPrimaryAttachment && hasWeapon
+    const selectedAttachmentVisible = ordinaryWeaponVisible || bareAttachmentVisible
     const ordinaryStaffVisible = !plan.unselectedPrimaryAttachment && hasStaff
     const nativeStaffVisible = ordinaryStaffVisible && !modWeapon
     const unselectedRobeAttachmentVisible = plan.unselectedPrimaryAttachment
@@ -391,17 +405,25 @@ export class PlayerWorldView {
       fallbackAttachmentVisible
       || (ordinaryWeaponVisible && !nativeStaffVisible && modStaffFront !== true)
     )
-    this.orbFrontBase.container.visible = !death.visible
+    const stoneskin = (this.secondaryState?.stoneskinTicksRemaining ?? 0) > 0
+    this.orbBackBase.container.visible = !death.visible && !stoneskin && elementEffectVisible
+      && selectedAttachmentVisible && plan.orbBackBase
+    this.orbFrontBase.container.visible = !death.visible && !stoneskin
       && elementEffectVisible
-      && ordinaryWeaponVisible
+      && selectedAttachmentVisible
       && plan.orbPasses.frontBase
-    this.orbFrontOverlay.container.visible = !death.visible
+    this.orbFrontOverlay.container.visible = !death.visible && !stoneskin
       && elementEffectVisible
-      && ordinaryWeaponVisible
+      && selectedAttachmentVisible
       && plan.orbPasses.frontOverlay
     this.orbHardenOverlay.container.visible = !death.visible && elementEffectVisible
-      && ordinaryWeaponVisible && player.progression.hardenCoating > 0
-      && (this.secondaryState?.stoneskinTicksRemaining ?? 0) <= 0
+      // Each native material branch calls the selected-element helper once
+      // after the composite, at its untranslated equipment socket.
+      && selectedAttachmentVisible && plan.orbSpecialFront
+      && (stoneskin || player.progression.hardenCoating > 0
+        || this.webbedState !== undefined && (this.secondaryState?.planewalkerTicksRemaining ?? 0) <= 0)
+    this.damageX4BackBase.container.visible = this.orbBackBase.container.visible
+      && selectedPrimaryAvailable && player.progression.damageX4TicksRemaining > 0
     this.damageX4HardenOverlay.container.visible = this.orbHardenOverlay.container.visible
       && selectedPrimaryAvailable && player.progression.damageX4TicksRemaining > 0
     this.damageX4FrontBase.container.visible = this.orbFrontBase.container.visible
@@ -411,7 +433,9 @@ export class PlayerWorldView {
       && selectedPrimaryAvailable
       && player.progression.damageX4TicksRemaining > 0
     for (const view of [this.damageX4FrontOverlay, this.orbFrontOverlay]) {
-      view.container.zIndex = plan.orbOverlayAfterHead ? 8.5 : 6
+      // A distinct late index preserves native base-then-overlay order even
+      // after the retained overlay previously sorted into the early pass.
+      view.container.zIndex = plan.orbOverlayAfterHead ? 8.75 : 1.5
     }
     this.robe.visible = !death.visible
     this.robeSecondary.visible = !death.visible && robeHasSecondary
@@ -570,6 +594,8 @@ export class PlayerWorldView {
     this.hitHead.position.set(headOffset.x, headOffset.y)
     this.hitHeadSecondary.position.set(headOffset.x, headOffset.y)
     for (const view of [
+      this.damageX4BackBase,
+      this.orbBackBase,
       this.damageX4FrontBase,
       this.orbFrontBase,
       this.damageX4HardenOverlay,
@@ -583,17 +609,14 @@ export class PlayerWorldView {
         orbOffset.y + attachmentOffset.y,
       )
     }
-    this.currentElementEffectScale = playerEquippedElementEffectScale(
-      player.lighting.overlayEffectPhase,
-      weaponKind,
-    )
+    this.currentElementEffectScale = plan.elementEffectScale
     const selectedPrimaryId = (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0
       ? 80
       : player.primaryCast.selectedPrimaryId
-    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
+    for (const view of [this.damageX4BackBase, this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
       view.update(player.progression.damageX4TicksRemaining, tick, this.currentElementEffectScale)
     }
-    for (const view of [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
+    for (const view of [this.orbBackBase, this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
       view.updateSelectedPrimary(selectedPrimaryId, tick, this.currentElementEffectScale)
     }
     this.applyMaterialTint()
@@ -697,11 +720,13 @@ export class PlayerWorldView {
   }
 
   get damageX4Alpha(): number {
-    return Math.max(this.damageX4FrontBase.alpha, this.damageX4FrontOverlay.alpha, this.damageX4HardenOverlay.alpha)
+    return Math.max(this.damageX4BackBase.alpha, this.damageX4FrontBase.alpha,
+      this.damageX4FrontOverlay.alpha, this.damageX4HardenOverlay.alpha)
   }
 
   get damageX4SpriteCount(): number {
-    return this.damageX4FrontBase.visibleSpriteCount
+    return this.damageX4BackBase.visibleSpriteCount
+      + this.damageX4FrontBase.visibleSpriteCount
       + this.damageX4FrontOverlay.visibleSpriteCount
       + this.damageX4HardenOverlay.visibleSpriteCount
   }
@@ -758,19 +783,27 @@ export class PlayerWorldView {
     if (player === null) return
     const stoneskin = (this.secondaryState?.stoneskinTicksRemaining ?? 0) > 0
     const excluded = [
-      this.harden.container, this.webbed.container,
+      this.harden.container, this.webbed.container, this.webbed.foreground,
       this.stoneskin.container,
       this.orbHardenOverlay.container, this.damageX4HardenOverlay.container,
     ]
-    this.harden.update(player, this.container, excluded, stoneskin)
-    this.stoneskin.update(player, this.container, [...excluded, this.hitOverlay], stoneskin,
-      this.stoneskinWarp, this.enhancedEffects)
-    this.webbed.update(player, this.webbedState, this.container, excluded,
-      stoneskin || player.progression.hardenCoating > 0
-        || (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0,
-    )
-    this.enhancedHit.update(player, this.presentationTick, this.container,
-      [...excluded, this.hitOverlay], this.enhancedEffects, stoneskin, this.complexLighting, this.worldTint)
+    const updateMaterials = () => {
+      this.harden.update(player, this.container, excluded, stoneskin)
+      // Native bit 1 suppresses these independent outputs while capturing the body.
+      const stoneskinExcluded = [...excluded, this.hitOverlay, this.magicShield]
+      this.stoneskin.update(player, this.container, stoneskinExcluded, stoneskin,
+        this.stoneskinWarp, this.enhancedEffects)
+      this.webbed.update(player, this.webbedState, this.container, excluded,
+        stoneskin || player.progression.hardenCoating > 0
+          || (this.secondaryState?.planewalkerTicksRemaining ?? 0) > 0,
+      )
+      this.enhancedHit.update(player, this.presentationTick, this.container,
+        [...excluded, this.hitOverlay], this.enhancedEffects, stoneskin, this.complexLighting, this.worldTint)
+    }
+    if (stoneskin || player.progression.hardenCoating > 0 || this.webbedState !== undefined
+      || (this.enhancedEffects && playerHitOverlayAlpha(player.progression, this.presentationTick) > 0)) {
+      this.enchantStaff.withDiffuseCapture(updateMaterials)
+    } else updateMaterials()
   }
 
   private applyMaterialTint(): void {
@@ -796,7 +829,7 @@ export class PlayerWorldView {
   }
 
   get orbSpriteCount(): number {
-    return [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]
+    return [this.orbBackBase, this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]
       .filter(({ container }) => container.visible)
       .reduce((count, orb) => (
         count + orb.sprites.filter((sprite) => sprite.visible).length
@@ -811,11 +844,11 @@ export class PlayerWorldView {
     this.webbed.destroy()
     this.container.removeChild(this.enchantStaff.container)
     this.enchantStaff.destroy()
-    for (const view of [this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
+    for (const view of [this.damageX4BackBase, this.damageX4FrontBase, this.damageX4FrontOverlay, this.damageX4HardenOverlay]) {
       this.container.removeChild(view.container)
       view.destroy()
     }
-    for (const orb of [this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
+    for (const orb of [this.orbBackBase, this.orbFrontBase, this.orbFrontOverlay, this.orbHardenOverlay]) {
       this.container.removeChild(orb.container)
       orb.destroy()
     }

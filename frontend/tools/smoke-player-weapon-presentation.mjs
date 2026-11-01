@@ -39,8 +39,8 @@ await page.route('**/__weapon-proof', route => route.fulfill({
 try {
   await page.goto(`http://127.0.0.1:${address.port}/__weapon-proof`)
   const receipt = await page.evaluate(async () => {
-    const [fixture, actors, simulation, snapshots, items, secondary, mods, staffProgram] = await Promise.all([
-      import('/tools/player-damage-smoke-fixture.mjs'),
+    const [webgl, actors, simulation, snapshots, items, secondary, mods, staffProgram, boneyard, stone, rng] = await Promise.all([
+      import('/src/game/renderer/game-webgl.ts'),
       import('/src/game/renderer/world-player-view.ts'),
       import('/src/game/core-server/game-simulation.ts'),
       import('/src/game/host/game-snapshot.ts'),
@@ -48,14 +48,16 @@ try {
       import('/src/game/core-kernels/native-secondary-abilities.ts'),
       import('/src/game/renderer/mod-presentation-assets.ts'),
       import('/src/assets/game/player-staff-attachment-program.json'),
+      import('/src/game/renderer/boneyard-textures.ts'),
+      import('/src/game/core-kernels/native-stoneskin.ts'),
+      import('/src/game/core-kernels/native-rng.ts'),
     ])
-    const loaded = await fixture.loadPlayerProofTextures()
+    const loaded = { textures: await boneyard.loadBoneyardWorldTextures(),
+      destroy() { boneyard.destroyBoneyardWorldTextures(this.textures) } }
+    const warp = stone.createNativeStoneskinWarp(rng.createNativeRng(331)).positions
     const modTextures = await mods.loadModPresentationTextures([])
-    const application = new fixture.Application()
-    await application.init({
-      autoStart: false, background: 0x202028, height: 600, width: 900,
-      preference: 'webgl', resolution: 1,
-    })
+    const { application } = await webgl.createGameWebGlApplication({
+      className: 'player-weapon-proof', height: 600, width: 900 })
     document.body.style.margin = '0'
     document.body.append(application.canvas)
     const config = {
@@ -172,9 +174,11 @@ try {
           }
           programReceipts.push({ recipeIndex, selectedPrimaryId, phase, count: view.orbSpriteCount })
           if (selectedPrimaryId !== 8 || phase !== 0) continue
-          view.setStatusEffects({ ...secondary.createNativeSecondaryPlayerState(), stoneskinTicksRemaining: 100 }, 200)
+          view.setStatusEffects({ ...secondary.createNativeSecondaryPlayerState(), stoneskinTicksRemaining: 100 },
+            200, undefined, true, warp)
           view.update(player, 200)
-          if (view.orbHardenOverlay.container.visible) failures.push({ recipeIndex, lifecycle: 'stoneskin' })
+          if (!view.orbHardenOverlay.container.visible || view.orbFrontBase.container.visible
+            || view.orbFrontOverlay.container.visible) failures.push({ recipeIndex, lifecycle: 'stoneskin' })
           view.setStatusEffects({ ...secondary.createNativeSecondaryPlayerState(), planewalkerTicksRemaining: 100 }, 200)
           view.update(player, 200)
           if (view.orbSpriteCount !== 0) failures.push({ recipeIndex, lifecycle: 'planewalker' })
@@ -183,11 +187,16 @@ try {
           if (view.orbSpriteCount === 0) failures.push({ recipeIndex, lifecycle: 'restore' })
           for (const suppressed of [
             { ...player, primaryCast: { ...player.primaryCast, selectedPrimaryId: -1 } },
-            { ...player, economy: { ...player.economy, equipment: { ...player.economy.equipment, weapon: null } } },
             { ...player, progression: { ...player.progression, lifeState: 'dying', deathTick: 153 } },
           ]) {
             view.update(suppressed, 200)
             if (view.orbSpriteCount !== 0 || view.damageX4SpriteCount !== 0) failures.push({ recipeIndex, lifecycle: 'suppressed' })
+          }
+          view.update({ ...player, economy: { ...player.economy,
+            equipment: { ...player.economy.equipment, weapon: null } } }, 200)
+          if (!view.orbHardenOverlay.container.visible || view.elementEffectScale !== Math.fround(.8)
+            || view.staffFront.texture !== loaded.textures.equipment.bareAttachment.front[6][0]) {
+            failures.push({ recipeIndex, lifecycle: 'bare restore' })
           }
           view.update(player, 200, null, false)
           if (view.orbSpriteCount !== 0) failures.push({ recipeIndex, lifecycle: 'scene-suppressed' })

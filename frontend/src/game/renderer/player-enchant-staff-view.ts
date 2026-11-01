@@ -1,4 +1,4 @@
-import { Container, MeshSimple, Sprite } from 'pixi.js'
+import { Container, MeshSimple, Sprite, type Texture } from 'pixi.js'
 
 import {
   nativeEnchantStaffDrawPlan,
@@ -6,6 +6,7 @@ import {
   type NativeEnchantStaffDrawPlan,
 } from '../player-enchant-staff-presentation.ts'
 import { nativePackedColor, setNativeVertexColors } from './native-material-batch.ts'
+import { createNativeTexturedVertexMeshShader } from './native-fixed-function-render-pipeline.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 const QUAD_INDICES = new Uint32Array([0, 1, 2, 1, 2, 3])
@@ -23,6 +24,7 @@ export class PlayerEnchantStaffView {
   private readonly secondaryHand: Sprite
   private readonly textures: PlayerWorldTextures['enchantStaff']
   private currentPlan: NativeEnchantStaffDrawPlan | null = null
+  private readonly captureShaders = new Map<Texture, ReturnType<typeof createNativeTexturedVertexMeshShader>>()
 
   constructor(textures: PlayerWorldTextures['enchantStaff']) {
     this.textures = textures
@@ -37,6 +39,9 @@ export class PlayerEnchantStaffView {
       vertices: this.auraVertices,
     })
     this.aura.autoUpdate = false
+    // Keep this draw standalone when capture swaps its RGB shader. Pixi's
+    // rebuilt instruction list otherwise retains the previous batched route.
+    this.aura.geometry.batchMode = 'no-batch'
     this.aura.blendMode = 'add'
     this.aura.eventMode = 'none'
     // Stryker disable next-line StringLiteral: Equivalent: this scene label has no runtime lookup consumer.
@@ -97,6 +102,7 @@ export class PlayerEnchantStaffView {
     this.aura.visible = true
     this.aura.texture = aura
     this.auraVertices.set(plan.vertices)
+    this.aura.geometry.getBuffer('aPosition').update()
     this.auraVertexColors.set([
       nativePackedColor(plan.tint, plan.nearAlpha),
       nativePackedColor(plan.tint, plan.nearAlpha),
@@ -110,6 +116,27 @@ export class PlayerEnchantStaffView {
     this.bodyAdditive.tint = tint
     this.primaryHand.tint = tint
     this.secondaryHand.tint = tint
+  }
+
+  withDiffuseCapture(render: () => void): void {
+    const additiveVisible = this.bodyAdditive.visible
+    const shader = this.aura.shader
+    this.bodyAdditive.visible = false
+    try {
+      if (this.aura.visible) {
+        let captureShader = this.captureShaders.get(this.aura.texture)
+        if (captureShader === undefined) {
+          captureShader = createNativeTexturedVertexMeshShader(this.aura.texture)
+          this.captureShaders.set(this.aura.texture, captureShader)
+        }
+        // Staff::Draw keeps the textured gradient between diffuse shaft/hands.
+        this.aura.shader = captureShader
+      }
+      render()
+    } finally {
+      this.aura.shader = shader
+      this.bodyAdditive.visible = additiveVisible
+    }
   }
 
   get active(): boolean {
@@ -132,6 +159,8 @@ export class PlayerEnchantStaffView {
     const geometry = this.aura.geometry
     this.container.destroy({ children: true })
     geometry.destroy(true)
+    for (const shader of this.captureShaders.values()) shader.destroy()
+    this.captureShaders.clear()
   }
 }
 

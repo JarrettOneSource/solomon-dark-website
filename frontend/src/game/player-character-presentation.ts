@@ -4,10 +4,15 @@ import type {
 } from './core-kernels/player-character.ts'
 import type { Vector2 } from './core-kernels/vector.ts'
 import type { NativeSecondaryCastAction } from './core-kernels/native-secondary-cast-action.ts'
+import type { NativePlayerHandPose } from './core-kernels/native-player-hand-action.ts'
 import { nativePlayerStaffActionPose } from './core-kernels/native-player-staff-action.ts'
-import { actorHeadingFromVector } from './core-kernels/actor-heading.ts'
 import { primaryCastPresentationPose, primarySpellEmitterOffset, type PrimarySpellTransientState } from './core-kernels/primary-spells.ts'
-import { playerStaffAttachmentOffset, playerWandPrimaryPose, playerWandSpellEmitterOffset, type PlayerStaffAttachmentPose, type PlayerWandAttachmentPose } from './core-kernels/native-player-weapon.ts'
+import { playerStaffAttachmentOffset, playerWandPrimaryPose, playerWandSpellEmitterOffset, type NativePlayerWeaponKind, type PlayerStaffAttachmentPose, type PlayerWandAttachmentPose } from './core-kernels/native-player-weapon.ts'
+import {
+  playerElementEffectCallAngle, playerElementEffectScale, playerHandElementAngleSocket, playerHandElementEffectPlan,
+} from './player-element-effect-presentation.ts'
+
+export { playerElementEffectScale as playerEquippedElementEffectScale } from './player-element-effect-presentation.ts'
 
 export {
   isPlayerModEquipmentAppearance,
@@ -51,13 +56,16 @@ const MELEE_ALT_STAFF_FRONT: readonly boolean[] = [
 export interface PlayerCharacterDrawPlan {
   attachmentPose: PlayerStaffAttachmentPose
   wandAttachmentPose: PlayerWandAttachmentPose
-  bareAttachmentPose: 0 | null
+  bareAttachmentPose: NativePlayerHandPose | null
   fixedRobeOffset: Vector2
   frontAttachmentOffset: Vector2
   headOffset: Vector2
   headingSheetOffsetY: number
   moving: boolean
+  orbBackBase: boolean
   orbPasses: PlayerEquippedOrbPasses
+  orbSpecialFront: boolean
+  elementEffectScale: number
   orbOverlayAfterHead: boolean
   orbOffset: Vector2
   robePose: number
@@ -112,14 +120,15 @@ export function createPlayerCharacterDrawPlan(
   staffActionPose: PlayerStaffAttachmentPose | null = null,
   secondaryCast: NativeSecondaryCastAction | 'spin' | null = null,
   elementEffectPhase = state.primaryCast.weaponPulse,
-  weaponKind: 'staff' | 'wand' = 'staff',
+  weaponKind: NativePlayerWeaponKind = 'staff',
+  tick = 0,
 ): PlayerCharacterDrawPlan {
   const castElement = selectedPrimaryCastElement(
     state.primaryCast.selectedPrimaryId,
     state.config.element,
   )
   const secondaryCastActive = secondaryCast !== null
-  const attachmentPose = secondaryCastActive
+  let attachmentPose: PlayerStaffAttachmentPose = secondaryCastActive
     ? 9
     : staffActionPose ?? primaryCastPresentationPose(state.primaryCast, castElement)
   let wandAttachmentPose: PlayerWandAttachmentPose = playerWandPrimaryPose(
@@ -131,22 +140,25 @@ export function createPlayerCharacterDrawPlan(
     wandAttachmentPose = secondaryCast.progress < 1 ? 1 : 2
   }
   const unselectedPrimaryAttachment = state.primaryCast.selectedPrimaryId === -1
-  const bareAttachmentPose: 0 | null = !unselectedPrimaryAttachment
-    && staffActionPose === null
-    && !secondaryCastActive
-    && state.primaryCast.actionTick < 0
-    && !state.primaryCast.channelActive
-    && !state.primaryCast.oneShotAttackPoseHeld
-    ? 0
-    : null
+  const handPose: NativePlayerHandPose = secondaryCast === 'spin' ? 3
+    : secondaryCast?.weaponKind === null ? secondaryCast.handPose
+      : state.primaryCast.handCast1?.pose
+        ?? (state.primaryCast.channelActive && state.primaryCast.actionTick > 0 ? 2 : 0)
+  const bareAttachmentPose = !unselectedPrimaryAttachment && weaponKind === null ? handPose : null
+  if (weaponKind === null) attachmentPose = handPose
   const staffFront = playerCharacterStaffIsFront(state.headingIndex, attachmentPose)
-  const orbOffset = weaponKind === 'wand'
+  const handEffect = playerHandElementEffectPlan(state.headingIndex, handPose, tick,
+    elementEffectPhase, state.primaryCast.channelActive)
+  const orbOffset = weaponKind === null ? handEffect.offset : weaponKind === 'wand'
     ? playerWandSpellEmitterOffset(state.headingIndex, wandAttachmentPose)
     : playerStaffAttachmentOffset(state.headingIndex, attachmentPose)
   const effectPose = weaponKind === 'wand'
     && secondaryCast !== 'spin' && secondaryCast?.weaponKind !== 'staff'
     ? 14 + wandAttachmentPose
     : attachmentPose
+  const angleSocket = weaponKind === null ? playerHandElementAngleSocket(state.headingIndex) : orbOffset
+  const angle = playerElementEffectCallAngle(angleSocket, weaponKind)
+  const passes = playerCharacterEquippedOrbPasses(angleSocket, effectPose, elementEffectPhase, weaponKind)
   return {
     attachmentPose,
     wandAttachmentPose,
@@ -162,11 +174,15 @@ export function createPlayerCharacterDrawPlan(
     ),
     headingSheetOffsetY: -state.headingIndex * 170,
     moving: Math.hypot(state.velocity.x, state.velocity.y) > 0.01,
-    orbPasses: playerCharacterEquippedOrbPasses(
-      orbOffset,
-      effectPose,
-      elementEffectPhase,
-    ),
+    orbBackBase: weaponKind === null && handEffect.front
+      && (angle <= 90 || angle > 270),
+    orbPasses: {
+      frontBase: passes.frontBase && (weaponKind !== null || handEffect.back),
+      frontOverlay: passes.frontOverlay && (weaponKind !== null || handEffect.back),
+    },
+    orbSpecialFront: weaponKind !== null || handEffect.front,
+    elementEffectScale: weaponKind === null ? handEffect.scale
+      : playerElementEffectScale(elementEffectPhase, weaponKind),
     orbOverlayAfterHead: effectPose === 9
       || elementEffectPhase > NATIVE_PLAYER_ELEMENT_EFFECT_FRONT_PULSE_THRESHOLD,
     orbOffset,
@@ -174,13 +190,6 @@ export function createPlayerCharacterDrawPlan(
     staffFront,
     unselectedPrimaryAttachment,
   }
-}
-
-export function playerEquippedElementEffectScale(
-  effectPhase: number,
-  weaponKind: 'staff' | 'wand' = 'staff',
-): number {
-  return Math.fround((weaponKind === 'wand' ? Math.fround(0.6) : 1) * (1 + 10 * effectPhase))
 }
 
 function selectedPrimaryCastElement(
@@ -204,9 +213,10 @@ export function playerCharacterEquippedOrbPasses(
   socket: Vector2,
   attachmentPose: number,
   elementEffectPhase: number,
+  weaponKind: NativePlayerWeaponKind = 'staff',
 ): PlayerEquippedOrbPasses {
   // PlayerWizard::Render derives this angle from the emitter, not body facing.
-  const headingDegrees = Math.trunc(actorHeadingFromVector(socket.x, socket.y + 20))
+  const headingDegrees = playerElementEffectCallAngle(socket, weaponKind)
   const backAngle = headingDegrees <= 90 || headingDegrees > 270
   return {
     frontBase: attachmentPose !== 9

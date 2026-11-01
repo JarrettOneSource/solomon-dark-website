@@ -196,9 +196,10 @@ built-browser journey on the rebased candidate under the campaign lock.
 Fresh `0x0054BC5B..0x0054BDA1` and `0x0053B830` falsify another shared
 assumption in entry 160: the angular gate is the **socket vector**, not body
 heading. For equipped items it computes integer degrees from
-`atan2(socket.x, -(socket.y+20))`, normalizes negative angles, then truncates.
-The double at `0x007DE920` is exactly 20. All Staff poses and all Wand poses
-must therefore use their authored socket for admission. This corrects the
+`atan2(socket.x, -(socket.y+20))` for Staff, normalizes negative angles, then truncates.
+The double at `0x007DE920` is exactly 20. The later complete recovery below
+corrects this query for Wand and bare hands; their effect emission remains
+at the authored full-XY socket. This corrects the
 same assumption across both equipped families, including the 90/270 edge
 tests. No extra point extraction is needed.
 
@@ -731,3 +732,59 @@ pass must not be removed or retuned. The shared renderer correction and full
 context membership are owned by entry 287. Staff acceptance must cover Ether,
 Fire, Air, Water, Earth, selected-primary changes, Hub, Create, Hub Inventory,
 Memorial portraits, and Boneyard without changing painter data or Staff scale.
+
+
+## Reports 130/135 — complete guarded helper and bare action presentation, 2026-11-01
+
+The complete retail census corrects the earlier query claim above. Helper
+`0x0053B830` returns Staff's virtual point1 with XY. Its Wand/no-item path
+stores point1.x at stack+C and point1.y at stack+10, but the final actor-Y
+addition at `0x0053B9DF` reads stack+C again. Preserve this native X/X
+query: Wand uses its current clamped pose and reference20; bare uses pose0
+and reference10. Actual emitted helper output still uses the full XY socket.
+
+The angle caller stores atan2 to float32, stores degrees after
+`radians*180/nativePI`, wraps negative degrees with a float32 store, then
+truncates. Native PI is 3.141592502593994: literal bytes DA0F4940 at
+`0x007DE8A8`, initialized into `0x00B4027C` by valid instructions
+`0x004100D0..0x004100DC`. Private report125/native-pi-writer.json independently
+verifies the same exact retail executable hash used by ledger083.
+
+| Main call | Native condition | Raw front argument | Transform/order |
+| --- | --- | --- | --- |
+| 0054BDE4 | no item; angle<=90 or >270 | true | untranslated; before body |
+| 0054C09E | K!=9; phase<=float32(.1); back angle | false | attachment translation; after back attachment, before body/head |
+| 0054C7FE | K==9; phase<=float32(.1) | false | attachment translation; after head/hit |
+| 0054C842 | K!=9; 90<=angle<=270 | false | untranslated; after head/hit |
+| 0054C8AE | phase>float32(.1) | false | attachment translation; after the untranslated base |
+
+Staff/Wand have no additional raw-front admission inside `0053B1D0`.
+Bare additionally applies the two-hand authored depth predicate and K2
+channel guard from ledger083. The ordinary calls are suppressed inside a
+Stone capture. Mutually exclusive Stone/Harden/Webbed special calls
+`00546E44/0054734E/00547DE0` each submit exactly one raw-front=true helper
+after their material passes. Webbed's severe cocoon follows that helper,
+then the common independent Magic Shield tail follows the material branch.
+Harden/Webbed retain their captured ordinary helpers and shell.
+
+`player-element-effect-presentation.ts` owns the shared angle/scale and bare
+socket/depth/bob plan. The authored bare program has 96 active rows from
+Clothes banks484 and676; K4 stays the unselected fallback. Body/robe fixed
+poses use accepted HandCast1.pose, secondary handPose, Constant's accepted
+0/1 step bit, and Spin3. Report135 owns action admission, born rate, shared
+RNG, replication and save compatibility. No painter RNG or Staff fallback
+is used to reconstruct bare action state.
+
+The renderer's early helper uses its pre-body position; its late translated
+helper has a distinct index after the base. A composed sequence from low to
+high phase exposed the old equal-index sort retaining overlay before base.
+The complete real-WebGL regression now compares 1,232 ordinary compositions
+exactly against the independent call matrix, plus the 3,696 Stone and 312
+sibling controls in ledger083. Its retained Enchant check independently submits
+diffuse shaft, texture-RGB gradient, then diffuse hands, with no extra additive
+shaft. One attachment crosses all six selectors, ten poses and 24 headings
+(1,440 cases), changing tick/width and comparing exactly. A 478-case preimage
+failure proves the explicit position-buffer upload needed by the standalone
+aura; cross-view destruction retains its shared compiled program. Same-harness preimage red and raw differences
+remain private report130 evidence. Actual integrated scene/native acceptance
+and the campaign gate remain parent-owned before completion marking.
