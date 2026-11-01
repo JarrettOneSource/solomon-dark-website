@@ -11,7 +11,9 @@ import {
 } from './core-kernels/native-belt.ts'
 import { isNativeBeltSkill, NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
 import type { GameSnapshot } from './protocol/game-state.ts'
+import type { ModContentProjection } from './protocol/game-mod-contract.ts'
 import { createSkillBookModelStore } from './skill-book-model-store.ts'
+import { boastProgressPresentation } from './boast-progress-presentation.ts'
 
 const playerId = 'local-player'
 const baseline = createGameSnapshot(createGameSimulation(), null)
@@ -19,9 +21,16 @@ const player = baseline.players[playerId]!
 
 function fixture() {
   let snapshot = baseline
+  let modContent: ModContentProjection | null = null
   const listeners = new Set<() => void>()
+  const modListeners = new Set<(projection: ModContentProjection) => void>()
   const source = {
     getSnapshot: () => snapshot,
+    getModContent: () => modContent,
+    onModContent(listener: (projection: ModContentProjection) => void) {
+      modListeners.add(listener)
+      return () => { modListeners.delete(listener) }
+    },
     onSnapshot(listener: () => void) {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
@@ -30,12 +39,55 @@ function fixture() {
   return {
     source,
     listeners,
+    modListeners,
+    publishContent(next: ModContentProjection) {
+      modContent = next
+      for (const listener of modListeners) listener(next)
+    },
     publish(next: GameSnapshot, notify = true) {
       snapshot = next
       if (notify) for (const listener of listeners) listener()
     },
   }
 }
+
+test('Boast content arriving after the Skills book opens refreshes and unsubscribes with the book', () => {
+  const { source, publishContent, modListeners, listeners } = fixture()
+  const store = createSkillBookModelStore(source, playerId)
+  assert.equal(store.getSnapshot()!.modContent, null)
+  let notifications = 0
+  const unsubscribe = store.subscribe(() => { notifications += 1 })
+  const content: ModContentProjection = {
+    boasts: [], content: [], manifestSha256: '', powerups: [], revision: 1, statuses: [],
+  }
+  const before = store.getSnapshot()
+  publishContent(content)
+  assert.equal(notifications, 1)
+  assert.notEqual(store.getSnapshot(), before)
+  assert.equal(store.getSnapshot()!.modContent, content)
+  assert.equal(store.getSnapshot(), store.getSnapshot(), 'unchanged content retains identity')
+  unsubscribe()
+  assert.equal(modListeners.size, 0)
+  assert.equal(listeners.size, 0)
+})
+
+test('the open Boasts view follows local accepted progress and clears with a replacement selection', () => {
+  const { source, publish } = fixture()
+  const store = createSkillBookModelStore(source, playerId)
+  let revision = player.economy.revision
+  for (const [boast, status] of [
+    [{ ...player.economy.npc.boast, selected: 2, failed: false, succeeded: false }, 'Active'],
+    [{ ...player.economy.npc.boast, selected: 2, failed: false, succeeded: true }, 'Achieved'],
+    [{ ...player.economy.npc.boast, selected: 2, failed: true, succeeded: false }, 'Failed'],
+    [{ ...player.economy.npc.boast, selected: null, failed: false, succeeded: false }, ''],
+  ] as const) {
+    const economy = { ...player.economy, npc: { ...player.economy.npc, boast }, revision: ++revision }
+    publish(withPlayer({ ...player, economy }))
+    const model = store.getSnapshot()!
+    assert.equal(model.economy.npc.boast, boast)
+    assert.equal(boastProgressPresentation(model.economy.npc.boast, model.modContent).status, status)
+  }
+})
 
 function withPlayer(next: typeof player): GameSnapshot {
   return { ...baseline, players: { [playerId]: next } }
