@@ -3,7 +3,7 @@ import {
   type NativeUiAtlasName,
   type NativeUiFontName,
 } from './native-ui-catalog.ts'
-import { NATIVE_UI_BUTTON, nativeUiButtonLabelScale } from './native-ui-button-label.ts'
+import { NATIVE_UI_BUTTON, fitNativeUiButtonLabel } from './native-ui-button-label.ts'
 import {
   layoutNativeUiText,
   wrapNativeUiMsgBoxText,
@@ -511,10 +511,17 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
   const scale = nativeUiButtonScale(spec.scale)
   const labelOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset * scale : 0
   const chrome = planNativeUiButtonChrome(spec)
-  const labelScale = nativeUiButtonLabelScale(
-    spec.label,
-    spec.bounds.width,
-    spec.bounds.height,
+  const label = fitNativeUiButtonLabel(
+    {
+      alpha,
+      font: 'menu',
+      text: spec.label,
+      tint: NATIVE_UI_BUTTON.textTint,
+      x: spec.bounds.left + spec.bounds.width / 2,
+      y: spec.bounds.top + spec.bounds.height / 2 + NATIVE_UI_BUTTON.labelYOffset * scale,
+      ...(scale === 1 ? {} : { scale }),
+    },
+    spec.bounds,
     scale,
   )
   const nodes: NativeUiNode[] = [
@@ -523,14 +530,10 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
       kind: 'text',
       label: `${spec.id}:label`,
       text: {
-        alpha,
-        font: 'menu',
-        text: spec.label,
-        tint: NATIVE_UI_BUTTON.textTint,
-        x: spec.bounds.left + spec.bounds.width / 2 + labelOffset,
+        ...label,
+        x: label.x + labelOffset,
         y: spec.bounds.top + spec.bounds.height / 2
-          + NATIVE_UI_BUTTON.labelYOffset * labelScale + labelOffset,
-        ...(labelScale === 1 ? {} : { scale: labelScale }),
+          + NATIVE_UI_BUTTON.labelYOffset * (label.scale ?? 1) + labelOffset,
       },
     },
   ]

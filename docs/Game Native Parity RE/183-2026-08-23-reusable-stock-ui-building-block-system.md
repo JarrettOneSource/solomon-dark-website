@@ -26,10 +26,13 @@ button scale and the actual glyph ink, including bearings beyond text advances.
 | Party footer `LEAVE COLLEGE`, `LEAVE PARTY`, `CLOSE` on all three tabs | `out-of-system` intentional client layout; shared fit and per-tab regression pass. Real Party DOM and Pixi compositions pass; full game admission remains a release check. |
 | Party row `KICK`, `ACCEPT`, `DENY`, `COPY`, `COPIED`, `GENERATE` at scale 0.55 | `out-of-system` client social controls; use the same fit. Short labels retain their authored scale in regressions and composed review. |
 | Party invitation `ACCEPT` / `DENY`, message actions, SimpleMenu rows, semantic `NativeUiButton` | `out-of-system` adaptive fit over `verified-already-at-parity` chrome; narrow invitation and ordinary/menu/cloud-sized controls have composed review. Existing UI plan tests protect message and SimpleMenu membership. |
+| Raw Hub notice labels `UNFORGE`, `CANCEL`, `OKAY`, and Dowsing button labels | `out-of-system` adaptive fit; the separate Pixi chrome/text path now uses the same text-specification fit. Explicit baselines remain authored. Narrow notice regressions and the actual held-UNFORGE renderer pass at all three viewports. |
+| Rust raw Sack Rename, skill-result, notice and player-panel labels | `out-of-system` adaptive fit; one pure text-specification owner retains independent chrome/font scales and explicit baselines. Short `Boasts`, `CLOTH`, `RENAME SACK` and `OKAY` remain identical in focused regressions. Rust composed release checks remain pending. |
 | Idle, focused, pressed, selected, disabled; translated/scaled viewports | `out-of-system` adaptive fit; one label size reserves press motion before state selection. Regressions cover every state at 0.55, 1 and 1.6 scales, retaining hit/chrome geometry. |
 | DOM and Pixi adapters | `verified-already-at-parity` plan consumption; both render the fitted text at 1600x900, 1423x1242 and 844x390. No adapter or CSS correction is needed. |
 | `UI.54` alpha membership and Fonts group 3 ink metrics | `verified-already-at-parity` source assets; all 85 cap-row edges match the original atlas in both repositories. Rust's cropped corner has identical decoded RGBA. |
 | Stone, tab, shaped-text, image-label controls; membership, protocol, saves | `out-of-system` of the stock menu-font/button fit; unchanged. |
+| Isolated editor authoring-shelf button implementation | `out-of-system` of the game runtime. Its six retained button cases (130-unit DELETE in five states and 190-unit NEW BONEYARD) already fit at the authored 0.55 scale. Audit makes no game dependency or editor change. |
 
 The current report campaign owns the focused receipts and remaining full game,
 Rust composed and installed journeys. The bounded composition uses actual React

@@ -1,4 +1,5 @@
 export * from './native-ui-catalog.ts'
+export { fitNativeUiButtonLabel } from './native-ui-button-label.ts'
 export * from './native-ui-notebox.ts'
 export * from './native-ui-plan.ts'
 export * from './native-ui-swipe-box.ts'

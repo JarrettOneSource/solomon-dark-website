@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { nativeUiRect, planNativeUiButton } from './native-ui-plan.ts'
+import { fitNativeUiButtonLabel } from './core.ts'
 import { planNativeUiPartyMenu } from './native-ui-party-menu.ts'
 import { layoutNativeUiText, nativeUiGlyphInkBounds } from './native-ui-text.ts'
 
@@ -83,5 +84,35 @@ test('every Party tab uses the fitted footer while its row controls retain their
         ? ['ACCEPT', 'DENY', 'KICK']
         : selectedTab === 'settings' ? ['COPY', 'GENERATE'] : [])
     }
+  }
+})
+
+test('raw notice labels fit narrow stock buttons while retaining explicit baselines', () => {
+  const bounds = nativeUiRect(0, 0, 197, 69)
+  for (const text of ['UNFORGE', 'CANCEL', 'OKAY']) {
+    const original = { font: 'menu' as const, text, x: 98.5, y: 45 }
+    const fitted = fitNativeUiButtonLabel(original, bounds, 1)
+    assert.equal(fitted.x, original.x)
+    assert.equal(fitted.y, original.y)
+    if (text === 'OKAY') assert.deepEqual(fitted, original)
+    else assert.ok((fitted.scale ?? 1) < 1, text)
+    for (const press of [0, 6]) {
+      for (const glyph of layoutNativeUiText({ ...fitted, x: fitted.x + press, y: fitted.y + press }).glyphs) {
+        const ink = nativeUiGlyphInkBounds(glyph)
+        assert.ok(ink.left >= 45 - 1e-9, `${text} left`)
+        assert.ok(ink.left + ink.width <= 152 + 1e-9, `${text} right`)
+      }
+    }
+  }
+})
+
+test('explicit font scales and baselines survive the fit when compact labels already fit', () => {
+  for (const [text, width, height, scale, baseline] of [
+    ['Boasts', 220, 50, 1, 34],
+    ['CLOTH', 240, 44, 1, 31],
+    ['RENAME SACK', 250, 44, 44 / 69, 42.5 * 44 / 69],
+  ] as const) {
+    const original = { font: 'menu' as const, text, x: width / 2, y: baseline, scale }
+    assert.deepEqual(fitNativeUiButtonLabel(original, nativeUiRect(0, 0, width, height), height / 69), original)
   }
 })
