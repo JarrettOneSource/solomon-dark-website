@@ -5653,7 +5653,14 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
     prunePartyAccess()
     if (!reservationId) return false
     const reservation = partyJoinReservations.get(reservationId)
-    return reservation?.partyId === partyId && reservation.expiresAt > performance.now()
+    if (reservation?.partyId !== partyId || reservation.expiresAt <= performance.now()) return false
+    // The leader may enter combat between ticket preparation and the actual Hello.
+    // An ordinary join cannot add a College actor to an already running party.
+    if (partyTarget(partyId)?.status !== 'hub') {
+      partyJoinReservations.delete(reservationId)
+      return false
+    }
+    return true
   }
 
   function availablePartyMembers(
