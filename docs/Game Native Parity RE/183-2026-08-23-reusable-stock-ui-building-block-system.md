@@ -1,5 +1,42 @@
 # 2026-08-23 — Reusable stock UI building-block system
 
+## Report 140: bounded stock button labels
+
+The Party Members screenshot in report 140 shows `LEAVE COLLEGE` crossing the
+two `UI.54` skulls. The archive does not identify its client or revision. Both
+current implementations supply the owning geometry: a 260-unit footer body carries
+228 units of menu-face text without a content fit. This reopens the reusable
+button's assumption that every caller supplies a label short enough for its art.
+
+Retail owns the `UI.101/.102/.54` art and Fonts group 3 metrics; the Party menu
+and adaptive label fit are intentional client presentation, not a recovered
+retail Party feature. `UI.54` is a 70 by 85 record at atlas `(679,394)`. Its
+nontransparent right edge is measured for every source row, rather than treating
+the whole rectangular end cap as occupied. Source atlas SHA-256:
+`37d5e8fc543af12a9d8019e738dbe1e29b648211144a3782c3a32e71f76cd2eb`.
+
+The shared planner must fit complete label ink between those mirrored edges,
+including the six-unit press motion. It may shrink the label uniformly; it must
+retain text, native chrome, action bounds, and a stable size across button states.
+Short labels retain their authored size. The fit accounts for the supplied
+button scale and the actual glyph ink, including bearings beyond text advances.
+
+| Member | Disposition and acceptance |
+| --- | --- |
+| Party footer `LEAVE COLLEGE`, `LEAVE PARTY`, `CLOSE` on all three tabs | `out-of-system` intentional client layout; shared fit and per-tab regression pass. Real Party DOM and Pixi compositions pass; full game admission remains a release check. |
+| Party row `KICK`, `ACCEPT`, `DENY`, `COPY`, `COPIED`, `GENERATE` at scale 0.55 | `out-of-system` client social controls; use the same fit. Short labels retain their authored scale in regressions and composed review. |
+| Party invitation `ACCEPT` / `DENY`, message actions, SimpleMenu rows, semantic `NativeUiButton` | `out-of-system` adaptive fit over `verified-already-at-parity` chrome; narrow invitation and ordinary/menu/cloud-sized controls have composed review. Existing UI plan tests protect message and SimpleMenu membership. |
+| Idle, focused, pressed, selected, disabled; translated/scaled viewports | `out-of-system` adaptive fit; one label size reserves press motion before state selection. Regressions cover every state at 0.55, 1 and 1.6 scales, retaining hit/chrome geometry. |
+| DOM and Pixi adapters | `verified-already-at-parity` plan consumption; both render the fitted text at 1600x900, 1423x1242 and 844x390. No adapter or CSS correction is needed. |
+| `UI.54` alpha membership and Fonts group 3 ink metrics | `verified-already-at-parity` source assets; all 85 cap-row edges match the original atlas in both repositories. Rust's cropped corner has identical decoded RGBA. |
+| Stone, tab, shaped-text, image-label controls; membership, protocol, saves | `out-of-system` of the stock menu-font/button fit; unchanged. |
+
+The current report campaign owns the focused receipts and remaining full game,
+Rust composed and installed journeys. The bounded composition uses actual React
+Party controls and the Pixi adapter with empty page/console/failed-response arrays;
+it does not exercise game admission. Compact landscape retains the existing small
+fixed-stage projection; no general mobile-readability improvement is established.
+
 ## Reported smell and parity question
 
 - Reported need: inspect the complete stock UI vocabulary and make it reusable
