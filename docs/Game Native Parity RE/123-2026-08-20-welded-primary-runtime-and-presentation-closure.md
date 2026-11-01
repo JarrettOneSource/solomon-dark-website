@@ -1,5 +1,12 @@
 # 2026-08-20 — Welded-primary runtime and presentation closure
 
+> **2026-11-01 correction — report 133:** every earlier assertion in this entry
+> that weak Steam lacks the Steamed contact lane is superseded. The normal
+> particle contact grant tests the caster bank, not the low-mana byte. Weak
+> Steam forces normal particles, halves their direct damage and quarters
+> their alpha; it retains the contact clock and learned Fire payload. The
+> instruction-derived contract and independent regressions are below.
+
 > **2026-10-13 correction — report 118:** the Flame Lash and Steam special-death
 > contracts below are reopened. A live hit supplies a per-damage payload; only
 > an admitted terminal death consumes it. The historical per-tick Steam-burst,
@@ -257,9 +264,9 @@ The same adjacency sweep closes the three channel draw families:
   `5.4*(1+widen*.02)` Normal or `6*(1+widen*.02)` Over speed, weak quarter
   alpha, and birth-time terrain terminal. Tick owns remaining-distance snap,
   `.25` tint loss, `.125` secondary-color loss, and the complete long tail.
-  Normal non-weak particles alone retain `Integer(10)` contact clocks; due
+  Normal particles, including weak particles, retain `Integer(10)` contact clocks; due
   contacts query `scale*50` and install ten-tick Steamed with the particle's
-  stored Fire payload. Over and weak particles own no Steamed contact lane.
+  stored Fire payload. Over particles own no Steamed contact lane; weak normal particles do.
   Positive normal tint draws two additive record-76 copies; after tint reaches
   zero one ordinary copy remains. Over draws one ordinary quarter-alpha copy.
 
@@ -832,7 +839,7 @@ member, color-overlay class, child factory, and non-recursive contact branch.
 | --- | --- | --- | --- |
 | Submitted web capture | player capture above, received 2026-08-30 | A sustained target contact keeps large ordinary Fire stacks resident while the report identifies intolerable repeated audio. | high-web |
 | Retail image | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Source of every address and constant below. | high |
-| Steam actor and modifier | `Anim_SteamJetEffect::Tick 0x0045B940`; `Mod_Steamed` RTTI/vtable `0x0079E3C0`, type `0x1B6C`, constructor `0x006232F0`, tick `0x00625F40`, merge `0x00625C80` | Normal non-weak particles install a ten-tick target modifier. Each live modifier tick dispatches Fire damage and writes special event type 2 when stored Explosion radius is positive. | high |
+| Steam actor and modifier | `Anim_SteamJetEffect::Tick 0x0045B940`; `Mod_Steamed` RTTI/vtable `0x0079E3C0`, type `0x1B6C`, constructor `0x006232F0`, tick `0x00625F40`, merge `0x00625C80` | Normal particles, including weak particles, install a ten-tick target modifier. Each live modifier tick dispatches Fire damage and writes special event type 2 when stored Explosion radius is positive. | high |
 | Event producer/consumer census | all five `DAT_0081C70C` xrefs; type-2 write `0x00625FDA`; receiver branch `0x0047704D..0x004770B7`; sole `0x00643CA0` xref at `0x004770B7` | Steam does not call shared Fire helper `0x00642BF0`. Type 2 has exactly one consumer: the distinct Steam detonation helper `0x00643CA0`. | high |
 | Steam detonation instructions | `0x00643CA0..0x0064445D`; `Anim_SpriteArray_ColorOverlay::Draw 0x0045DA80`; `Anim_SteamJetEffect` constructor/tick/draw `0x00453CE0/0x0045B940/0x00458550` | The burst has the shared three visual clocks but gray overlays and optional normal Steam-particle children, not ordinary Embers. | high |
 | Audio registry and call | `0x00643D35..0x00643D86`; registry offset `+0x4BC`, index 27, `sounds\\explodesteam`; source SHA-256 `f93fca2917072811b96f4ec4c3c864c66f0bb785f05c6113e1931661471df090` | Each Steam detonation birth requests only `explodesteam` with signed `Float(.1)+1` pitch and doubled point gain. It does not request `fireballhit` or `throwfire`. | high |
@@ -854,7 +861,7 @@ teardown**.
 | --- | --- | --- | --- |
 | normal full-power Steam particle | `0x00453CE0`, `0x0045B940` | `exact-ported` | random `Integer(10)` contact clock, ten-tick recurrence, target query, modifier install |
 | Over Steam particle | constructor/handler Over branch | `verified-already-at-parity` | no `Mod_Steamed` contact lane |
-| underpowered normal particle | handler weak branch | `verified-already-at-parity` | quarter alpha and no `Mod_Steamed` contact lane |
+| underpowered normal particle | handler weak branch | `recovered-pending-port` (report 133) | half direct damage, quarter alpha, normal contact clock and retained learned payload |
 | target-owned `Mod_Steamed` lifetime/tick | `0x006232F0`, `0x00625F40` | `exact-ported` | ten ticks, per-tick direct Fire damage, owner/source identity |
 | repeated modifier merge | `0x00625C80` | `exact-ported` | maximum duration, damage, radius, fragment count, and fragment damage; strongest source ownership |
 | Explosion radius zero | `0x00625FCE` strict positive gate | `exact-ported` | direct Steam damage only; no type-2 VFX, audio, or learned fragments |
@@ -875,9 +882,9 @@ No member is blocked by the browser platform.
 
 ### Native ownership thread and recovered behavioral contract
 
-- Only a normal, full-power Steam particle owns the contact clock. Its first
+- Every normal Steam particle, including weak, owns the contact clock. Its first
   clock is `Integer(10)` and each due edge resets to ten while life remains
-  above `.5`. Over and weak particles cannot install the modifier.
+  above `.5`. Only Over particles cannot install the modifier.
 - `Mod_Steamed` begins with duration ten. Before submitting direct Fire damage,
   its tick, only when stored Explosion radius is positive, writes event type 2 with
   visual scale `float32((radius-10)*.180000007+1)`, Explosion damage, fragment
@@ -1508,7 +1515,7 @@ audio or post-fix acceptance.
 | Normal chain contact | target query `0x00641340`, write `0x00541710` | Valid first contact, positive arcs, nearest distinct mask-2 root within 200; direct damage multiplies by `0.6000000238418579`; visited membership preserved |
 | Underpowered Flame | `0x005409ED..0x00540A05`, `0x00540CDE`, `0x005412BD..C2` | Direct damage and handler strength halve; main Stun and the entire chain loop are skipped; main type-1 payload remains eligible |
 | Flame cached Ember count | conversion `0x0054A424`, store `0x0054A42D` | `trunc(vector[7])` is cached before use; chain uses `trunc(cachedInteger * .5)`, not truncation of an unrounded half vector |
-| Normal Steam contact | `0x0045B940`, modifier `0x006232F0/0x00625F40` | Normal full-power particles install the ten-tick modifier; Over and weak particles have no modifier contact lane |
+| Normal Steam contact | `0x0045B940`, modifier `0x006232F0/0x00625F40` | Normal particles, including weak, install the ten-tick modifier; only Over particles have no modifier contact lane |
 | Steamed type-2 event | `0x00625FDA` | Radius-positive per-damage payload; live surviving ticks never detonate |
 | Steamed maximum merge | `0x00625C80` | Retain duration/damage/radius/count/fragment maxima and source ownership; zero-own-payload children can refresh a stronger resident modifier |
 | Common terminal consumer | `0x0048A290 -> 0x00477020` | Actual terminal dispatch, family gate and target alignment are required; entry 162 has all 21 native vtable members and exceptions |
@@ -1928,3 +1935,112 @@ are empty; the strict driver's only warning is the owned host's normal
 server-shutdown disconnect, and all owned resources closed. Roughly 100 ms
 headless frame intervals with most sampled CPU time idle remain an observation,
 not a demonstrated client bottleneck or report-resolution claim.
+
+## 2026-11-01 — Report 133: weak Steam contact permission correction
+
+### Evidence and corrected boundary
+
+The original seven-second web clip has an empty-looking mana bar, vapor over
+nearby skeletons and gold pickup notices. It exposes neither target HP nor
+accepted damage values. Its SHA-256 is
+`fdce43582f03ac923c2044baf683eb8a796d684ee2873fe6e7d1b995daedfbcf`.
+This is evidence of the report, not proof of zero damage or its historical cause.
+
+Fresh read-only disassembly of the hash-matching retail 0.72.5 PE (4,723,200
+bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`) falsifies the previous weak-no-contact claim.
+The [instruction catalog](report133-native-steam-low-mana-evidence.json)
+retains the byte-range hashes, raw instructions, constants, vtable members and
+complete direct-call census of both Steam constructors. No original executable,
+Ghidra project, clean-stock runtime or injected runtime was executed in this pass.
+
+Native system: **Steam Jet mana admission, normal/Over allocation, particle
+contact permission and clock, target-owned Steamed damage, learned terminal
+payload, presentation and teardown**. Its authored vector, recorded constructor
+RNG, stock record 76 and learned fragment/explosion families remain the previously
+recovered complete Steam membership; no new authored row or cosmetic family is
+invented here. The earlier pass stopped at a decompiler-level weak/normal
+classification and did not trace the actual writer of particle byte `+0x50`.
+
+### Reachable native contract
+
+- Mana adjustment `0x0052B150` returns 1 on the underflow branch at
+  `0x0052B337`; the empty local reserve also reaches that return through
+  `0x0052B496..0x0052B4A7`. The handler saves its return in local byte
+  `[esp+0x17]` at `0x00542DB7`. That byte controls the low-mana branch.
+- At `0x00542DE8..0x00542E05`, account for the outstanding four-byte sound
+  argument: the weak branch zeroes cached strength/widen and writes **0.5**
+  into the retained damage multiplier. Normal particle assignment
+  `0x00543279..0x00543283` multiplies base damage `PlayerWizard+0x28C` by
+  that retained multiplier. Weak direct damage is therefore half strength.
+- The selector calls `Integer(7)` and admits Over only for selector 1 with
+  weak byte zero (`0x00542F45..0x00542F60`). Weak always takes the normal
+  constructor `0x00453CE0` at `0x0054310C`; normal and Over use the same
+  tick `0x0045B940`, with different draw slots `0x00458550/0x00458750`.
+- Constructor `0x00453CE0` initially clears contact byte `+0x50`, retains
+  `Integer(10)` at `+0x54` and zeroes payload fields. At
+  `0x00543266..0x005432A7`, the handler tests **caster bank `+0x5C == 0`**,
+  then grants particle contact `+0x50 = 1`, source/world and all learned
+  fields. This block has no low-mana test. Player bank assignment is explicit
+  at `0x005CB907..0x005CB90E`; it is not an underpowered boolean.
+  The authority ports decide each participant's contacts once, rather than
+  reproducing retail's local-client duplication by suppressing host peers.
+- Weak alpha is separately multiplied by **0.25** at
+  `0x0054345F..0x0054346F`. It does not undo the contact grant. Over skips
+  the normal grant and remains a visual particle. The other direct normal
+  constructor caller is the learned Steam helper `0x0064420C`; that caller
+  explicitly grants contact and zeroes its own learned payload as already
+  recovered. The inherited Over constructor is the third normal call site.
+- Tick `0x0045BAC2..0x0045BB08` requires life strictly greater than **0.5**,
+  contact byte set and the decremented clock at most zero. It resets to ten.
+  The target query uses radius `scale*50`, center `(x,y+15)`, bank mask 2;
+  it installs a ten-tick `Mod_Steamed` with
+  `f32(min(life,1)*particleDamage)` and the stored learned fields.
+- Modifier `0x00625F40` owns Fire damage and the already recovered source-bank
+  exclusion, max merge and type-2 terminal payload. Weak does not erase the
+  learned payload. Over, an expired particle, a wrong world, or a target
+  rejected by the existing root/category query does not gain a contact.
+  A funded particle already in flight and a resident modifier keep their
+  original strength when the owner subsequently runs out of mana.
+
+### Membership and implementation consequences
+
+| Member | Disposition before code | Required proof |
+| --- | --- | --- |
+| Funded normal stream and first/random/recurrent contact | verified-already-at-parity | Existing constructor/motion/contact coverage |
+| Weak normal stream at zero or insufficient mana | recovered-pending-port | Half-damage contact reaches the real enemy receiver; quarter-alpha motion unchanged |
+| Over selector and particle | verified-already-at-parity | Same selector is forced to normal when weak; Over remains contact-disabled |
+| Normal/weak learned Explosion and fragment fields | recovered-pending-port | Weak contact retains fields; terminal-only shared receiver and zero-payload children remain protected |
+| Contact life edge, ten-tick clock and target/world/category rejection | verified-already-at-parity | Independent edge/contact tests, including weak recurrence |
+| Funded-to-weak transition, release and retained modifier expiry | recovered-pending-port | New particles use half damage; existing particles/modifiers are not rewritten |
+| Normal/weak record-76 drawing, terrain terminal and retirement | verified-already-at-parity | Existing exact visual/motion fixtures plus independent contact-clock coverage |
+| Owner/peer/observer, snapshots and saves | recovered-pending-port | Authority contact once per participant; transmitted/saved contact fields retain the new branch |
+| Other welded and ordinary primaries | out-of-system | Their distinct low-mana owners are unchanged |
+
+Both clients incorrectly required `!underpowered` in normal particle contact
+permission. Remove that condition at the constructor owner in each maintained
+client. Preserve the existing half-damage producer, quarter-alpha painter,
+normal/Over RNG, learned fields, world filtering and terminal-only detonation.
+No protocol or save shape changes. Frozen Website-derived fixtures must retain
+original bytes; their weak Steam contact-enabled/clock/due fields are explicitly
+superseded only where independent instruction-derived regressions cover them.
+
+### Validation boundary
+
+Add failure-first constructor/clock and real held-input enemy regressions in both
+clients. Cover funded, zero and insufficient mana, the Over selector, retained
+learned fields, release/expiry and a non-owner participant. Preserve unchanged
+RNG and visuals through the original frozen fixtures outside the three corrected
+contact fields. Exact-candidate combined gates and built, installed browser
+journeys are campaign-owned and pending. Static instructions establish this
+corrected contract; no clean-retail pixel, runtime numerical or audio match is
+claimed, and the old matching disposition is withdrawn.
+
+Website focused implementation: the canonical normal-particle permission is
+corrected. The independent constructor/clock matrix, real held-input target HP,
+owner/peer, empty/insufficient/full reserve, funded-to-weak transition, release,
+snapshot encode/decode, learned Coffin payload and existing shared terminal/
+modifier regressions pass (237 tests in the recorded focused invocation).
+Scoped TypeScript and changed-file lint pass. These source checks do not replace
+Rust's independent verification, the exact combined gate or installed browser
+acceptance. The joint membership rows above remain pending those checks.

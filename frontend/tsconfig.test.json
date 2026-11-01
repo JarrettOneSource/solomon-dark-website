@@ -90,6 +90,8 @@
     "src/game/core-server/boneyard-world.test.ts",
     "src/game/core-server/boneyard-enemy-store.test.ts",
     "src/game/core-server/boneyard-spell-combat.test.ts",
+    "src/game/core-kernels/native-weld-steam.test.ts",
+    "src/game/core-server/report133-steam-low-mana.test.ts",
     "src/game/core-server/air-water-secondary-skill-system.test.ts",
     "src/game/core-server/air-water-player-visual-system.test.ts",
     "src/game/core-kernels/player-progression.test.ts",
