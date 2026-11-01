@@ -297,7 +297,7 @@ not only the two Rings shown in the video.
 | Kind-7 parent holder on a nested page | `0x00575850` kind 7 | `exact-ported`: visible cell zero inserts into the immediate parent root; built Hub journey confirms depth one and its first free slot. |
 | Occupied ordinary cell and Sack destination | `0x0056DE50` occupied branch; `0x0055FF20` first-hole insertion; `0x00550A70` Flyby | `exact-ported`: occupied cell receives the dragged Ring, its prior resident takes the first visible hole, and the existing two-lane Flyby waits for host feedback. A Sack cell inserts into that Sack's first free child slot. |
 | Matching stack | `0x0056DE50` Potion/content branch | `out-of-system` for equipped sources: every removable equipment class is one non-stackable object; existing backpack stack handling is unchanged. |
-| Click/double activation without a pointed grid cell | `0x0056D920 -> 0x0056D1B0` | `verified-already-at-parity` as a distinct auto-placement path; the existing first-hole action and direct activation remain unchanged and have a regression assertion. |
+| Click/double activation without a pointed grid cell | `0x0056D920 -> 0x0056D1B0` | Distinct first-hole auto-placement path. The later explicitly requested open-Sack destination is documented below; it does not change pointed drag destinations. |
 | Invalid/off-grid target, full root, stale Sack path, locked ring sink | InventoryScreen release and shared admission | `exact-ported`: invalid targets and full visible pages leave the equipped object unchanged, and addressed nested slots cannot hide a displaced item beyond the visible 87 cells. Off-grid restoration and the third-ring gate retain their existing tests. |
 | College and Boneyard InventoryScreens | shared screen/economy owner | `exact-ported`: the same real pointer-to-host action passed built journeys in both scenes. |
 | Fomentius, Hagatha, Luthacus and Shlorio companion InventoryScreens | shared InventoryActions stage | `verified-already-at-parity` for mounting and drag ownership: the new action is the common path; a focused Fomentius journey passed and previous all-four receipts remain in this ledger. The broader fresh all-service journey has a separate limit below. |
@@ -407,6 +407,73 @@ and Boneyard nested-Sack, occupied, parent-holder and equipment-source
 receipts with empty browser error arrays (log SHA-256
 `0e4039e90d8374fc0629c9bf1a9e1f08ff9fed8bb92861790b1913baa765fc63`).
 The canonical gate and publication are recorded separately.
+
+## Report 50: automatic removal into the open Sack
+
+The October 12 followup, Discord `1559260033882132540`, requests double-click
+removal into the first available slot of the currently open Sack. Its original
+Air Kit screenshot has SHA-256
+`a74d97e6ffa58e4b1848edc26ab3c0b2dc3557f86af073db666951ce2b9f850c`.
+It establishes the open Sack and spare cells, not a recorded click sequence.
+This is an expressly requested convenience change to automatic removal, not
+new evidence overturning the recovered pointed-holder drag contract above.
+
+Both maintained clients retain the addressed drag implementation. Their
+automatic equipment activation instead emits a rootless `unequip`, although
+both canonical economy owners already support a Sack ID with a null slot for
+first-hole insertion. The intended correction belongs at this shared activation
+handoff: pass the active Sack ID with a null slot. At the root, continue passing
+null. Do not infer a pointed cell from selection or reuse the parent holder as
+an item slot. Existing owned-root validation, admission, capacity, feedback and
+save behavior remain the authority's responsibility.
+
+The boundary is the ordinary equipment activation used by mouse double-click,
+touch double-tap and keyboard activation in Inventory and trader companion panes.
+Its complete members are:
+
+| Member | Contract and validation |
+| --- | --- |
+| Ring 0, Ring 1, unlocked Ring 2, Amulet, Staff and Wand | Shared activation carries the active root; public UI actions and accepted placements must agree. |
+| Hat and Robe | Existing required-clothing notice; no removal or destination change. |
+| Root, one-level and deeper Sack pages | Exact current root, ordinary first-hole insertion and unchanged displayed page. |
+| Sparse addressed contents | Retain other item addresses and select the first available root slot. |
+| Stale root, locked Ring 2 and full admitted root | Existing authoritative rejection; no fallback into the top-level backpack. |
+| College, Boneyard and all four trader companion screens | The same activation owner; scene/service does not select a different destination. |
+| Transition, pending drop and teardown | Existing input lock and feedback owners; no action during page motion. |
+| Replication and save/restore | Existing action fields and item identity; no protocol or save-schema change. |
+| Explicit drag, parent-holder and occupied-cell transfer | Unchanged accepted pointed-holder contract above. |
+
+Before changing runtime code, extend the existing real-host Report 50 browser
+journey with root/outer/inner automatic removal and check the accepted item ID,
+root, slot, equipment vacancy and saved continuation. The old callback must
+fail the outer-Sack expectation by returning the Ring to the root. Rust needs
+the corresponding real panel attach/update/action regression, with unchanged
+independently recorded drag goldens. Combined gates, actual Rust game acceptance,
+publication and installation remain separate coordinator-owned checks.
+
+Local M2 acceptance of the Website correction uses the actual production PixiJS
+build and real host. The new `--report50-activation-only` journey first failed
+on the unchanged callback: the root case passed, then outer-Sack removal returned
+`[depth 0, parent null, slot 0]` instead of `[depth 1, parent 40010, slot 1]`.
+After the callback began carrying the existing destination pair, all ten
+receipts pass, including both nested depths, Ring 1/2, required Hat/Robe notices
+without mutation and ordinary saved Leave. Restoring that actual IndexedDB
+revision 13 preserves the Ring in inner Sack 40011, slot 0. The first green
+attempt retained a selected backpack Ring during the clothing probe, exercising
+click-to-equip instead of removal; ordinary blank-stage deselection fixes that
+test precondition, and the failed receipt remains retained.
+
+The unchanged original `--report50-only` journey also passes all twelve Hub and
+Boneyard pointed-drop receipts, including occupied, Sack and parent targets.
+All sampled old-source channel differences are zero. Both journeys have empty
+page, console and failed-response arrays; their five complete screenshots were
+reviewed. The 377 focused economy/simulation/protocol tests, application
+TypeScript check, focused lint and production build pass. These are bounded
+desktop M2 Website receipts. Touch, Rust composed gameplay, the final combined
+gate, publication and installed behavior are not established by them. The
+campaign's private `report050` evidence retains source manifests and original
+red/green logs and images. No native evidence, golden fixture, capacity rule,
+protocol version or save schema changed.
 
 ## 2026-09-22 — Report 03: released-item ownership across host feedback
 
