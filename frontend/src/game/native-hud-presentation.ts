@@ -14,7 +14,7 @@ export const NATIVE_HUD_METER_INSET = 5
 export const NATIVE_HUD_TRACK_PADDING = NATIVE_HUD_METER_INSET * 2
 
 export interface NativeHudHealthLayer {
-  readonly kind: 'health' | 'shield'
+  readonly kind: 'health' | 'shield' | 'regenerate'
   readonly progress: number
   readonly record: typeof NATIVE_HUD_HEALTH_RECORD | typeof NATIVE_HUD_POISONED_HEALTH_RECORD
   readonly tint: 'magic-shield' | 'white'
@@ -185,6 +185,7 @@ export function nativeHealthHudLayers(
   healthProgress: number,
   shieldProgress: number,
   poisoned = false,
+  regenerateActive = false,
 ): readonly NativeHudHealthLayer[] {
   const record = poisoned ? NATIVE_HUD_POISONED_HEALTH_RECORD : NATIVE_HUD_HEALTH_RECORD
   const health = Object.freeze({
@@ -199,11 +200,15 @@ export function nativeHealthHudLayers(
     record,
     tint: 'magic-shield' as const,
   })
-  if (shield.progress === 0) return Object.freeze([health])
-  return Object.freeze([health, shield].sort((left, right) => (
+  const layers: NativeHudHealthLayer[] = shield.progress === 0 ? [health] : [health, shield].sort((left, right) => (
     left.progress - right.progress
     || (left.kind === 'shield' ? -1 : 1)
-  )))
+  ))
+  // Requested Regenerate indicator, matching the Rust HUD; the native life/Shield order stays intact.
+  if (regenerateActive) layers.push(Object.freeze({
+    kind: 'regenerate', progress: health.progress, record: NATIVE_HUD_POISONED_HEALTH_RECORD, tint: 'white',
+  }))
+  return Object.freeze(layers)
 }
 
 export function nativeManaHudPresentation(
