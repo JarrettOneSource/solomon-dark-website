@@ -143,3 +143,56 @@ test('Steam detonation owns gray Explosion state and three zero-payload particle
     assert.ok(Math.hypot(fragment.velocity.x, fragment.velocity.y) <= 5.4)
   }
 })
+
+// Instruction-derived correction: ledger 123 / report133-native-steam-low-mana-evidence.json.
+test('weak normal Steam retains contact recurrence and learned payload at quarter alpha', () => {
+  const vector = [400, 20, 8, 3, 12, 15, 5, 2]
+  const weak = spawnNativeWeldSteamActor({
+    damage: 2, direction: { x: 1, y: 0 }, id: 1, origin: { x: 0, y: 0 }, ownerId: 'peer',
+    queryOrigin: { x: 0, y: 0 }, rng: createNativeRng(0), tick: 2, underpowered: true,
+    vector, worldKey: 'boneyard:steam',
+  }).actor!
+  assert.equal(weak.variant, 'normal')
+  assert.equal(weak.contactEnabled, true, '0x00543266 grants normal contact independently of weak')
+  assert.equal(weak.alphaMultiplier, 0.25)
+  assert.equal(weak.contactDamage, 2)
+  assert.deepEqual(weak.vector, vector)
+  let actor = { ...weak, contactTicksRemaining: 1, life: 1, lifeLoss: 0 }
+  const due: number[] = []
+  for (let tick = 1; tick <= 11; tick++) {
+    actor = stepNativeWeldSteamActor(actor)!
+    if (actor.contactDue) due.push(tick)
+  }
+  assert.deepEqual(due, [1, 11])
+  const expiredContact = stepNativeWeldSteamActor({ ...actor, life: 0.5, contactTicksRemaining: 1 })!
+  assert.equal(expiredContact.contactDue, false, 'the life > .5 gate is strict')
+  assert.equal(stepNativeWeldSteamActor({ ...actor, life: 0, lifeLoss: 0.1 }), null)
+})
+
+test('the Over selector stays cosmetic when funded and becomes damaging normal Steam when weak', () => {
+  let overCount = 0
+  for (let seed = 0; seed < 32; seed++) {
+    const input = {
+      damage: 4, direction: { x: 1, y: 0 }, id: 1, origin: { x: 0, y: 0 }, ownerId: 'owner',
+      queryOrigin: { x: 0, y: 0 }, rng: createNativeRng(seed), tick: 2,
+      vector: [400, 20, 8, 3, 12, 15, 5, 2], worldKey: 'boneyard:steam',
+    }
+    const funded = spawnNativeWeldSteamActor({ ...input, underpowered: false })
+    const weak = spawnNativeWeldSteamActor({ ...input, damage: 2, underpowered: true })
+    assert.deepEqual(weak.rng, funded.rng, `seed ${seed}: unchanged constructor draws`)
+    assert.equal(weak.actor!.variant, 'normal')
+    assert.equal(weak.actor!.contactEnabled, true)
+    if (funded.actor!.variant === 'over') {
+      overCount++
+      assert.equal(funded.actor!.contactEnabled, false)
+      assert.equal(stepNativeWeldSteamActor({
+        ...funded.actor!, contactTicksRemaining: 1,
+      })!.contactDue, false)
+    } else {
+      assert.equal(funded.actor!.contactEnabled, true)
+      assert.deepEqual(weak.actor!.position, funded.actor!.position)
+      assert.equal(weak.actor!.life, funded.actor!.life)
+    }
+  }
+  assert.ok(overCount > 0)
+})

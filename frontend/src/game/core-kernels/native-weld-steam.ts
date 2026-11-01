@@ -147,7 +147,8 @@ export function spawnNativeWeldSteamActor(input: {
       colorRise: constructor.colorRise,
       contactDamage: input.damage,
       contactDue: false,
-      contactEnabled: variant === 'normal' && !input.underpowered,
+      // 0x00543266 gates the native caster bank, not the low-mana byte.
+      contactEnabled: variant === 'normal',
       contactTicksRemaining: constructor.contactTicksRemaining,
       direction: Object.freeze({ ...input.direction }),
       id: input.id,

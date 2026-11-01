@@ -2183,52 +2183,54 @@ test('Blizzard push arms after a gap, ramps on sustained roots, and respects its
   assert.equal(blocked.enemies.actors[0]!.blizzardPushAccumulator, 0)
 })
 
-test('Steam particle contact installs its ten-tick Steamed payload on a risen Coffin', () => {
-  const spawned = riseCoffins(spawnEnemies([
-    { position: { x: 0, y: 0 }, token: 'COFFIN' },
-  ]))
-  const actor = spawned.actors[0]!
-  const enemies = {
-    ...spawned,
-    actors: [{ ...actor, currentHealth: 100, maximumHealth: 100 }],
-  }
-  const profile = weldProfile(1005, [300, 10, 5, 0.1, 4, 6, 2, 3], 'channel')
-  const steam = spawnNativeWeldSteamActor({
-    damage: 3,
-    direction: { x: 1, y: 0 },
-    id: 12,
-    origin: { x: 0, y: 0 },
-    ownerId: 'wizard',
-    queryOrigin: { x: 0, y: 0 },
-    rng: createNativeRng(0),
-    tick: 2,
-    underpowered: false,
-    vector: profile.vector.values,
-    worldKey: WORLD_KEY,
-  }).actor
-  assert.ok(steam?.kind === 'weld-steam' && steam.variant === 'normal')
-  const applied = resolveCombatWithAuthority(
-    enemies,
-    spellState({ transients: [{ ...steam, contactDue: true }] }),
-    [],
-    1,
-  )
-  assert.deepEqual(applied.targetEffects, [{
-    patch: { steamed: {
-      damagePerTick: 3,
-      emberDamage: 2,
-      emberFragments: 3,
-      explodeDamage: 4,
-      explodeRadius: 6,
+test('funded and weak Steam contact install their ten-tick learned payload on a risen Coffin', () => {
+  for (const underpowered of [false, true]) {
+    const spawned = riseCoffins(spawnEnemies([
+      { position: { x: 0, y: 0 }, token: 'COFFIN' },
+    ]))
+    const actor = spawned.actors[0]!
+    const enemies = {
+      ...spawned,
+      actors: [{ ...actor, currentHealth: 100, maximumHealth: 100 }],
+    }
+    const profile = weldProfile(1005, [300, 10, 5, 0.1, 4, 6, 2, 3], 'channel')
+    const steam = spawnNativeWeldSteamActor({
+      damage: underpowered ? 1.5 : 3,
+      direction: { x: 1, y: 0 },
+      id: 12,
+      origin: { x: 0, y: 0 },
       ownerId: 'wizard',
-      sourceActorId: 12,
-      ticks: 10,
-    } },
-    targetId: 1,
-    worldKey: WORLD_KEY,
-  }])
+      queryOrigin: { x: 0, y: 0 },
+      rng: createNativeRng(0),
+      tick: 2,
+      underpowered,
+      vector: profile.vector.values,
+      worldKey: WORLD_KEY,
+    }).actor
+    assert.ok(steam?.kind === 'weld-steam' && steam.variant === 'normal')
+    const applied = resolveCombatWithAuthority(
+      enemies,
+      spellState({ transients: [{ ...steam, contactDue: true }] }),
+      [],
+      1,
+    )
+    assert.deepEqual(applied.targetEffects, [{
+      patch: { steamed: {
+        damagePerTick: underpowered ? 1.5 : 3,
+        emberDamage: 2,
+        emberFragments: 3,
+        explodeDamage: 4,
+        explodeRadius: 6,
+        ownerId: 'wizard',
+        sourceActorId: 12,
+        ticks: 10,
+      } },
+      targetId: 1,
+      worldKey: WORLD_KEY,
+    }])
 
-  // Steamed deaths are resolved by the secondary receiver, not free pulses here.
+    // Steamed deaths are resolved by the secondary receiver, not free pulses here.
+  }
 })
 
 test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pulse', () => {
