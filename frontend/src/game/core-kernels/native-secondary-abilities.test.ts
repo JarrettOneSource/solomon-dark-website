@@ -926,23 +926,26 @@ test('all 23 category-2 rows admit their edge while one-shot or sustained primar
 })
 
 test('every Cast 2 owner writes one player phase pulse and actionless siblings write none', () => {
-  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
-    const accepted = cast(skillId)
-    const ownsCastTwo = accepted.state.players.player?.castAction !== null
-    const firstActionUpdate = stepNativeSecondaryAbilities(
-      accepted.state,
-      context(skillId, 2, null),
-    )
-    assert.deepEqual(
-      firstActionUpdate.staffCastPulsePlayerIds,
-      ownsCastTwo ? ['player'] : [],
-      `skill ${skillId}`,
-    )
-    const laterUpdate = stepNativeSecondaryAbilities(
-      firstActionUpdate.state,
-      context(skillId, 3, null),
-    )
-    assert.deepEqual(laterUpdate.staffCastPulsePlayerIds, [], `skill ${skillId}: repeat`)
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+      const base = context(skillId, 1, 0)
+      const authority = { ...base.players.player!, weaponKind }
+      const accepted = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+        ...base, players: { player: authority },
+      })
+      const ownsCastTwo = accepted.state.players.player?.castAction !== null
+      let state = accepted.state
+      for (let age = 1; age <= 12; age++) {
+        const result = stepNativeSecondaryAbilities(state, {
+          ...context(skillId, age + 1, null),
+          players: { player: { ...authority, input: input(null) } },
+        })
+        state = result.state
+        assert.deepEqual(result.staffCastPulsePlayerIds,
+          ownsCastTwo && age === (weaponKind === 'staff' ? 1 : 11) ? ['player'] : [],
+          `skill ${skillId}, weapon ${weaponKind}, update ${age}`)
+      }
+    }
   }
 })
 
@@ -1481,7 +1484,9 @@ test('Dampen appends weapon-selected Cast2 alongside CastSpin and emits its open
     const accepted = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
       ...base, players: { player: authority },
     })
-    assert.deepEqual(accepted.state.players.player?.castAction, { weaponKind, progress: 0 })
+    assert.deepEqual(accepted.state.players.player?.castAction, {
+      weaponKind, progress: 0, ...(weaponKind === null ? { handPose: 0, handDone: false } : {}),
+    })
     assert.equal(accepted.state.players.player?.castSpinTicksRemaining, 73)
     let state = accepted.state
     for (let age = 1; age <= 73; age += 1) {
@@ -1489,10 +1494,31 @@ test('Dampen appends weapon-selected Cast2 alongside CastSpin and emits its open
         ...base, players: { player: { ...authority, input: input(null) } }, tick: age + 1,
       })
       state = next.state
-      assert.deepEqual(next.staffCastPulsePlayerIds, age === 1 ? ['player'] : [])
-      assert.equal(state.players.player!.castAction !== null, age < (weaponKind === 'staff' ? 51 : 64))
+      assert.deepEqual(next.staffCastPulsePlayerIds,
+        age === (weaponKind === 'staff' ? 1 : 11) ? ['player'] : [])
+      assert.equal(state.players.player!.castAction !== null,
+        age < (weaponKind === 'staff' ? 51 : weaponKind === 'wand' ? 64 : 65))
       assert.equal(state.players.player!.castSpinTicksRemaining, 73 - age)
       assert.equal(state.players.player!.castSequence, 1)
+    }
+  }
+})
+
+test('interrupted Cast2 marker delivery never refreshes after the action has crossed it', () => {
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    const base = context(11, 1, 0)
+    const authority = { ...base.players.player!, weaponKind }
+    let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+      ...base, players: { player: authority },
+    }).state
+    const markerUpdate = weaponKind === 'staff' ? 1 : 11
+    for (let age = 1; age <= markerUpdate + 1; age++) {
+      const result = stepNativeSecondaryAbilities(state, {
+        ...base, tick: age + 1, players: { player: { ...authority,
+          eligible: age !== markerUpdate, input: input(null) } },
+      })
+      assert.deepEqual(result.staffCastPulsePlayerIds, [])
+      state = result.state
     }
   }
 })

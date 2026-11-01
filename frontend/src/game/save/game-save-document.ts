@@ -1,5 +1,6 @@
 import { PLAYER_BELT_SLOT_COUNT, NATIVE_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { nativeScreenFlashes } from '../protocol/codecs/screen-flash.ts'
+import { playerHandCast1, validatePlayerHandCast1Owner } from '../protocol/codecs/player-hand-cast.ts'
 import { nativeSecondaryCameraDisplacements } from '../protocol/codecs/secondary.ts'
 import { createNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { hubActionFeedback } from '../protocol/codecs/economy.ts'
@@ -2201,9 +2202,10 @@ function normalizePrimaryCast(
   skillBook: PlayerSkillBookComponent,
 ): PlayerPrimaryCastState {
   const source = record(value, 'game save primary cast')
-  return {
+  const state = {
     ...createIdlePlayerPrimaryCast(),
     ...source,
+    handCast1: playerHandCast1(source.handCast1 ?? null, 'game save primary handCast1'),
     oneShotAttackPoseHeld: source.oneShotAttackPoseHeld === true,
     selectedPrimaryId: typeof source.selectedPrimaryId === 'number'
       ? source.selectedPrimaryId
@@ -2211,6 +2213,8 @@ function normalizePrimaryCast(
         ? skillBook.weldBuildId ?? -1
         : skillBook.primarySkillId,
   } as PlayerPrimaryCastState
+  validatePlayerHandCast1Owner(state.handCast1, state, 'game save primary handCast1')
+  return state
 }
 
 function normalizeRun(value: unknown): Record<string, unknown> {

@@ -252,6 +252,7 @@ test('all sixteen rows resolve their exact rank and concentration scalars', () =
   assert.equal(derived.deflectChancePercent, 10)
   assert.equal(derived.poisonResistance, 0.2)
   assert.equal(derived.castProgressFactor, 1.1)
+  assert.equal(derived.handCastFactor, 1.100000023841858)
 })
 
 test('mana recovery applies native flat equipment in per-second units', () => {

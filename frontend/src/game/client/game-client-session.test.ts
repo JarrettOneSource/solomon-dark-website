@@ -2072,6 +2072,7 @@ test('client accepts cast-owned heading and prevents movement prediction from re
           etherBlastCharge: 0,
           etherBlastChargeCueSequence: 0,
           fizzleSequence: 0,
+          handCast1: null,
           held: false,
           lastWeldPlaybackRate: null,
           lastWeldSoundVariant: null,

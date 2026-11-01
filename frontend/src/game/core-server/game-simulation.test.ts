@@ -3298,6 +3298,40 @@ test('authoritative primary edges write one shared orb and light phase before de
   )
 })
 
+test('accepted Cast2 markers publish the unchanged phase to player and observer snapshots', () => {
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    let state = createGameSimulation({ caster: { displayName: 'Marker', element: 'ether', discipline: 'arcane' } })
+    const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'caster', 11, 1, state.gameRng)
+    state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+    const economy = getPlayerEconomy(state, 'caster')
+    const weapon = weaponKind === 'wand'
+      ? createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2]!, economy.nextItemId)
+      : weaponKind === 'staff' ? economy.equipment.weapon : null
+    state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'caster', {
+      ...economy, equipment: { ...economy.equipment, weapon },
+      nextItemId: economy.nextItemId + (weaponKind === 'wand' ? 1 : 0),
+    }) }
+    state = enterBoneyardWorld(state, emptyBoneyard())
+    state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', 11, 0)!
+    const player = getPlayerCharacter(state, 'caster')
+    const castInput = { ...gameplayInput(0, 0), aim: { x: player.position.x, y: player.position.y - 200 },
+      cast: { primary: false, quickbar: 0 } }
+    state = stepGameSimulationTick(state, { caster: castInput })
+    const markerUpdate = weaponKind === 'staff' ? 1 : 11
+    for (let update = 1; update <= markerUpdate + 1; update++) {
+      state = stepGameSimulationTick(state, { caster: { ...castInput, cast: { primary: false, quickbar: null } } })
+      const expected = update < markerUpdate ? 0 : update === markerUpdate
+        ? Math.fround(.45) : Math.fround(Math.fround(.45) * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY)
+      assert.equal(getPlayerCharacter(state, 'caster').primaryCast.weaponPulse, expected)
+      for (const hostPlayerId of ['caster', null]) {
+        const snapshot = gameSnapshot(createGameSnapshot(state, hostPlayerId))
+        assert.equal(snapshot.players.caster!.primaryCast.weaponPulse, expected)
+        assert.equal(snapshot.players.caster!.lighting.overlayEffectPhase, expected)
+      }
+    }
+  }
+})
+
 test('Boneyard Air falls back to a Gravestone and publishes the native curved segment', () => {
   let state = createGameSimulation({ caster: {
     discipline: 'arcane',
