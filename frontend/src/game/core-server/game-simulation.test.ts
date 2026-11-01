@@ -78,6 +78,7 @@ import { nativeCocoonPosition } from '../core-kernels/native-webbed.ts'
 import { applyPlayerContacts } from './player-contact-system.ts'
 import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
 import { NativeSecondaryScreenFeedbackPresentation } from '../renderer/native-screen-feedback.ts'
+import { nativeSecondaryPresentationPlan } from '../renderer/native-secondary-presentation.ts'
 import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile } from '../save/game-save-document.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { createGameSnapshotFrame, EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
@@ -5053,6 +5054,66 @@ test('Ether Drain preserves suppressed ordinary hit feedback while still damagin
   assert.equal(state.world.enemyEvents.some(event => event.type === 'player-damage-sound'), false)
   assert.equal(state.world.enemyEvents.some(event => event.type === 'player-cheat-death'), false)
 })
+
+for (const enhancedEffects of [false, true]) {
+  for (const victim of ['caster', 'peer']) {
+    test(`Ether Drain living ${victim} contact and caster continuation do not create capture presentation, enhanced=${enhancedEffects}`, () => {
+      const loadedBoneyard = combatBoneyard('ether-drain-living-contact')
+      const config = { discipline: 'arcane', displayName: 'Wizard', element: 'ether' } as const
+      let state = enterBoneyardWorld(createGameSimulation({ caster: config, peer: config }, {
+        enhancedEffects,
+      }), loadedBoneyard)
+      state = withPlayerSkillRank(state, 'caster', 74, 1)
+      for (const playerId of ['caster', 'peer']) {
+        state = { ...state, playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
+          ...getPlayerCharacter(state, playerId),
+          position: { x: playerId === victim ? 250 : 90, y: 250 },
+        }) }
+      }
+      // Keep this a living-contact case; a dying corpse has a separate native pulse.
+      state = { ...state, playerEntities: { ...state.playerEntities,
+        progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+          currentHealth: 100_000, maximumHealth: 100_000,
+        })),
+      } }
+      state = stepGameSimulationTick(bindGameSimulationPlayerSkillQuickbar(state, 'caster', 74, 0)!, {
+        caster: { ...gameplayInput(0, 0), aim: { x: 250, y: 250 }, cast: { primary: false, quickbar: 0 } },
+      })
+
+      // Empty scene, before free debris can cross its 1,024-unit spawn radius.
+      for (let tick = 0; tick < 120; tick += 1) {
+        state = stepGameSimulationTick(state, {})
+        const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')
+        assert.ok(field, `tick ${tick}: the actual cast must remain active`)
+        const drain = field.etherDrain
+        assert.ok(drain)
+        assert.ok(drain.queried.some(ref => ref.kind === 'player' && ref.id === victim))
+        assert.equal(field.slowFactor, 0, `tick ${tick}: living contact is not capture`)
+        assert.deepEqual(getPlayerCharacter(state, victim).position, field.position)
+        assert.equal(drain.animations.some(animation => animation.kind === 'captured'), false)
+        assert.equal(state.secondaryAbilities.actors.some(actor => actor.kind === 'ether-drain-capture-flare'), false)
+        assert.equal(nativeSecondaryPresentationPlan(field, state.tick).draws.some(draw =>
+          draw.role === 'ether-drain-capture-pulse' || draw.role === 'ether-drain-captured-image'), false)
+      }
+
+      assert.equal(getPlayerProgression(state, victim).lifeState, 'alive')
+      assert.ok(getPlayerProgression(state, victim).currentHealth < 100_000,
+        'center contact must still apply its native damage')
+      state = restoreGameSaveDocument(createGameSaveDocument({
+        integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'caster', state,
+      })).state
+      assert.deepEqual(state.playerEntities.identities.map(identity => identity.playerId), ['caster'])
+      for (let tick = 0; tick < 20; tick += 1) {
+        const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')
+        assert.ok(field, 'the saved caster retains its field')
+        assert.equal(field.slowFactor, 0, `resumed tick ${tick}: restore is not capture`)
+        assert.equal(nativeSecondaryPresentationPlan(field, state.tick).draws.some(draw =>
+          draw.role === 'ether-drain-capture-pulse' || draw.role === 'ether-drain-captured-image'), false)
+        state = stepGameSimulationTick(state, {})
+      }
+    })
+  }
+}
 
 test('Ether Drain consumes eligible Gold and every item carried by a Sack without pickup credit', () => {
   for (const payload of ['gold', 'potion', 'key', 'element-book', 'random-book'] as const) {
