@@ -879,3 +879,108 @@ All recovered-pending-port members above are now ported and focused-verified;
 the unchanged marker/world contracts and unrelated-target negative checks pass.
 The full canonical Mac gate and final integrated acceptance remain the
 integration owner's separate closure requirement, not a claim of this receipt.
+
+## 2026-11-01 — Rust InventoryScreen presentation consumer gap
+
+Report67's original fire clause remains the same presentation contract recovered
+above. This review preserves the accepted PixiJS implementation and its October11
+integer-raster correction. The maintained Rust client is an additional consumer,
+so the historical Website-only completion does not establish Rust parity.
+
+### Evidence and boundary before implementation
+
+At Rust `61e0bb8f8474eb2d1a9bcc1ea29c10cf0956ce4e`,
+`crates/web/src/player_panels/chrome.rs::draw_footer` submits UI75 with a constant
+white tint only for standalone Inventory and Luthacus. It never consumes UI76 or
+UI77. All four service companions already call the same Inventory/footers, so the
+restriction also omits their shared target presentation. The same old producer
+exists in installed-source baseline `6aad963021bc60810b4d4b4ae396084baa737de7`.
+These are static source observations; no new Rust browser result is claimed.
+
+The three source-record draws also retain Sprite constructor `0x00413DE0`'s
+UV contract recovered in entry090: leading atlas coordinates add `.5`, trailing
+coordinates are origin plus extent plus `.25`. The accepted independent Unforge
+oracle already samples that convention. Rust's new operation must consume those
+exact UVs for UI75/76/77 rather than inherit the old marker's raw atlas edges;
+the generated scratch target retains its separate full0..1 UV contract above.
+
+The original C++ root `0x00568B90`, its complete caller census, UI75/76/77 authored
+rows, shared-target lifecycle, application clock and integer raster contract are
+already closed above. No new retail interpretation or guessed Fire actor is
+needed. Rust's tracked `UI.png` and `UI.bundle` supply those same records.
+
+| Member | Rust disposition before code | Required proof |
+| --- | --- | --- |
+| UI77 twice, signed `trunc(appTick/8)%55`, authored one-pixel overlap | recovered-pending-port | Exact centers at all55 phases, wrap and negative signed boundary |
+| UI76 ZERO/SRCCOLOR mask and integer `(103,109,51,39)` capture | recovered-pending-port | Native integer-sample masked silhouette, native alpha equation, no unmasked edge |
+| UI75 after target, 360-tick red pulse and reveal | recovered-pending-port | Actual ordered paint operation, pulse extrema and common25-pixel reveal movement |
+| Hub and paused Boneyard standalone Inventory | recovered-pending-port | Same application-time phase, resize/book replace/reopen, real game contexts |
+| Hagatha, Fomentius, Luthacus, Shlorio before/after Dowsing | recovered-pending-port | Every owner submits the same complete operation; actual companion journeys |
+| Sack pages, selection, held drag, ineligible drop, confirm/cancel/result, dye and notice | recovered-pending-port | No presentation branch or reset; target below later overlays and dragger, existing input/transactions preserved |
+| Per-draw clear/rebuild, retained256 target and final teardown | recovered-pending-port | Repeated draws reuse owned target; no atlas deletion; enclosing target/projection/clip restored |
+| Title, standalone Skills, dialogue and HUD skill selector | out-of-system | No InventoryScreen target submission |
+| Other UI groups, world native projection, spell Fire, rewards, saves, audio and replication | out-of-system | Keep existing owners/contracts; scoped target rendering must restore state |
+| Absolute process-start phase | blocked-by-platform | Independent processes cannot share a historical recording's phase; preserve100Hz application-time progression |
+
+### Implementation and validation consequence
+
+The Rust panel footer will request one typed native Unforge paint operation for
+Inventory and every service companion. The shared GPU UI painter owns its private
+256 target, performs the recovered two image draws and multiply mask with native
+integer sample centers, restores the enclosing projection/target/clip, and paints
+the completed target before its pulsing marker. Panel reveal and the existing
+stage transform apply to both together. Ordinary SourceOver UI groups retain their
+current alpha and projection contracts. No new UI asset, gameplay state, timer,
+network/save field or transaction branch is required.
+
+Focused tests must exercise the actual footer submission for all owners and
+negative consumers, native frame boundaries and transforms. A native-sample GPU
+comparison and actual composed Hub/Boneyard/service journeys remain required on
+the final integrated M2 candidate; source tests alone do not establish parity.
+Report22 still shares source message `1554349667230416936`, so completion marking
+requires both report scopes to reach the campaign's acceptance boundary.
+
+### Rust source and focused M2 receipt
+
+The shared Rust footer now submits the complete typed paint operation for
+standalone Inventory and all four service companions. One private target is
+retained by the GPU UI painter and cleared/rebuilt for each visible draw. Its
+source records use the recovered UV bias, integer scissor/sample centers and
+native alpha equation; target/marker composition shares reveal and the actual
+egui stage transform. The enclosing projection and ordinary SourceOver group
+alpha are restored. Existing Unforge action/drop/transaction owners are unchanged.
+
+A task-only removal of the new footer consumer, restoring the old staticUI75
+draw, produced two intended behavior failures while the authored frame test
+passed. With the exact candidate restored, all three new tests pass: every
+55-phase/signed/wrap boundary; the real footer for standalone and all four
+companions, both Dowsing states and negative book/dialogue consumers; and shared
+reveal/stage geometry. The two existing group parser/composition tests also pass.
+Native/test and browser-fixtures WASM Clippy pass with warnings denied. The
+graphics crate's library test command has zero tests and supplies no behavior
+acceptance. The isolated fixture WASM and unchanged wasm-bindgen output build.
+
+Headed Mac Chrome on AppleM2/ANGLE Metal drives the actual
+`UiFrame -> typed nodes -> GpuPainter` operation against the independent stock
+integer-sample oracle. All55 scroll phases plus wrap have zero channels beyond
+the two-byte rounding tolerance, maximum RGBA error1, and zero unmasked edge
+pixels. Ten final compositions cover marker pulse extrema, partial/hidden reveal
+and an ordinary SourceOver parent group: maximum error2 and no above-tolerance
+channels. The post-capture sentinel, page/console/request/HTTP error arrays and
+GL error checks pass. Browser exit is normal, its private profile is removed,
+and the task HTTP listener is stopped.
+
+All132 original actual/reference PNGs are retained with file and decoded-RGBA
+hashes; all decode as256-square RGBA and reproduce the original readback bytes.
+All capture/composite pairs are visually reviewed through labeled contact sheets,
+plus the original physical Chrome screenshot. The private campaign receipt root
+is `~/codex-runs/solomon-discord-reports-20261101/report067/`; its source and binary
+manifests pin the exact candidate, `browser-fixtures` feature and dev-profile WASM.
+The fixture-only document explicitly selects isolated startup; normal builds and
+ordinary fixture documents preserve Game startup.
+
+The UI75/76/77 program is source-ported and focused-verified across its complete
+data cycle. Final integrated Hub, paused Boneyard and actual service/overlay/input
+journeys, complete source gates, publication and installation remain the
+coordinator's acceptance boundary. This receipt does not close those scene
+members or qualify the shared Report22 completion reaction.
