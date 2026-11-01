@@ -31,6 +31,8 @@ import {
   nativeAirRibbonRandomSample,
 } from './primary-spell-air-native.ts'
 import { AirPrimarySpellView } from './primary-spell-air-view.ts'
+import { PrimarySpellWorldView } from './primary-spell-world-view.ts'
+import type { PlayerWorldTextures } from './world-player-textures.ts'
 
 const STRAIGHT_BOLT = {
   birthTick: 40,
@@ -600,6 +602,49 @@ test('Air view bounds transient resources to reachable ages and shares split geo
     ['body', 'contact'],
   )
   bodyAndContact.destroy()
+})
+
+test('Air world live split quality changes scenery occlusion while retaining born ribbon data', () => {
+  for (const bornEnhanced of [true, false]) {
+    const initial = airViewState(0, 94)
+    assert.ok(initial.painterRegistrations)
+    const state = { ...initial, enhancedEffects: bornEnhanced, painterRegistrations: initial.painterRegistrations }
+    const root = new Container()
+    // This journey materializes only Air; the other texture banks are not loaded.
+    const textures = { primarySpells: { air: AIR_VIEW_TEXTURES } } as unknown as PlayerWorldTextures
+    const world = new PrimarySpellWorldView(root, textures)
+    const spells = { nextId: 95, projectiles: [], transients: [state] }
+    let birthGeometry: readonly unknown[] | null = null
+    for (const liveEnhanced of [true, false, true]) {
+      world.update(spells, state.worldKey, 800, () => 1, undefined, liveEnhanced)
+      const owner = world.painterLayers().find(layer => layer.id === 'primary-spell:94:body')!
+      const queueFamily = owner.queueFamily
+      assert.ok(queueFamily)
+      const insertions = owner.insertions!
+      assert.equal(insertions[0]!.worldY - owner.worldY, liveEnhanced ? 25 : 50)
+      assert.deepEqual(owner.registration, state.painterRegistrations[0])
+      const order = buildBoneyardPainterOrder({
+        referenceY: owner.worldY,
+        staticLayers: [{ layerIndex: 0, worldY: owner.worldY + 37, sortBias: 0, sourceOrder: 0 }],
+        dynamicLayers: [{ ...owner, queueFamily }],
+      })
+      const firstDepth = order.dynamicLayers.find(layer => layer.id === insertions[0]!.id)!.zIndex
+      const nextDepth = order.dynamicLayers.find(layer => layer.id === insertions[1]!.id)!.zIndex
+      const sceneryDepth = order.bands[0]!.zIndex
+      assert.ok(liveEnhanced ? firstDepth < sceneryDepth && sceneryDepth < nextDepth : sceneryDepth < firstDepth)
+      const geometry = [...new Set(descendantMeshes([root]).map(mesh => mesh.geometry))].map(resource => ({
+        positions: [...resource.getBuffer('aPosition').data],
+        uvs: [...resource.getBuffer('aUV').data],
+      }))
+      if (birthGeometry === null) birthGeometry = geometry
+      else assert.deepEqual(geometry, birthGeometry, 'live masks cannot reroll born ribbons')
+      assert.equal(state.enhancedEffects, bornEnhanced)
+    }
+    world.update({ ...spells, transients: [] }, state.worldKey)
+    assert.equal(root.children.length, 0)
+    world.destroy()
+    root.destroy()
+  }
 })
 
 test('direct Air factory consumers do not allocate ZAnimSplit bands', () => {

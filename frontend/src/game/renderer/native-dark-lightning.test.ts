@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { Container, Mesh, Texture } from 'pixi.js'
+import { buildBoneyardPainterOrder } from '../boneyard-painter-order.ts'
 import type { NativeBossSpell } from '../core-kernels/native-boss-spell.ts'
 import { NativeBossSpellViews } from './native-boss-spell-view.ts'
 import { nativeDarkLightningBody } from './native-dark-lightning.ts'
@@ -56,4 +57,48 @@ test('DarkLightning shares immutable geometry across its depth bands and destroy
   assert.deepEqual(destroyed, geometries)
   views.destroy()
   root.destroy()
+})
+
+test('DarkLightning live split quality changes scenery occlusion while retaining born ribbon data', () => {
+  for (const bornEnhanced of [true, false]) {
+    const born = { ...spell, enhancedEffects: bornEnhanced }
+    const root = new Container()
+    const base = Object.fromEntries([64, 373, 374].map(entry => [nativeEnemySpriteRecord('BadGuys', entry).source, Texture.EMPTY]))
+    const views = new NativeBossSpellViews(root, { base, greenPlasma: Texture.EMPTY })
+    const meshes = (container: Container): Mesh[] => container.children.flatMap(child => (
+      child instanceof Mesh ? [child] : child instanceof Container ? meshes(child) : []
+    ))
+    let birthGeometry: readonly unknown[] | null = null
+    for (const liveEnhanced of [true, false, true]) {
+      views.update([born], 31, 900, liveEnhanced)
+      const layers = views.painterLayers([born])
+      const owner = layers[0]!
+      const insertions = owner.insertions!
+      const height = liveEnhanced ? 25 : 50
+      assert.equal(insertions[0]!.worldY - owner.worldY, height)
+      assert.deepEqual(owner.registration, born.painterRegistration)
+      const order = buildBoneyardPainterOrder({
+        referenceY: owner.worldY,
+        staticLayers: [{ layerIndex: 0, worldY: owner.worldY + 37, sortBias: 0, sourceOrder: 0 }],
+        dynamicLayers: layers,
+      })
+      const firstDepth = order.dynamicLayers.find(layer => layer.id === insertions[0]!.id)!.zIndex
+      const nextDepth = order.dynamicLayers.find(layer => layer.id === insertions[1]!.id)!.zIndex
+      const sceneryDepth = order.bands[0]!.zIndex
+      assert.ok(liveEnhanced ? firstDepth < sceneryDepth && sceneryDepth < nextDepth : sceneryDepth < firstDepth)
+      const current = meshes(root)
+      assert.ok(current.every(mesh => mesh.blendMode === 'normal'))
+      const geometry = [...new Set(current.map(mesh => mesh.geometry))].map(resource => ({
+        positions: [...resource.getBuffer('aPosition').data],
+        uvs: [...resource.getBuffer('aUV').data],
+      }))
+      if (birthGeometry === null) birthGeometry = geometry
+      else assert.deepEqual(geometry, birthGeometry, 'live masks cannot reroll born ribbons')
+      assert.equal(born.enhancedEffects, bornEnhanced)
+    }
+    views.update([], 33)
+    assert.equal(root.children.length, 0)
+    views.destroy()
+    root.destroy()
+  }
 })
