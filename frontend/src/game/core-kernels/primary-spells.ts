@@ -2039,6 +2039,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 firstChildId: nextId,
                 registerWorldPainter,
                 rng,
+                targets: context.spellTargets(playerId),
                 tick: context.tick,
               })
               rng = releasedActor.rng
@@ -2407,6 +2408,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           registerWorldPainter,
           rng,
           context.tick,
+          context.spellTargets(playerId),
         )
         transients = releasedWeld.transients
         nextId = releasedWeld.nextId
@@ -2454,6 +2456,7 @@ function releaseOwnedNativeWeldPersistentActors(
   registerWorldPainter: RegisterNativeWorldPainter,
   sourceRng: NativeRngState,
   tick: number,
+  targets: readonly PrimarySpellTarget[],
 ): {
   readonly nextId: number
   readonly rng: NativeRngState
@@ -2490,6 +2493,7 @@ function releaseOwnedNativeWeldPersistentActors(
     }
     const released = releaseNativeWeldPersistentActor({
       actor: effect,
+      targets,
       firstChildId: nextId,
       registerWorldPainter,
       rng,

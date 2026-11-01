@@ -12,6 +12,7 @@ import {
   nativeWeldMeteorPulseRadius,
 } from '../../core-kernels/native-weld-meteor.ts'
 import {
+  finishNativeWeldEtherealBoulderGuidance,
   nativeWeldHailstoneDrawOffset,
   nativeWeldHailstoneFlightContactSubsteps,
   retainNativeWeldHailstoneDamage,
@@ -47,7 +48,6 @@ export function resolvePersistentContacts(work: BoneyardSpellCombatWork): void {
         0x6,
         rows.map(({ target }) => target),
       ).filter(({ id }) => !priorTargets.has(id))
-      if (contacts.length === 0) continue
       const hitTargetIds = [...effect.hitTargetIds]
       let remainingDamage = effect.remainingDamage
       let contactScale = effect.scale
@@ -92,14 +92,12 @@ export function resolvePersistentContacts(work: BoneyardSpellCombatWork): void {
           tick: work.tick,
         })
       }
-      const retained = retainNativeWeldPersistentActorContacts(
-        effect,
-        hitTargetIds,
-        remainingDamage,
-        contactScale,
-      )
+      const retained = hitTargetIds.length === effect.hitTargetIds.length ? effect
+        : retainNativeWeldPersistentActorContacts(effect, hitTargetIds, remainingDamage, contactScale)
       if (retained) {
-        work.updatedTransients.set(effect.id, retained)
+        work.updatedTransients.set(effect.id, finishNativeWeldEtherealBoulderGuidance(
+          retained, primaryTargetRows(work.enemies).map(({ target }) => target),
+        ))
       } else {
         work.consumedTransientIds.add(effect.id)
         const terminal = createPrimarySpellWeldBoulderTerminal(

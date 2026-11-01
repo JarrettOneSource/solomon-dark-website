@@ -13,6 +13,7 @@ import { DOWSING_EQUIPMENT_RECIPES, HUB_SACK_REPLICATION_DEPTH_LIMIT, createEqui
 import { HUB_SPAWN } from '../core-kernels/hub-math.ts'
 import { archiveHubMemorialPortrait } from '../core-kernels/hub-memorial.ts'
 import { createNativeHubNpcState } from '../core-kernels/native-hub-npc.ts'
+import { createNativeWeldPersistentActor, releaseNativeWeldPersistentActor } from '../core-kernels/native-weld-primary-runtime.ts'
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { nativeDesaturateColor } from '../core-kernels/native-color.ts'
 import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
@@ -3892,5 +3893,79 @@ test('portable item rarities restore earlier Rust profiles and continuations wit
       const hydrated = hydrateGameSaveProfile(createGameSimulation({ owner: OWNER }), 'owner', profile)
       decodeGameSnapshot(createGameSnapshot(hydrated, 'owner'))
     }, /rarity is not supported/)
+  }
+})
+
+
+test('EBoulder guidance survives current saves and schema51 retains old flight identity with native null-target defaults', () => {
+  const initial = createGameSimulation({ owner: OWNER })
+  const order = createNativeWorldManagerOrder(initial.worldManagerOrder)
+  const birth = createNativeWeldPersistentActor({ buildId: 1006, direction: { x: 1, y: 0 },
+    id: 1, origin: { x: 120, y: 200 }, ownerId: 'owner', tick: 0,
+    vector: [12, 3, 1, 1.5, 2.5, 1], worldKey: 'hub:courtyard', registerWorldPainter: order.register })
+  assert.ok(birth.buildId === 1006)
+  const held = { ...birth, painterRegistrations: [birth.lightRegistration!] }
+  const released = releaseNativeWeldPersistentActor({ actor: held, firstChildId: 2,
+    rng: initial.combatRng, tick: 1, targets: [{ active: true, actorFlags: 2,
+      attachment: { x: 0, y: 0 }, bodyRadius: 10, cellBindingOrder: 0,
+      id: 'enemy:99', kind: 'enemy', nativePriority: 0, pendingRemove: false,
+      position: { x: 300, y: 100 }, queryLane: 'grid', registrationOrder: 0 }] })
+  const rock = released.actors[0]
+  assert.ok(rock?.buildId === 1006)
+  const actor = { ...rock, ageTicks: 30, flightTicks: 12,
+    headingDegrees: Math.fround(87.25), turnAccumulator: Math.fround(.61),
+    hitTargetIds: ['enemy:2'], trackingTicksRemaining: 1738 }
+  const state = { ...initial, worldManagerOrder: order.state(),
+    primarySpells: { nextId: 2, projectiles: [], transients: [actor] } }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(document).state
+  assert.deepEqual(restored.primarySpells.transients, [actor])
+  assert.deepEqual(restored.combatRng, state.combatRng)
+  for (const hostPlayerId of ['owner', null]) {
+    const snapshot = decodeGameSnapshot(createGameSnapshot(state, hostPlayerId))
+    assert.deepEqual(snapshot.primarySpells.transients, [actor])
+    for (const baseline of [undefined, createReplicatedEntityBaseline(snapshot)]) {
+      const frame = createGameSnapshotFrame(snapshot, 0, baseline, baseline === undefined)
+      const decoded = decodeServerGameMessage(encodeGameMessage({ type: 'server-snapshot',
+        acknowledgedInputSequence: 0, frame, sequence: 1 }))
+      assert.ok(decoded.type === 'server-snapshot')
+      assert.deepEqual(decoded.frame.primarySpells.transients, [actor])
+    }
+  }
+  for (const [field, invalid] of [['targetId', 4], ['turnAccumulator', 0],
+    ['flightSpeed', 0], ['trackingTicksRemaining', -1]] as const) {
+    const changed = JSON.parse(document)
+    changed.continuation.simulation.primarySpells.transients[0][field] = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(changed)), new RegExp(field))
+  }
+  for (const source of [actor, held]) {
+    const old = JSON.parse(document)
+    old.schemaVersion = 51
+    const { flightSpeed: _speed, headingDegrees: _heading, reacquiresTarget: _policy,
+      targetId: _target, trackingTicksRemaining: _clock, turnAccumulator: _accumulator,
+      turnInput: _turn, ...stored } = source
+    old.continuation.simulation.primarySpells.transients = [{ ...stored,
+      lifetimeTicksRemaining: 1200, speedFactor: 1.5 }]
+    const mixed = structuredClone(old)
+    mixed.continuation.simulation.primarySpells.transients[0].targetId = 'enemy:99'
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(mixed)), /mixes legacy and guidance/)
+    const migratedState = restoreGameSaveDocument(JSON.stringify(old)).state
+    const migrated = migratedState.primarySpells.transients[0]
+    assert.ok(migrated?.kind === 'weld-persistent' && migrated.buildId === 1006)
+    assert.equal(migrated.id, source.id)
+    assert.deepEqual(migrated.origin, source.origin)
+    assert.deepEqual(migrated.velocity, source.velocity)
+    assert.deepEqual(migrated.hitTargetIds, source.hitTargetIds)
+    assert.equal(migrated.targetId, null)
+    assert.equal(migrated.turnAccumulator, Math.fround(.01))
+    assert.equal(migrated.reacquiresTarget, source.phase === 'held')
+    assert.equal(migrated.trackingTicksRemaining, source.phase === 'held' ? 1750 : 1200)
+    assert.equal(migrated.headingDegrees, 90)
+    assert.equal(migrated.flightSpeed, source.phase === 'held' ? 2.25 : Math.hypot(source.velocity.x, source.velocity.y))
+    const reexport = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard: null,
+      mods: [], modState: {}, playerId: 'owner', state: migratedState })
+    assert.deepEqual(restoreGameSaveDocument(reexport).state.primarySpells, migratedState.primarySpells)
+    assert.deepEqual(migratedState.combatRng, state.combatRng)
   }
 })

@@ -2083,3 +2083,172 @@ Scoped TypeScript and changed-file lint pass. The added rate-1 behavior remains
 covered by the original regression expectations. Rust verification, the combined
 candidate gate and installed journeys remain pending; no native-runtime numerical,
 x87, pixel/audio or performance equality is inferred from these source checks.
+
+## 2026-11-01 — Report131: EBoulder guidance and flight reopening
+
+The earlier four-rock-ceiling conclusion remains supported. The earlier assertion
+that released EBoulders are deliberately ballistic is false: it stopped at the
+shared Boulder tick and did not follow its concrete contact vslot or the release
+routine's acquisition calls and the lost-target call. This reopening owns the complete
+build1006 quantity, release, guidance, contact ordering and persistence contract
+in both maintained clients. Report81's separate performance claim is unresolved.
+
+### Direct retail evidence
+
+The freshly hashed retail0.72.5 PE is4,723,200bytes, SHA256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base0x400000. LLVM23.1.3 disassembly and PE data reads are retained in the private
+campaign `report131/` evidence folder. No injected or clean-stock-runtime claim
+is made. Instruction/data facts below supersede earlier inferred field names.
+
+- Rebuild1006 case0x668FE1..0x66951C, selected by switch0x66B1B8, consumes the
+  complete component tuple8,40,10,43,9,42. More Missiles row10 supplies rounded
+  quantity, clamped1..4 at0x669495..0x6694C9. Smart row9 supplies1+mSpeed/100.
+  Existing extracted catalog contains all quantity rows1..14 and Smart speed
+  additions0,10,25,40,55,100,110,120,130,140,150. No extra quantity is implied
+  by the ordinary Magic Missile card's description.
+- Base constructor0x5FA270 sets heading+6C, +70=3.0, held state, shell/pool/list.
+  EBoulder constructor0x5FA670 installs vtable0x79E08C, target handle
+  +21C/+21E=-1, turn input+224=1, turn accumulator+228=f32(.01), reacquisition
+  +220=false and guidance countdown+230=250.
+- Player handler0x545360 multiplies the constructor turn input+224 by the Smart factor at birth (0x5454B8..0x5454C4), never translational
+  speed+70. While funded with Smart factor>1 it sets+220=true and+230 to the
+  truncation of1000*factor+250. Weak handling0x545B84..0x545BC1 sets
+  countdown150 (immediate0x96), disables+220 and restores+224=1. Subsequent
+  funded holding refreshes the Smart window/policy but does not rewrite+224. Weak quantity
+  collapses toone and retains the independently recovered debris/growth rules.
+- Release0x5FA6D0 first multiplies+70 by.75, so the original rock's native
+  flight speed is2.25. Existing claims calling this an angular-only field were
+  incomplete: shared contact0x620C10..0x620C5F computes heading unit-vector
+  times+70 and commits it to position. The complete templates are:
+
+  | Quantity | Along/across offsets, heading offset, speed and turn-input factors |
+  | --- | --- |
+  |1| (0,0,0), original speed2.25 and original Smart turn input |
+  |2| (0,+30,0), original; (0,-30,+10), speed2.25 and turn input1 |
+  |3| (+30,0,0), original; (0,+30,-10), speed2.25*f32(.95), turn inputf32(.95); (0,-30,+10), same factors |
+  |4| quantity3 plus(-15,0,0), speed2.25*f32(.9), turn inputf32(.9) |
+
+  Added children are constructed independently and copy the parent's current
+  turn accumulator, reacquisition policy and guidance countdown; their turn
+  input starts from constructor1 before the template multiplier. Each owns its
+  own target handle, damage pool, hit list, light, painter, pose and lifetime.
+- Release calls0x5F28A0 for every child at0x5FABB0, then the original at
+  0x5FABCA. This helper's only other direct caller is0x621569. It asks shared
+  nearest-root query0x641160 at the rock's current root with no excluded root,
+  stores that handle, then rejects it if the rock's hit list already contains
+  the selected root. It does not retry a farther target. No selection disables
+  reacquisition. Query uses mask2, strict squared distance<999999 and native
+  registration tie ordering; neither a100-unit forward probe nor visual
+  attachment offsets participate.
+- Shared tick0x609D30 has exactly two absolute vtable references, Earth
+  0x79E014+8 and EBoulder0x79E08C+8. Its released-contact call uses vslot+64:
+  Earth0x620B60, EBoulder0x621450. Thus EBoulder first performs the complete
+  shared move/contact/terrain transaction, then its own guidance tail.
+- Guidance0x621450 calls0x620B60, decrements+230, then returns when the result
+  is<=0 or the target handle is null. The countdown is a steering window,
+  **not an actor lifetime**. Otherwise a resolved target contributes its root
+  even when inactive for that last sample. Desired heading, native one-degree
+  sign-turn/deadband0x410D60, f32(sign*f32(.7)), turn input and accumulator
+  produce one final f32 heading write. Accumulator adds f32(.05) through1,
+  f32(.002) above1, and caps at10. Heading affects the following movement tick.
+  Inactive resolved targets clear after steering; a missing non-null target
+  reacquires only when+220 is true, without same-tick steering. Failed search
+  clears both handle and policy. Empty-at-release/null targets never poll.
+- The two vtable references plus direct-call sweep establish exact membership:
+  no Hail/Meteor or ordinary MagicMissile base tick is silently included.
+  Terrain/pool exhaustion, world bounds/scene cleanup and owner teardown still
+  end individual rocks; guidance expiry alone cannot remove one. Presentation,
+  audio, RNG, damage and painter ownership stay with their established owners.
+
+### Membership and implementation contract
+
+| Member | Source disposition | Verification / remaining acceptance |
+| --- | --- | --- |
+| All quantity rows1..14, Smart additions0..150, component tuple8/40/10/43/9/42 | verified-already-at-parity for vector rebuild | retail data, Pixi public-profile matrix and both runtime split matrices |
+| Normal/weak held original, quantity collapse and release1..4 | implemented; focused source checks passed | native speed/turn/countdown/template assertions |
+| All independently registered original and child rocks | implemented; focused source checks passed | each target choice, IDs, light roots, speeds, turn inputs and copied clocks |
+| No target, live target, resolved inactive, unresolved target, hit-list rejection, failed replacement | implemented; focused source checks passed | independent move-before-turn and no-poll/reacquire regressions |
+| Guidance-window boundary and continued clear flight | implemented; focused source checks passed | zero-window survival and frozen heading; collision still terminal |
+| Authority caller target collections and contact ordering | implemented; focused source checks passed | actual admitted primary cast and ordered contact path |
+| Object/compact/delta replication and current/native checkpoint/Website save | implemented; focused source checks passed | required fields, strict invalid-state rejection, exact continuation round trips |
+| Old in-flight save migration | implemented; focused source checks passed | preserve stored identity/pose/velocity/pool/RNG; derive heading from saved direction, default absent target to native null and accumulatorf32(.01); never invent a past acquired target |
+| Old held save migration | implemented; focused source checks passed | native constructor guidance defaults, current accepted held state retained before corrected release |
+| Ordinary Earth shared move/contact/termination | verified-already-at-parity, unchanged | existing Earth/contact tests |
+| MagicMissile, FireMissile, FrostMissile, BallLightning Smart tracking | out-of-system: distinct shared missile base0x5FD270 | existing sibling targeting tests remain required |
+| Hailstones and Meteor persistent members | out-of-system: distinct release/update lifecycles | unchanged existing persistent-member checks |
+| Hub/Boneyard owner, peers and observers; teardown | real-M2-acceptance-pending | root's final affected real M2 acceptance after combined gates |
+
+Old saves never retained the missing target or turn-accumulator history. Native
+null target is a supported state, so migration can safely resume the saved
+trajectory without fabricating prior acquisition. A fresh cast acquires normally.
+This unavoidable historical target-history limit must be disclosed; it does not
+justify a permanent alternate ballistic implementation. Required new wire fields
+use the coordinated protocol revision; current save output gets its own schema
+revision while earlier supported schemas are migrated at the save boundary.
+
+The canonical source port is implemented in both clients. Browser acceptance,
+publication and Report131 completion remain pending with the campaign owner. The shared original message1562279615068643348 still
+requires both Report81 and Report131 acceptance before a completion reaction.
+
+
+### Source port and bounded verification
+
+Pixi protocol155 and Rust gameplay protocol3 require seven authoritative fields:
+`flightSpeed`/`flight_speed`, `headingDegrees`/`heading_degrees`,
+`reacquiresTarget`/`reacquires_target`, `targetId`/`target_id`,
+`trackingTicksRemaining`/`tracking_ticks_remaining`,
+`turnAccumulator`/`turn_accumulator`, and `turnInput`/`turn_input`.
+Website save schema52 writes them; native server container schema2 keeps its
+outer format. Deployment protocol2 is unchanged. Native disk migration visits
+only `checkpoint.spells.transients[i].Weld.Persistent.EtherealBoulder`, preserving
+arbitrary same-name authored/mod objects. Mixed old/current native field sets
+and absent current fields are rejected, including a missing nullable target.
+
+Old held records also lack the weak/funded countdown history: their clock was a
+fake TTL. Migration derives held window/policy from retained turn input, using
+constructor250 for non-Smart state. The next held update applies the native
+funded/weak writer. Immediate key-up after unrecorded weak/refunded history cannot
+recover the exact prior150/250/Smart-reset window. This historical limit does not
+create an alternate runtime branch. Old in-flight actors preserve stored velocity
+and use native null-target defaults; fresh release uses the recovered owner.
+
+Release instructions alone do not establish whether the shared actor scheduler
+runs later in the same frame. Established accepted contact timing is retained.
+Steering follows actual movement and accepted contacts. Empty contact gathers run
+guidance without rewriting the untouched shell rebuild bucket.
+
+Original fixture bytes remain unchanged. Qualification is limited to build1006:
+
+- The eight1006 actor cases (bare/learned/frozen normal and weak, three/four splits)
+  retain held geometry, release roots, membership, IDs, registrations, age, pools,
+  growth, RNG and breakup. Only the old clock and released turn/motion inputs are
+  displaced; moved origin/orientation follow the corrected trajectory. All
+  compositor assertions still run at their recorded poses. Only bare-normal
+  tick1250's fake-TTL absence is superseded; its RNG remains asserted, and an
+  independent native case requires clear-flight survival past1300 ticks.
+- The three1006 held/empty/terrain journey cases retain mana, cast/queue/ownership
+  epochs, IDs, painters, RNG, pools and lifecycle. Only the old clock, released
+  trajectory and terrain children's inherited planar pose/vector are displaced.
+  Terrain child alpha/height/vertical motion and identity stay exact.
+- Contact fixture assertions remain intact; the adapter maps old state spellings.
+  No contact case is skipped. Historical Website-save replay retains old in-flight
+  trajectories; only missing guidance fields and newly released old held actors'
+  refuted trajectories are qualified. Current re-export expects schema52.
+  All other families and original fixture files are unchanged.
+
+Independent expectations come from retail rows/owners, not regenerated goldens:
+154 authored quantity/Smart combinations, all split members/factors, independent
+root acquisition, move-before-turn, missing/null/inactive targets, visited-nearest
+rejection, steering expiry without retirement, weak downgrade/refunding,
+deadband/cap, real funded/weak callers, shell preservation without contact, and
+current/old save plus owner/observer keyframe/delta round trips.
+
+M2 focused receipts: Pixi267/267 tests across six affected files, then the expanded
+authored-profile file5/5; TypeScript checking passed. Scoped Oxlint reports only
+the pre-existing save-contract control-regex warning. Rust19/19 focused simulation
+tests, native/Website save boundary2/2, historical Website-save suite9/9 and
+focused sim/assets Clippy with `-D warnings` passed. Logs name the exact131 worker
+source paths and nonzero tests despite the coordinated shared target. Root owns
+fresh combined gates and real affected browser/native acceptance. No worker GPU,
+browser or performance result is claimed.
