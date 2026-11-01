@@ -443,6 +443,7 @@ consulted. The existing 2,000-ms phase remains for two or more active humans.
 | Solo Pause/nested Settings, Inventory and full Skill Screen close | Preserve full native close/owner lifecycle; release directly | exact-ported |
 | Solo active save restart and same-tab takeover/rejoin | Preserve run/token restoration, materialization and readiness; skip only the post-ready deadline | exact-ported |
 | Shared-host solo run with other humans in Hub or other runs | Run-local human count is one; entry, surfaces and restart/rejoin stay direct | exact-ported |
+| Ordinary party ticket arriving after its leader enters combat | Recheck the existing Hub-only admission contract before creating an actor; reject the stale transfer and preserve the active owner's save | exact-ported |
 | Multiplayer fresh ordinary/custom readiness | All required renderers ready before one shared 2,000-ms deadline | verified-already-at-parity |
 | Multiplayer Pause/Settings, Inventory/full Skills | Same source-qualified 2,000-ms deadline after final owner release | verified-already-at-parity |
 | Multiplayer rejoin, catch-up picker and coordinated restart | Wait for readiness and materialization; required absent members remain required; retain shared countdown | verified-already-at-parity |
@@ -466,6 +467,17 @@ multiplayer audience shrinks to solo. Input clearing, scheduler reset and
 run-scoped broadcasts remain at the same host boundaries. The protocol and
 save shapes are unchanged; the client renders the authoritative state and
 requires no locally guessed audience or hidden timer.
+
+Ordinary party transfers must recheck the destination at the actual Hello, after
+ticket preparation. Resolution and reservation already require a party in the
+Hub; an unexpired ticket cannot admit a College actor after that party starts a
+Boneyard. A matching stale reservation is consumed before actor creation. This
+keeps party membership, run-local audiences and owner-save projection consistent.
+Signed active-party recovery/rejoin uses its separate retained-run admission and
+is unchanged. Valid Hub transfers, including private profile import, retain their
+existing behavior. Public host regressions verify rejection without a Welcome or
+actor mutation, successful restore of the surviving owner's saved run, and saves
+for both owners of a legitimate Hub transfer.
 
 ### Validation contract
 
