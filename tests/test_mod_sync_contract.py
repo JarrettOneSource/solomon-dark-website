@@ -802,39 +802,47 @@ console.log(JSON.stringify({
 
     def test_reconnect_uses_current_jwt_and_existing_publication_without_importing_browser_state(self) -> None:
         cls = type(self)
-        before = len(cls.reconnect_requests)
-        body = {"sessionId": None, "playerId": "player-1", "resumeToken": "R" * 43,
-                "requestId": "q" * 32, "leaderboardUserId": 999, "developerAccess": True,
-                "save": "editable-browser-save", "content": {"mods": ["injected"]}}
-        self.assertEqual(self.request("POST", "/api/game/reconnect", json_body=body)[0], 400)
-        self.assertEqual(len(cls.reconnect_requests), before)
-        headers = {"X-Solomon-Dark-Session": "reconnect"}
-        status, endpoint = self.request("POST", "/api/game/reconnect", json_body=body, headers=headers)
-        self.assertEqual(status, 200, endpoint)
-        self.assertEqual(endpoint["url"], "wss://game.example.invalid/game-hub")
-        self.assertEqual(cls.reconnect_requests[-1], {"sessionId": None, "playerId": "player-1",
-            "resumeToken": "R" * 43, "requestId": "q" * 32, "leaderboardUserId": None})
-        private = {**body, "sessionId": "s" * 32, "requestId": "v" * 32}
-        status, endpoint = self.request("POST", "/api/game/reconnect", json_body=private,
-            headers={**headers, "Authorization": f"Bearer {self.token}"})
-        self.assertEqual(status, 200, endpoint)
-        self.assertEqual(endpoint["url"], "wss://game.example.invalid/game-sessions/" + "s" * 32)
-        self.assertEqual(cls.reconnect_requests[-1]["leaderboardUserId"], self.user_id)
-        self.assertEqual(self.request("POST", "/api/game/reconnect",
-            json_body={**body, "sessionId": "../other-authority"}, headers=headers)[0], 400)
-        cls.reconnect_status = 403
+        # This case consumes all six game-session permits. Keep prior admission
+        # tests out of its limiter window, as the editor admission case does.
+        cls.stop_server()
+        cls.start_server()
         try:
-            self.assertEqual(self.request("POST", "/api/game/reconnect", json_body=body, headers=headers)[0], 403)
-        finally:
-            cls.reconnect_status = 201
-        publication = cls.web_root / "deployment.json"
-        publication.write_text('{"ready":false}', encoding="utf-8")
-        before = len(cls.reconnect_requests)
-        try:
-            self.assertEqual(self.request("POST", "/api/game/reconnect", json_body=body, headers=headers)[0], 503)
+            before = len(cls.reconnect_requests)
+            body = {"sessionId": None, "playerId": "player-1", "resumeToken": "R" * 43,
+                    "requestId": "q" * 32, "leaderboardUserId": 999, "developerAccess": True,
+                    "save": "editable-browser-save", "content": {"mods": ["injected"]}}
+            self.assertEqual(self.request("POST", "/api/game/reconnect", json_body=body)[0], 400)
             self.assertEqual(len(cls.reconnect_requests), before)
+            headers = {"X-Solomon-Dark-Session": "reconnect"}
+            status, endpoint = self.request("POST", "/api/game/reconnect", json_body=body, headers=headers)
+            self.assertEqual(status, 200, endpoint)
+            self.assertEqual(endpoint["url"], "wss://game.example.invalid/game-hub")
+            self.assertEqual(cls.reconnect_requests[-1], {"sessionId": None, "playerId": "player-1",
+                "resumeToken": "R" * 43, "requestId": "q" * 32, "leaderboardUserId": None})
+            private = {**body, "sessionId": "s" * 32, "requestId": "v" * 32}
+            status, endpoint = self.request("POST", "/api/game/reconnect", json_body=private,
+                headers={**headers, "Authorization": f"Bearer {self.token}"})
+            self.assertEqual(status, 200, endpoint)
+            self.assertEqual(endpoint["url"], "wss://game.example.invalid/game-sessions/" + "s" * 32)
+            self.assertEqual(cls.reconnect_requests[-1]["leaderboardUserId"], self.user_id)
+            self.assertEqual(self.request("POST", "/api/game/reconnect",
+                json_body={**body, "sessionId": "../other-authority"}, headers=headers)[0], 400)
+            cls.reconnect_status = 403
+            try:
+                self.assertEqual(self.request("POST", "/api/game/reconnect", json_body=body, headers=headers)[0], 403)
+            finally:
+                cls.reconnect_status = 201
+            publication = cls.web_root / "deployment.json"
+            publication.write_text('{"ready":false}', encoding="utf-8")
+            before = len(cls.reconnect_requests)
+            try:
+                self.assertEqual(self.request("POST", "/api/game/reconnect", json_body=body, headers=headers)[0], 503)
+                self.assertEqual(len(cls.reconnect_requests), before)
+            finally:
+                publication.unlink()
         finally:
-            publication.unlink()
+            cls.stop_server()
+            cls.start_server()
 
     def test_game_session_provisioning_fails_closed_when_supervisor_rejects(self) -> None:
         status, response = self.request("POST", "/api/game/sessions")
