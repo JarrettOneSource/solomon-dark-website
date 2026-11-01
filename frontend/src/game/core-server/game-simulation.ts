@@ -2922,6 +2922,14 @@ function finishGameSimulationTick(
     const received = applyPlayerContacts({ world, playerEntities, secondaryAbilities, enhancedEffects: previous.enhancedEffects },
       resolvedPlayers, fieldDamage, tick, extensions, worldManagerOrder.register, writeScreenFlash)
     world = received.world
+    // Field flags suppress ordinary hit feedback; charm loss and rescue remain
+    // independent in retail Player damage (0x0052FCEA, 0x005304B0).
+    const feedback = received.playerDamageSoundEvents.filter(event => event.type === 'player-charm-lost'
+      || event.type === 'player-cheat-death')
+    if (world.kind === 'boneyard' && feedback.length > 0) {
+      world = { ...world, enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents,
+        feedback, tick) }
+    }
     playerEntities = received.playerEntities
     secondaryAbilities = received.secondaryAbilities
     resolvedPlayers = received.resolvedPlayers
