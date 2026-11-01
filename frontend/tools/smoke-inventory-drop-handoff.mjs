@@ -4,16 +4,17 @@ import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium } from 'playwright-core'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { preview } from 'vite'
 import { createGameSimulation, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'
-import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
+import { createGameSaveDocument, restoreGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { WEB_GAME_SAVE_SLOT } from '../src/game/save/game-save-contract.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { HUB_INVENTORY_GRID, HUB_SHOP_GRID, HUB_UNFORGE_TARGET, hubInventorySlotPosition } from '../src/game/renderer/hub-inventory-render-contract.ts'
 import { DOWSING_EQUIPMENT_RECIPES, createEquipmentInventoryItem, findInventoryItem, projectInventoryItems } from '../src/game/core-kernels/hub-economy.ts'
 
 const report50Only = process.argv.includes('--report50-only')
+const report50ActivationOnly = process.argv.includes('--report50-activation-only')
 const report22ParentOnly = process.argv.includes('--report22-parent-only')
 const screenshotRoot = process.env.SDR_INVENTORY_DROP_SCREENSHOT_ROOT
   || await mkdtemp(join(tmpdir(), 'solomon-inventory-drop-'))
@@ -80,9 +81,11 @@ const document = createGameSaveDocument({
     }),
   },
 })
-const server = await startStaticClientServer({
-  root: fileURLToPath(new URL('../../backend/wwwroot/', import.meta.url)),
-})
+const frontendRoot = fileURLToPath(new URL('../', import.meta.url))
+const frontend = await preview({ root: frontendRoot, logLevel: 'error',
+  preview: { host: '127.0.0.1', port: 0 } })
+const server = { origin: `http://127.0.0.1:${frontend.httpServer.address().port}`,
+  close: () => frontend.close() }
 const credential = 'inventory-drop-browser-acceptance'
 const host = await startGameHost({
   allowedOrigins: [server.origin], authentication: { kind: 'shared', credential }, snapshotRate: 20,
@@ -118,7 +121,10 @@ await page.addInitScript(({ credential: gameCredential, url }) => {
   window.solomonDarkRuntime = { gameEndpoint: { kind: 'localhost', credential: gameCredential, url } }
 }, { credential, url: host.address.url })
 try {
-  await page.goto(server.origin)
+  await page.route('**/__inventory_seed', route => route.fulfill({
+    contentType: 'text/html', body: '<!doctype html><title>Inventory fixture</title>',
+  }))
+  await page.goto(`${server.origin}/__inventory_seed`)
   await page.evaluate(record => new Promise((resolve, reject) => {
     const open = indexedDB.open('solomon-dark-game-saves', 1)
     open.onupgradeneeded = () => open.result.createObjectStore('slots', { keyPath: 'slot' })
@@ -136,7 +142,11 @@ try {
   await page.locator('.hub-scene[data-renderer-state="ready"][data-gameplay-input-blocked="false"]').waitFor({ timeout: 60_000 })
   await page.getByRole('button', { name: /Open inventory/ }).click()
   const inventory = page.getByRole('dialog', { name: 'Inventory', exact: true })
-  if (report22ParentOnly) {
+  if (report50ActivationOnly) {
+    await exerciseReport50Activation(inventory)
+    await closeInventory(inventory)
+    await saveReport50Continuation()
+  } else if (report22ParentOnly) {
     await openSack(inventory, inventory.locator('[data-inventory-item-id="40010"]'), '40010')
     await openSack(inventory, inventory.locator('[data-inventory-item-id="40011"]'), '40010/40011')
     const before = JSON.stringify(host.state().playerEntities.economies[0].backpack)
@@ -251,6 +261,76 @@ async function exerciseInventory(inventory, scene) {
     await item(ringId).waitFor()
   }
   await page.screenshot({ path: join(screenshotRoot, `${scene}-inventory.png`) })
+}
+
+async function exerciseReport50Activation(inventory) {
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  const item = (id, owner = 'backpack') => inventory.locator(
+    `[data-inventory-owner="${owner}"][data-inventory-item-id="${id}"]`,
+  ).first()
+  for (const [depth, parent, slot] of [[0, null, 0], [1, 40_010, 1], [2, 40_011, 0]]) {
+    let sequence = currentEconomy().actionFeedback?.sequence ?? 0
+    await item(ringId).dblclick()
+    await waitForHostFeedback(sequence)
+    await item(ringId, 'equipment').waitFor()
+    if (depth > 0) await openSack(inventory, item(parent), depth === 1 ? '40010' : '40010/40011')
+    sequence = currentEconomy().actionFeedback.sequence
+    await item(ringId, 'equipment').dblclick()
+    await waitForHostFeedback(sequence)
+    const placement = projectInventoryItems(currentEconomy().backpack).find(({ item }) => item.id === ringId)
+    assert.equal(currentEconomy().actionFeedback.accepted, true)
+    assert.deepEqual([placement?.depth, placement?.parentSackId, placement?.slot], [depth, parent, slot],
+      `double-click removal at depth ${depth} must use the open root`)
+    assert.equal(currentEconomy().equipment.rings[0], null)
+    await item(ringId).waitFor()
+    assert.equal(await item(ringId).getAttribute('data-inventory-slot'), String(slot))
+    await waitForSack(inventory, depth === 0 ? '' : depth === 1 ? '40010' : '40010/40011')
+    await page.screenshot({ path: join(screenshotRoot, `report50-double-click-depth-${depth}.png`) })
+    receipts.push({ name: `report50-double-click-depth-${depth}`, depth, parentSackId: parent, slot, accepted: true })
+  }
+  for (const slot of ['ring-1', 'ring-2']) {
+    await releaseItem(inventory, item(ringId), await center(inventory.locator(`[data-equipment-slot="${slot}"]`).first()), `report50-activate-${slot}`)
+    const sequence = currentEconomy().actionFeedback.sequence
+    await item(ringId, 'equipment').dblclick()
+    await waitForHostFeedback(sequence)
+    assert.deepEqual(projectInventoryItems(currentEconomy().backpack)
+      .filter(({ item }) => item.id === ringId).map(({ parentSackId, slot }) => [parentSackId, slot]), [[40_011, 0]])
+    await item(ringId).waitFor()
+    receipts.push({ name: `report50-double-click-${slot}`, parentSackId: 40_011, slot: 0, accepted: true })
+  }
+  for (const slot of ['hat', 'robe']) {
+    const point = await stagePoint(inventory, 750, 420)
+    await page.mouse.click(point.x, point.y)
+    const before = JSON.stringify(currentEconomy())
+    await item(currentEconomy().equipment[slot].id, 'equipment').dblclick()
+    await inventory.getByRole('button', { name: 'OKAY', exact: true }).click()
+    assert.equal(JSON.stringify(currentEconomy()), before)
+    receipts.push({ name: `report50-double-click-${slot}-refused`, noMutation: true })
+  }
+  await leaveNestedSacks(inventory)
+}
+
+async function saveReport50Continuation() {
+  await page.keyboard.press('Escape')
+  const pause = page.locator('.gameplay-pause-stage[data-gameplay-pause-view="owner"]')
+  await pause.getByRole('button', { name: 'LEAVE GAME' }).click()
+  await page.getByRole('button', { name: 'Play', exact: true }).waitFor()
+  const saved = await page.evaluate(() => new Promise((resolve, reject) => {
+    const open = indexedDB.open('solomon-dark-game-saves', 1)
+    open.onerror = () => reject(open.error)
+    open.onsuccess = () => {
+      const request = open.result.transaction('slots', 'readonly').objectStore('slots').get(0)
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => { open.result.close(); resolve(request.result) }
+    }
+  }))
+  assert.ok(saved.revision > 1)
+  const restored = restoreGameSaveDocument(saved.document)
+  const placement = projectInventoryItems(getPlayerEconomy(restored.state, restored.playerId).backpack)
+    .find(({ item }) => item.id === ringId)
+  assert.deepEqual([placement?.depth, placement?.parentSackId, placement?.slot], [2, 40_011, 0])
+  receipts.push({ name: 'report50-saved-leave-restores-current-sack-removal', revision: saved.revision,
+    parentSackId: 40_011, slot: 0, accepted: true })
 }
 
 async function exerciseReport50(inventory) {
