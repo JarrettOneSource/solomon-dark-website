@@ -69,6 +69,23 @@ test('gives Magic Shield the native equality tie and shares the poisoned strip',
   ])
 })
 
+test('shows the Regenerate pulse only while active and clips it to life rather than Shield', () => {
+  for (const poisoned of [false, true]) {
+    for (const shield of [0, 0.1, 0.25, 0.75]) {
+      const inactive = nativeHealthHudLayers(0.25, shield, poisoned)
+      const active = nativeHealthHudLayers(0.25, shield, poisoned, true)
+      assert.deepEqual(active.slice(0, -1), inactive)
+      assert.deepEqual(active.at(-1), {
+        kind: 'regenerate', progress: 0.25, record: 52, tint: 'white',
+      })
+      assert.deepEqual(nativeHealthHudLayers(0.25, shield, poisoned, false), inactive)
+    }
+  }
+  for (const [health, progress] of [[-1, 0], [0, 0], [1, 1], [2, 1]] as const) {
+    assert.equal(nativeHealthHudLayers(health, 1, false, true).at(-1)?.progress, progress)
+  }
+})
+
 test('clips local vital fills from the right so health remains left anchored', () => {
   assert.equal(nativeHudLeftOriginClipPath(1), 'inset(0 0% 0 0)')
   assert.equal(nativeHudLeftOriginClipPath(0.25), 'inset(0 75% 0 0)')

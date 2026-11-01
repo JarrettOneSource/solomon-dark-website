@@ -317,6 +317,16 @@
   filter: url('#hub-hud-magic-shield-tint');
 }
 
+.hub-hud-meter-regenerate {
+  /* Use the Rust HUD pulse bounds and period: alpha 0.1..0.5 over a 500π ms cycle. */
+  animation: hub-hud-regenerate-pulse 785.398ms ease-in-out infinite alternate;
+}
+
+@keyframes hub-hud-regenerate-pulse {
+  from { opacity: 0.1; }
+  to { opacity: 0.5; }
+}
+
 .hub-hud-mana-reserve {
   top: 5px;
   right: 5px;

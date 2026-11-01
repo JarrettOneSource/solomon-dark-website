@@ -221,6 +221,7 @@ export default function GameHud({
     healthHud.fillProgress,
     healthHud.shieldProgress,
     progression.poisonTicksRemaining > 0,
+    quickbarHud.playerState?.regenerate === true,
   )
   const skillBindings = nativeHudSkillBindings({
     concentrationSkillIds: quickbarHud.concentrationSkillIds,
@@ -313,11 +314,13 @@ export default function GameHud({
           />
           {healthLayers.map((layer) => (
             <NativeUiStrip
-              ariaLabel={layer.kind === 'shield'
-                ? `Magic shield ${quickbarHud.playerState!.magicShieldAbsorb} of ${quickbarHud.playerState!.magicShieldMaximum}`
-                : `Health ${progression.currentHealth} of ${progression.maximumHealth}`}
+              ariaLabel={layer.kind === 'regenerate'
+                ? 'Regenerate active'
+                : layer.kind === 'shield'
+                  ? `Magic shield ${quickbarHud.playerState!.magicShieldAbsorb} of ${quickbarHud.playerState!.magicShieldMaximum}`
+                  : `Health ${progression.currentHealth} of ${progression.maximumHealth}`}
               atlas="UI"
-              className={`hub-hud-meter-fill${layer.tint === 'magic-shield' ? ' hub-hud-meter-shield' : ''}`}
+              className={`hub-hud-meter-fill${layer.kind === 'health' ? '' : ` hub-hud-meter-${layer.kind}`}`}
               key={layer.kind}
               record={layer.record}
               style={{ clipPath: nativeHudLeftOriginClipPath(layer.progress) }}
