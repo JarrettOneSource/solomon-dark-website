@@ -1,5 +1,44 @@
 # 2026-10-10 — Active-run charms and Sack menu quality of life
 
+## Charm-loss notification
+
+Report 101 authorizes a brief `CHARM EFFECT LOST!` notice in the existing
+fixed-tick world notification lane. This is a deliberate presentation addition;
+the recovered native loss branch below still supplies only its sound. The
+accepted `player-charm-lost` event names its owner but does not identify which
+until-hurt charm ended, so the notice does not guess Reverie or Serendipity from
+current flags or imply that an owned charm was removed.
+
+Reverie alone, Serendipity alone and both together use the same one-event notice.
+The client session seeds retained events and deduplicates fresh events before
+presentation; other owners and unrelated event kinds produce no charm notice.
+Zero, absorbed and repeated damage retain their existing authority behavior.
+Reactivation produces no notice until another accepted loss. The notification
+uses the existing rise, fade, visibility and teardown rules alongside Cheat Death
+and loot. Current charm/status visibility and loss audio are preserved, including
+the absent persistent HUD row described below. No gameplay, save or wire contract
+changes. The report's tentative Boast question is separate from this addition.
+
+### Ether Drain's accepted loss is a semantic event
+
+The field's `0x10A` flags suppress ordinary hit presentation. They do not cancel
+an accepted until-hurt loss. Retail `0x0052FCEA–0x0052FDEB` checks the active
+flags and positive summed post-defense damage, plays the loss stream and clears
+both flags before calling common Actor reaction at `0x0052FDF1`. That reaction's
+separate `flags & 0x08` test is at `0x00627FA4`; it clears the redraw latch.
+The loss branch has no corresponding suppression test. Fresh read-only M2
+disassembly of the same SHA-256 executable listed below confirms this boundary.
+
+Both maintained receivers already create `PlayerCharmLost` from the accepted
+runtime transition independently of hit-response suppression. Ether Drain must
+retain exactly that semantic loss and `PlayerCheatDeath` from the receiver's
+outbox, preserving suppression of ordinary Ouch/status feedback. The earlier
+rescue-only Rust filter excluded an already-accepted charm transition; forwarding
+the entire outbox would instead reintroduce the previously detected Ouch leak.
+Caster and peer field regressions cover each until-hurt charm, both together,
+and loss followed by Cheat Death, including event order and no repeated loss.
+This changes event retention, not damage, charm lifetime or field mechanics.
+
 ## 2026-10-13 — Charm status row removed
 
 At the user's request, the persistent charm status row and its tooltip controls

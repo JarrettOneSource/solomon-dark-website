@@ -50,7 +50,7 @@ try {
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ headed, modes, receipts, errors, rawRequestFailures, failure,
-    qualification: 'Desktop and touch-landscape use the built client, real authority/replication/audio and public saved-run/leave/resume navigation. Narrow portrait checks only the intentional rotate gate; portrait gameplay is not accepted. Declared fixtures: owned charms, initial spent flags, authoritative damage, reactivation via existing purchase reducer, and one synthetic participant. The removed charm status row must stay absent throughout active, spent and restored states. Touch is Chrome emulation, not physical-device acceptance.' }, null, 2) + '\n')
+    qualification: 'Desktop and touch-landscape use the built client, real authority/replication/audio and public saved-run/leave/resume navigation. Narrow portrait checks only the intentional rotate gate; portrait gameplay is not accepted. Declared fixtures: owned charms, initial spent flags, authoritative damage, reactivation via existing purchase reducer, and one synthetic participant. Fresh owner loss shows CHARM EFFECT LOST! through the transient notification clock; retained, peer and zero-damage state does not. The removed charm status row must stay absent throughout active, spent and restored states. Touch is Chrome emulation, not physical-device acceptance.' }, null, 2) + '\n')
   await browser.close()
   await server.close()
 }
@@ -73,6 +73,7 @@ async function journey(mode) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: touch ? 2 : 1,
     isMobile: touch, hasTouch: touch })
   const page = await context.newPage()
+  const lossNotice = page.locator('.boneyard-loot-messages > span[aria-label="CHARM EFFECT LOST!"]')
   const wire = observeGameWire(page)
   let requestContext = 'setup'
   page.setDefaultTimeout(15_000)
@@ -136,6 +137,7 @@ async function journey(mode) {
     expectActive(false)
     assert.deepEqual(getPlayerEconomy(host.state(), owner).ownedPerkSelectors, selectors)
     assert.equal(await lossCount(), 0, 'initial spent state must remain silent')
+    assert.equal(await lossNotice.count(), 0, 'initial spent state must not replay a notice')
     await capture('initial-spent')
 
     rearm()
@@ -146,17 +148,25 @@ async function journey(mode) {
     damage(peer, 1)
     await page.waitForTimeout(200)
     assert.equal(await lossCount(), 0, 'another owner cannot play the local loss stream')
+    assert.equal(await lossNotice.count(), 0, 'another owner cannot show the local loss notice')
     damage(owner, 0)
     await page.waitForTimeout(100)
     assert.equal(await lossCount(), 0)
+    assert.equal(await lossNotice.count(), 0, 'zero damage cannot show a loss notice')
     expectActive(true)
     damage(owner, 1)
     await waitForLoss(1)
+    await lossNotice.waitFor({ state: 'visible' })
     expectActive(false)
     damage(owner, 1)
     await page.waitForTimeout(250)
     assert.equal(await lossCount(), 1, 'repeated hits and snapshots cannot replay loss')
+    assert.equal(await lossNotice.count(), 1, 'repeated hits and snapshots cannot duplicate the notice')
     await capture('authoritative-loss')
+    await lossNotice.waitFor({ state: 'detached', timeout: 8_000 })
+    damage(owner, 1)
+    await page.waitForTimeout(200)
+    assert.equal(await lossNotice.count(), 0, 'spent-state damage cannot restart an expired notice')
 
     rearm()
     expectActive(true)
@@ -165,6 +175,7 @@ async function journey(mode) {
     Object.assign(host.state(), removePlayerCharacter(host.state(), peer))
     damage(owner, 1)
     await waitForLoss(2)
+    await lossNotice.waitFor({ state: 'visible' })
     const audio = await lossEvents()
     assert.ok(audio.every(event => event.playbackRate === 1 && event.volume > 0))
     await page.locator('.boneyard-scene').focus()
@@ -183,6 +194,7 @@ async function journey(mode) {
     expectActive(false)
     await page.waitForTimeout(250)
     assert.equal(await lossCount(), 0, 'resume must not replay saved loss audio')
+    assert.equal(await lossNotice.count(), 0, 'resume must not replay a saved loss notice')
     await capture('reconnected-spent')
     rearm()
     expectActive(true)
@@ -246,6 +258,7 @@ async function journey(mode) {
     assert.deepEqual(getPlayerEconomy(host.state(), owner).ownedPerkSelectors, selectors)
     await page.screenshot({ path: join(output, `${mode}-${name}.png`) })
     receipts.push({ mode, name, charmRowCount: 0,
+      charmLossNotices: await lossNotice.allTextContents(),
       ownedCharms: getPlayerEconomy(host.state(), owner).ownedPerkSelectors,
       authority: getPlayerProgression(host.state(), owner).hagathaRuntime })
   }

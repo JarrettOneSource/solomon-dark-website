@@ -42,6 +42,7 @@ import type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 import { PlayerCardRequests } from '../player-card-request.ts'
+import { NativeLootMessagePresentation } from '../loot-message-presentation.ts'
 import { connectGameClientSession } from './game-client-session.ts'
 import { connectGameObserverSession } from './game-observer-session.ts'
 import type { GameConnectionFailure } from './game-connection-failure.ts'
@@ -1308,7 +1309,7 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
   session.destroy()
 })
 
-test('charm loss is silent on initial load and reconnect, and delivered once for a fresh event', async () => {
+test('charm loss has no notice on initial load or reconnect, and notifies only a fresh owner loss once', async () => {
   const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }),
     loadedBoneyardFixture('charm-reconnect'))
   const initial = createGameSnapshot(state, 'player-1')
@@ -1327,16 +1328,28 @@ test('charm loss is silent on initial load and reconnect, and delivered once for
     receiveWelcome(transport, initial)
     const session = await connecting
     const received: number[] = []
-    session.onEnemyEvent(event => received.push(event.eventId))
-    receiveSnapshot(transport, { ...initial, tick: 5 }, 0)
-    assert.deepEqual(received, [], `${attempt} must seed its cursor without replaying loss`)
-    const next = { ...initial, tick: 10, world: { ...initial.world,
-      enemyEvents: [loss, { ...loss, eventId: 8, tick: 6 }],
-    } }
-    receiveSnapshot(transport, next, 0)
-    receiveSnapshot(transport, { ...next, tick: 15 }, 0)
-    assert.deepEqual(received, [8])
-    session.destroy()
+    const presentation = new NativeLootMessagePresentation(initial.tick)
+    try {
+      session.onEnemyEvent(event => {
+        received.push(event.eventId)
+        presentation.consumeCombat(event, session.playerId)
+      })
+      receiveSnapshot(transport, { ...initial, tick: 5 }, 0)
+      assert.deepEqual(received, [], `${attempt} must seed its cursor without replaying loss`)
+      assert.deepEqual(presentation.sample(5), [])
+      const next = { ...initial, tick: 10, world: { ...initial.world,
+        enemyEvents: [loss, { ...loss, eventId: 8, tick: 6 },
+          { ...loss, eventId: 9, tick: 7, targetPlayerId: 'peer' }],
+      } }
+      receiveSnapshot(transport, next, 0)
+      receiveSnapshot(transport, { ...next, tick: 15 }, 0)
+      assert.deepEqual(received, [8, 9])
+      assert.deepEqual(presentation.sample(15).map(({ key, text }) => ({ key, text })), [
+        { key: 'combat:8', text: 'CHARM EFFECT LOST!' },
+      ])
+    } finally {
+      session.destroy()
+    }
   }
 })
 

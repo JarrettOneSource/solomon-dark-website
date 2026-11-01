@@ -1,4 +1,4 @@
-import type { BoneyardLootEventSnapshot } from './protocol/game-state.ts'
+import type { BoneyardEnemyEventSnapshot, BoneyardLootEventSnapshot } from './protocol/game-state.ts'
 import type { PlayerCombatComponent } from './core-kernels/player-combat.ts'
 
 export const NATIVE_LOOT_MESSAGE_INITIAL_LIFETIME = Math.fround(1.5)
@@ -56,6 +56,16 @@ export class NativeLootMessagePresentation {
       source: 'loot',
       tint: nativeLootMessageTint(event),
     })
+  }
+
+  /** Receives fresh accepted events after the session has seeded/deduplicated them. */
+  consumeCombat(event: BoneyardEnemyEventSnapshot, playerId: string): boolean {
+    if (event.targetPlayerId !== playerId) return false
+    const text = event.type === 'player-charm-lost' ? 'CHARM EFFECT LOST!'
+      : event.type === 'player-cheat-death' ? 'CHEAT DEATH!' : null
+    if (text === null) return false
+    return this.consumeText({ source: 'combat', eventId: event.eventId,
+      tick: event.tick, text, tint: 0xffffff })
   }
 
   consumeText(event: NativeWorldNotificationInput): boolean {
