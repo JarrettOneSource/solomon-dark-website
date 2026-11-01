@@ -12,6 +12,7 @@ import {
 } from 'pixi.js'
 
 import { hub, skillPicker } from '../../lib/assets.ts'
+import { planBoastProgress, type BoastProgressPresentation } from '../boast-progress-presentation.ts'
 import { DOWSING_EQUIPMENT_RECIPES } from '../core-kernels/hub-economy.ts'
 import {
   nativeBeltEntryItem,
@@ -34,7 +35,7 @@ import {
   type NativeHudPoint,
 } from '../native-hud-layout.ts'
 import { nativeUiFont } from '../native-ui/core.ts'
-import { destroyNativeUiPixiFor } from '../native-ui/pixi.ts'
+import { destroyNativeUiPixiFor, nativeUiPixiFor } from '../native-ui/pixi.ts'
 import type {
   ProtocolPlayerEconomy,
   ProtocolPlayerProgression,
@@ -78,6 +79,7 @@ import {
 
 export interface SkillBookRendererPresentation {
   readonly belt: PlayerBeltComponent
+  readonly boastProgress: BoastProgressPresentation | null
   readonly dragPosition: Readonly<NativeHudPoint> | null
   readonly draggedSkillId: number | null
   readonly economy: ProtocolPlayerEconomy
@@ -139,6 +141,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   const overlay = new Container()
   const help = new Container()
   const pages = new Container()
+  const boasts = new Container()
   const pageViewport = new Container()
   const pageMask = new Graphics().rect(
     NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.x,
@@ -152,7 +155,7 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
   const hotbarControls = new ModalHotbarControlsView()
   const hover = new Container()
   const dragger = new Container()
-  root.addChild(curtain, ambient, fixtures, field, overlay, help, pageViewport, hud, hotbarControls.container, hover, dragger)
+  root.addChild(curtain, ambient, fixtures, field, overlay, help, pageViewport, boasts, hud, hotbarControls.container, hover, dragger)
   application.stage.addChild(root)
 
   drawSkillScreenField(field, resources)
@@ -211,6 +214,8 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
       overlay.alpha = progress ** 3
       help.alpha = progress ** 3
       pages.alpha = progress ** 2
+      boasts.alpha = progress ** 2
+      pageViewport.visible = presentation.boastProgress === null
       pages.position.x = -presentation.scrollX
       hotbarControls.container.alpha = progress
       hotbarControls.container.position.y = nativeHudModalSlideOffset(presentation.hudProgress)
@@ -228,6 +233,12 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
         destroyChildren(help)
         if (presentation.showHelp) drawSkillScreenHelp(help, resources)
       }
+      if (previousPresentation?.boastProgress !== presentation.boastProgress) {
+        destroyChildren(boasts)
+        if (presentation.boastProgress) boasts.addChild(nativeUiPixiFor(resources).render(
+          planBoastProgress(presentation.boastProgress), 'boast-progress',
+        ))
+      }
       destroyChildren(hud)
       destroyChildren(hover)
       destroyChildren(dragger)
@@ -243,8 +254,10 @@ export async function createSkillBookRenderer(): Promise<SkillBookRenderer> {
         presentation.progression,
         hudLayout,
       )
-      drawNativeHoverBox(hover, resources, presentation)
-      drawSkillDragger(dragger, resources, presentation)
+      if (presentation.boastProgress === null) {
+        drawNativeHoverBox(hover, resources, presentation)
+        drawSkillDragger(dragger, resources, presentation)
+      }
       previousPresentation = presentation
       renderer.render(performance.now())
     },

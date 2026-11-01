@@ -1,5 +1,25 @@
 # 2026-08-20 — Inventory and SkillScreen interaction closure in Hub and Boneyard
 
+## Requested Boast progress view
+
+Report 110 requests a read-only Boasts submenu within the Skills book. This is
+a requested presentation addition, with the accepted Rust implementation in
+`crates/web/src/player_panels/boasts.rs` at `6aad9630` defining its product meaning.
+Show the selected stock or authored Boast's name and statement; show Active in
+gold (`d9ba70`), Achieved in green (`97c797`), and Failed in red (`e08080`). Failure
+takes priority if both accepted flags are set. An empty selection and unavailable
+authored content have distinct neutral messages. The view reads the local
+participant's accepted economy and namespaced content projection; it owns no
+gameplay, score, persistence, or success/failure rule.
+
+The PixiJS Skills book exposes the same view in Hub and Boneyard. Boasts/Skills
+switches views; Back first returns to learned skills, while Inventory retains
+the existing book replacement. The Skills renderer owns the card art and native
+bitmap text; React supplies semantic state and ordinary input controls. Focused
+projection/render-plan and live model-store tests cover all five stock selections,
+each status, authored identity, empty/unavailable content, and content arrival.
+Full M2 gate and composed browser acceptance remain release requirements.
+
 ## Reported smell and parity question
 
 - Reported web behavior: Inventory can be opened and acted upon only in the

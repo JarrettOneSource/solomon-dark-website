@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { nativeSkillHoverBoxLayout } from './renderer/native-skill-hover-box-layout.ts'
 import { measureNativeSkillExactText } from './renderer/skill-book-render-contract.ts'
-import { nativeUiFont, wrapNativeUiMsgBoxText } from './native-ui/core.ts'
+import {
+  layoutNativeUiText, nativeUiFont, nativeUiGlyphInkBounds, wrapNativeUiMsgBoxText,
+} from './native-ui/core.ts'
+import { boastProgressPresentation, planBoastProgress } from './boast-progress-presentation.ts'
+import { createBoastState, createModBoastSelection } from './core-kernels/boast.ts'
+import type { ModContentProjection } from './protocol/game-mod-contract.ts'
 
 import {
   NATIVE_SKILL_CATALOG,
@@ -546,3 +551,75 @@ function catalogRow(skillId: number): NativeSkillBookRow {
     weldBuildId: skillId === 52 ? 1000 : null,
   }
 }
+
+test('the Boasts view distinguishes no selection from an unavailable authored selection', () => {
+  const empty = boastProgressPresentation(createBoastState(), null)
+  assert.equal(empty.name, 'No Boast selected')
+  assert.equal(empty.statement, 'Choose a Boast from Provokatus in the College.')
+  assert.equal(empty.status, '')
+  assert.equal(empty.tint, 0x808080)
+  const unavailable = boastProgressPresentation({
+    ...createBoastState(), selected: createModBoastSelection('1', 'missing'),
+  }, null)
+  assert.equal(unavailable.name, 'Boast unavailable')
+  assert.equal(unavailable.statement, "This Boast's content is not installed.")
+  assert.equal(unavailable.status, '')
+})
+
+test('every selected stock Boast has its own name and gold, green or red progress', () => {
+  const names = [
+    'POTIONS ARE FOR PEASANTS!', "I'M TOO MACHO FOR MAGIC!", 'SECONDARIES ARE SISSY!',
+    'I AM ONE WITH THE MAGIC!', 'I NEVER RUN OUT OF MANA!',
+  ]
+  const states = [
+    { failed: false, succeeded: false, status: 'Active', tint: 0xd9ba70 },
+    { failed: false, succeeded: true, status: 'Achieved', tint: 0x97c797 },
+    { failed: true, succeeded: false, status: 'Failed', tint: 0xe08080 },
+    { failed: true, succeeded: true, status: 'Failed', tint: 0xe08080 },
+  ]
+  for (const selected of [0, 1, 2, 3, 4] as const) {
+    for (const { failed, succeeded, status, tint } of states) {
+      const state = { ...createBoastState(), failed, selected, succeeded }
+      const before = structuredClone(state)
+      const progress = boastProgressPresentation(state, null)
+      assert.equal(progress.name, names[selected])
+      assert.equal(progress.status, status)
+      assert.equal(progress.tint, tint)
+      const card = planBoastProgress(progress)
+      const texts = card.nodes.filter(node => node.kind === 'text').map(node => node.text)
+      assert.deepEqual(texts.map(text => text.text), [progress.name, status, progress.statement])
+      assert.deepEqual(texts.slice(0, 2).map(text => text.tint), [tint, tint])
+      const cardBackground = card.nodes[0]
+      assert.equal(cardBackground.kind, 'solid')
+      if (cardBackground.kind !== 'solid') throw new Error('Boast card background missing')
+      const bounds = cardBackground.bounds
+      for (const text of texts) for (const glyph of layoutNativeUiText(text).glyphs) {
+        const ink = nativeUiGlyphInkBounds(glyph)
+        assert.ok(ink.left >= bounds.left && ink.left + ink.width <= bounds.left + bounds.width,
+          `${selected}/${status}: text fits the card width`)
+        assert.ok(ink.top >= bounds.top && ink.top + ink.height <= bounds.top + bounds.height,
+          `${selected}/${status}: text fits the card height`)
+      }
+      assert.equal(card.actions.length, 0, 'progress is read-only')
+      assert.deepEqual(state, before)
+    }
+  }
+})
+
+test('authored Boast progress resolves the complete package and content identity', () => {
+  const definition = (modId: string, name: string) => ({
+    contentId: '1', failureProducers: [], icon: { kind: 'stock' as const, record: 90, style: 0 },
+    instruction: '', modId, name, randomSkillChoices: false, response: '',
+    scoreMultiplier: 2, statement: `${name} statement`, successWave: 10,
+  })
+  const content: ModContentProjection = {
+    boasts: [definition('first', 'First Boast'), definition('second', 'Second Boast')],
+    content: [], manifestSha256: '', powerups: [], revision: 1, statuses: [],
+  }
+  const progress = boastProgressPresentation({
+    ...createBoastState(), selected: createModBoastSelection('1', 'second'), succeeded: true,
+  }, content)
+  assert.deepEqual(progress, {
+    name: 'Second Boast', statement: 'Second Boast statement', status: 'Achieved', tint: 0x97c797,
+  })
+})
