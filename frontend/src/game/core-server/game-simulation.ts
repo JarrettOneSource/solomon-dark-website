@@ -50,7 +50,7 @@ import type { DeferredNativeWorldManagerRegistrations, NativeWorldManagerOrder, 
 import { createDeferredNativeWorldManagerRegistrations, createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import type { PlayerCharacterConfig, PlayerCharacterInput, PlayerCharacterState } from '../core-kernels/player-character.ts'
 import { NATIVE_GAMEPLAY_VIEWPORT_WIDTH, PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL, PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, PLAYER_CHARACTER_RADIUS, createIdlePlayerCharacterInput, createIdlePlayerPrimaryCast, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
-import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
+import { playerCollisionEnabledAfterCombatTick, playerMovementScale } from '../core-kernels/player-combat.ts'
 import { NATIVE_FLASH_RESPONSE_RADIUS } from '../core-kernels/player-harmful-contact.ts'
 import { NATIVE_PLAYER_STAFF_CAST_TWO_OVERLAY } from '../core-kernels/player-lighting.ts'
 import type { PlayerLevelUpBarrierState, PlayerProgressionComponent, PlayerSkillBookComponent, PlayerStatBookComponent, SharedPlayerLevelMilestone } from '../core-kernels/player-progression.ts'
@@ -3085,8 +3085,10 @@ function finishGameSimulationTick(
         playerId,
         {
           alive: progression.lifeState === 'alive',
+          actionTimeFactor: playerMovementScale(progression),
           availableMana: progression.currentMana,
           castProgressFactor: derived.castProgressFactor,
+          handCastFactor: derived.handCastFactor,
           weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
           eligible: playerEntityCanCast(playerEntities, playerId)
             && progression.pendingOffer === null,
@@ -4130,6 +4132,7 @@ function createNativeSecondaryTickContext(
       }
       return [playerId, {
         alive: progression.lifeState === 'alive',
+        actionTimeFactor: playerMovementScale(progression),
         weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
         belt: playerEntities.belts[index]!,
         character,

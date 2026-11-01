@@ -52,7 +52,7 @@ const ONLINE_PREFERENCES = {
 } as const
 
 test('Create root domain uses the current protocol across hello, confirmation, snapshot, and Player Card', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 153)
+  assert.equal(GAME_PROTOCOL_VERSION, 154)
   const elements = ['ether', 'fire', 'air', 'water', 'earth'] as const
   for (const element of elements) {
     for (const discipline of [...elements, 'body', 'mind', 'arcane'] as const) {
@@ -1794,12 +1794,15 @@ test('protocol v42 strictly round-trips projected statuses, lighting, shields, p
     const message = structuredClone(fractionalGlobalCooldown)
     message.snapshot.secondaryAbilities.players['player-1'].castAction = {
       weaponKind, progress: weaponKind === 'staff' ? 5 : 6,
+      ...(weaponKind === null ? { handPose: 3, handDone: true } : {}),
     }
     assert.deepEqual(decodeServerGameMessage(JSON.stringify(message)), message)
-    message.snapshot.secondaryAbilities.players['player-1'].castAction.progress += 0.01
+    if (weaponKind === null) {
+      message.snapshot.secondaryAbilities.players['player-1'].castAction.handDone = false
+    } else message.snapshot.secondaryAbilities.players['player-1'].castAction.progress += 0.01
     assert.throws(
       () => decodeServerGameMessage(JSON.stringify(message)),
-      /castAction.progress exceeds the native action end/,
+      /castAction.*(exceeds the native action end|inconsistent with HandCast2 progress)/,
     )
   }
   for (const invalidAction of [

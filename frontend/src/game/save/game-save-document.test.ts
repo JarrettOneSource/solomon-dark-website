@@ -67,6 +67,52 @@ test('save byte admission keeps the exact UTF-8 limit without measuring ordinary
   assert.equal(gameSaveDocumentFitsByteLimit('x'.repeat(MAX_WEB_GAME_SAVE_BYTES)), true)
   assert.equal(gameSaveDocumentFitsByteLimit('x'.repeat(MAX_WEB_GAME_SAVE_BYTES + 1)), false)
 })
+
+test('accepted bare HandCast1 survives player, observer and checkpoint continuation without a new variant draw', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 135))!
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }, { gameRngSeed: 91 }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  state = { ...state, world: { ...state.world, arenaTransition: null, encounter: null, waves: null } }
+  const economy = state.playerEntities.economies[0]!
+  state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'owner',
+    { ...economy, equipment: { ...economy.equipment, weapon: null } }) }
+  const input = { ...createIdlePlayerCharacterInput(), aim: { x: 200, y: 300 },
+    cast: { primary: true, quickbar: null } }
+  for (let tick = 0; tick < 6; tick++) state = stepGameSimulationTick(state, { owner: input })
+  const accepted = state.playerEntities.primaryCasts[0]!.handCast1
+  assert.ok(accepted)
+  assert.ok(accepted.progress > 0 && accepted.progress < 1)
+  for (const hostPlayerId of ['owner', null]) {
+    const frame = decodeGameSnapshot(createGameSnapshot(state, hostPlayerId))
+    assert.deepEqual(frame.players.owner!.primaryCast.handCast1, accepted)
+  }
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const checkpoint = decodeServerGameMessage(encodeGameMessage({
+    type: 'server-save-checkpoint', reason: 'progress', save: document, sequence: 1,
+  }))
+  if (checkpoint.type !== 'server-save-checkpoint') throw new Error('expected checkpoint')
+  const restored = restoreGameSaveDocument(checkpoint.save).state
+  assert.deepEqual(restored.playerEntities.primaryCasts[0]!.handCast1, accepted)
+  assert.deepEqual(restored.combatRng, state.combatRng)
+  const resumed = stepGameSimulationTick(restored, { owner: input })
+  const continuous = stepGameSimulationTick(state, { owner: input })
+  assert.deepEqual(resumed.playerEntities.primaryCasts[0], continuous.playerEntities.primaryCasts[0])
+  assert.deepEqual(resumed.combatRng, continuous.combatRng)
+  const legacy = JSON.parse(document)
+  delete legacy.continuation.simulation.playerEntities.primaryCasts[0].handCast1
+  const old = restoreGameSaveDocument(JSON.stringify(legacy)).state
+  assert.equal(old.playerEntities.primaryCasts[0]!.handCast1, null)
+  assert.deepEqual(old.combatRng, state.combatRng)
+  for (const changed of [{ firstPose: 1 }, { pose: 2 }, { done: true }, { rate: -1 }]) {
+    const invalid = JSON.parse(document)
+    Object.assign(invalid.continuation.simulation.playerEntities.primaryCasts[0].handCast1, changed)
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(invalid)), /HandCast1|handCast1/)
+  }
+  const interrupted = JSON.parse(document)
+  interrupted.continuation.simulation.playerEntities.primaryCasts[0].channelActive = true
+  assert.throws(() => restoreGameSaveDocument(JSON.stringify(interrupted)), /handCast1.*one-shot/)
+})
 const MODS = [{
   contentSha256: 'a'.repeat(64),
   id: 'tests.save-mod',
