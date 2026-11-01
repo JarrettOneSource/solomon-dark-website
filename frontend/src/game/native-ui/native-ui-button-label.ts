@@ -1,4 +1,5 @@
-import { layoutNativeUiText, nativeUiGlyphInkBounds } from './native-ui-text.ts'
+import type { NativeUiRect } from './native-ui-plan.ts'
+import { layoutNativeUiText, nativeUiGlyphInkBounds, type NativeUiTextSpec } from './native-ui-text.ts'
 
 export const NATIVE_UI_BUTTON = Object.freeze({
   disabledAlpha: 0.5,
@@ -25,35 +26,42 @@ const SURROUND_INK_RIGHT = [
   63, 66, 68, 68, 68, 68, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70, 70,
 ] as const
 
-/** Fits full menu-face ink inside the mirrored skulls, reserving press motion. */
-export function nativeUiButtonLabelScale(
-  label: string,
-  width: number,
-  height: number,
-  scale: number,
-): number {
-  const { surround, labelYOffset, pressedOffset } = NATIVE_UI_BUTTON
-  const glyphs = layoutNativeUiText({ font: 'menu', text: label, x: 0, y: labelYOffset }).glyphs
-  if (glyphs.length === 0) return scale
+/** Fits an unpressed label while preserving the caller's explicit baseline. */
+export function fitNativeUiButtonLabel(
+  spec: NativeUiTextSpec,
+  bounds: NativeUiRect,
+  chromeScale: number,
+): NativeUiTextSpec {
+  const { surround, pressedOffset } = NATIVE_UI_BUTTON
+  const glyphs = layoutNativeUiText(spec).glyphs
+  if (glyphs.length === 0) return spec
+  const centerX = bounds.left + bounds.width / 2
+  const centerY = bounds.top + bounds.height / 2
+  const baselineOffset = (spec.y - centerY) / chromeScale
   let reach = 0
-  let top = 0
-  let bottom = 0
+  let top = Math.min(0, baselineOffset)
+  let bottom = Math.max(0, baselineOffset)
   for (const glyph of glyphs) {
     const ink = nativeUiGlyphInkBounds(glyph)
-    reach = Math.max(reach, -ink.left, ink.left + ink.width)
-    top = Math.min(top, ink.top)
-    bottom = Math.max(bottom, ink.top + ink.height)
+    reach = Math.max(
+      reach,
+      (centerX - ink.left) / chromeScale,
+      (ink.left + ink.width - centerX) / chromeScale,
+    )
+    top = Math.min(top, (ink.top - centerY) / chromeScale)
+    bottom = Math.max(bottom, (ink.top + ink.height - centerY) / chromeScale)
   }
-  // Include the button centre so a smaller label's entire vertical band remains
-  // inside this envelope. Fit once for both resting and pressed states.
-  const centre = height / scale / 2 + surround
+  // Both baseline anchors enclose every smaller label, including explicit
+  // notice baselines and the stock button's centred baseline offset.
+  const centre = bounds.height / chromeScale / 2 + surround
   const firstRow = Math.max(0, Math.floor(centre + top))
   const lastRow = Math.min(SURROUND_INK_RIGHT.length, Math.ceil(centre + bottom + pressedOffset))
   let endInk = 0
   for (let row = firstRow; row < lastRow; row += 1) {
     endInk = Math.max(endInk, SURROUND_INK_RIGHT[row]!)
   }
-  const halfWidth = width / scale / 2 - Math.max(0, endInk - surround) - pressedOffset
+  const halfWidth = bounds.width / chromeScale / 2 - Math.max(0, endInk - surround) - pressedOffset
   if (halfWidth <= 0) throw new RangeError('native UI button has no room for label ink')
-  return scale * Math.min(1, halfWidth / reach)
+  const fit = Math.min(1, halfWidth / reach)
+  return fit === 1 ? spec : { ...spec, scale: (spec.scale ?? 1) * fit }
 }
