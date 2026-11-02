@@ -815,6 +815,10 @@ diffuse shaft, texture-RGB gradient, then diffuse hands, with no extra additive
 shaft. One attachment crosses all six selectors, ten poses and 24 headings
 (1,440 cases), changing tick/width and comparing exactly. A 478-case preimage
 failure proves the explicit position-buffer upload needed by the standalone
-aura; cross-view destruction retains its shared compiled program. Same-harness preimage red and raw differences
+aura; cross-view destruction retains its shared compiled program. The canonical
+renderer probe requires one geometry upload per changed Staff frame and none
+during rendering. Its texture-RGB capture cases cover cropped straight and
+premultiplied sources, preserving color inside a diffuse-only body capture.
+Same-harness preimage red and raw differences
 remain private report130 evidence. Actual integrated scene/native acceptance
 and the campaign gate remain parent-owned before completion marking.
