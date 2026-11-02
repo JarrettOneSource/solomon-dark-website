@@ -335,11 +335,13 @@ export default function HubInventoryUi({
         }
         return
       }
-      const dyeBack = overlayRoot.current?.querySelector<HTMLButtonElement>('[data-native-dye-cancel]')
-      if (dyeBack && bookKey) {
+      const childBack = overlayRoot.current?.querySelector<HTMLButtonElement>(
+        '[data-native-dye-cancel], [data-native-inventory-notice-dismiss]',
+      )
+      if (childBack && bookKey) {
         event.preventDefault()
         event.stopImmediatePropagation()
-        if (!dyeBack.disabled) dyeBack.click()
+        if (!childBack.disabled) childBack.click()
         return
       }
       if (surface?.kind === 'inventory') {
@@ -357,13 +359,18 @@ export default function HubInventoryUi({
           return
         }
       }
-      if (surface?.kind === 'service' && (menuKey || event.code === inventoryKeyCode)) {
+      if (surface?.kind === 'service' && bookKey) {
         event.preventDefault()
         event.stopImmediatePropagation()
         if (menuKey) {
           audio.playSound('open-panel')
           closeSurface()
-        } else inventoryBackOrClose()
+        } else if (event.code === inventoryKeyCode) inventoryBackOrClose()
+        else {
+          audio.playSound('open-panel')
+          closeSurface()
+          onOpenSkills()
+        }
         return
       }
       if (
@@ -398,6 +405,7 @@ export default function HubInventoryUi({
     nearestInteraction,
     openWorldDialogue,
     overlayRoot,
+    onOpenSkills,
     onSurfaceChange,
     skillsKeyCode,
     surface,

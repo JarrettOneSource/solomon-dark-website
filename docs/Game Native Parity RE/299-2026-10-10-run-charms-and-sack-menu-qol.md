@@ -206,11 +206,22 @@ database or roll back browser IndexedDB saves.
 | Menu/Escape in Inventory or service companion | out-of-system native input QoL | Close whole optional surface; preserve service cleanup |
 | Optional Skills | out-of-system native input QoL | Dismiss whole optional book and resume the current scene |
 | Mandatory level-up choice | out-of-system for dismissal change | Cannot dismiss a required choice |
+| Inventory notice and Unforge confirmation | out-of-system native input QoL | Inventory, Skills, Menu and Escape dismiss only the child; Unforge uses Cancel without an authority request or parent Sack traversal |
 | Dye child confirmation | verified-already-at-parity | Child cancel takes priority; no accidental dye commit |
 | Rename text field and rebound letter keys | out-of-system native naming QoL | Editing does not leak navigation; Escape cancels edit |
 | Parent-cell pointer, keyboard activation, and held input | verified-already-at-parity | Existing one-step and release-consumption rules remain |
 | Sack page animation | verified-already-at-parity | Existing 37×10 ms clock and traversal remain unchanged |
 | New storage navigation and unrelated optional menus | out-of-system | Preserve existing scope unless explicitly authorized |
+
+The active notice owns book shortcuts before the parent Inventory or College
+service. Its safe dismissal is the ordinary notice acknowledgment or Unforge's
+Cancel, never the destructive Unforge action. Repeated held keys cannot traverse
+the parent after dismissal. Scene-level Skills shortcuts defer to the active
+Inventory or service owner, which also preserves ordinary Skills replacement
+and service cleanup after child dismissal. The shared Sack browser journey
+exercises both child families with configured/rebound bindings in College
+Inventory, Luthacus and paused Boneyard, preserving the accepted path, equipment,
+backpack, gold and belt.
 
 ## Validation contract
 

@@ -591,6 +591,7 @@ export default function BoneyardScene({
         && event.target.closest('input, textarea, [contenteditable="true"], [data-sack-rename-dialog]')) return
       if (
         inputBlocked
+        || inventorySurface !== null
         || tutorialAccess?.skills === false
         || run.phase !== 'active'
         || event.code !== settings.controls.openSkills
@@ -606,7 +607,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', openSkills, { capture: true })
     return () => window.removeEventListener('keydown', openSkills, { capture: true })
-  }, [inputBlocked, onOpenSkills, run.phase, settings.controls.openSkills, tutorialAccess?.skills])
+  }, [inputBlocked, inventorySurface, onOpenSkills, run.phase, settings.controls.openSkills, tutorialAccess?.skills])
 
   useEffect(() => {
     const toggleDigIndicator = (event: KeyboardEvent) => {

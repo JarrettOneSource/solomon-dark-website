@@ -474,6 +474,8 @@ export default function HubScene({
       if (
         gameplayHudHidden
         || inputBlocked
+        || hubUiSurface?.kind === 'inventory'
+        || hubUiSurface?.kind === 'service'
         || pickerOpen
         || transitionActive
         || event.code !== settings.controls.openSkills
@@ -489,7 +491,7 @@ export default function HubScene({
     }
     window.addEventListener('keydown', openSkills, { capture: true })
     return () => window.removeEventListener('keydown', openSkills, { capture: true })
-  }, [gameplayHudHidden, inputBlocked, onOpenSkills, pickerOpen, settings.controls.openSkills, transitionActive])
+  }, [gameplayHudHidden, hubUiSurface?.kind, inputBlocked, onOpenSkills, pickerOpen, settings.controls.openSkills, transitionActive])
 
   useEffect(() => {
     const openPause = (event: KeyboardEvent) => {
