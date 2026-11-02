@@ -73,6 +73,12 @@ through the held burst.
 
 ## Recovered behavioral contract
 
+- Resolve the admitted action's lifetime before updating the latch. The bare
+  `HandCast1` program owns its completion tick; the Staff clock cannot clear or
+  retain the latch on its behalf. This applies to Ether, Fire, and welded
+  one-shots `1000`, `1001`, `1002`, and `1009`, including release and changes to
+  casting speed after admission. Bare body poses still come from `HandCast1`;
+  this metadata rule does not substitute the Staff pose bank.
 - Keep the first native one-shot program through its release marker. At that
   marker, latch displayed Staff release pose `K=8` for the rest of the same
   held burst and any repeatedly admitted one-shot actions.
@@ -89,6 +95,27 @@ through the held burst.
   geometry.
 - Sustained/persistent primaries keep their native Staff Constant `K=7` rule.
   Secondary and melee actions retain their higher presentation priority.
+
+### Bare-action retirement boundary
+
+Actual integrated M2 material acceptance reached a bare Ether release where the
+built client and independent protocol reader both rejected
+`oneShotAttackPoseHeld` outside an active one-shot burst. The shared tick first
+computed the latch against the Staff action clock, then replaced `actionTick`
+with the completed HandCast1 result. That ordering could publish a retained
+latch alongside released input and `actionTick=-1`; it could also clear the
+latch early when a speed change made the Staff clock shorter than the born hand
+program. The earlier bare-action tests checked the terminal pose and action
+removal but omitted the shared latch invariant.
+
+The correction belongs in the shared primary tick after both action clocks
+resolve, across all six one-shot profiles and Staff/Wand/bare ownership. The
+strict protocol and save validation stay unchanged. The Rust cast owner already
+retires `hand_cast` before updating `one_shot_attack_pose_held` in
+`PlayerPrimaryCastState::advance`. This is an implementation-ordering finding;
+it introduces no new retail timing or appearance rule. Focused regression,
+complete M2 gate and the failed actual journey must qualify the correction
+before closure.
 
 ## Nearby-system findings
 

@@ -384,6 +384,41 @@ test('bare Cast 1 keeps its born rate across equipment speed changes and retires
   assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
 })
 
+test('bare one-shot release keeps the pose latch until the admitted hand action retires', () => {
+  const profiles = [
+    primarySkillRankStats('ether', 1),
+    primarySkillRankStats('fire', 1),
+    weldedProfile(1000, 'one-shot', [4, 10, 12, 2, 1.25, 3, 8, 2, 3]),
+    weldedProfile(1001, 'one-shot', [4, 10, 12, 2, 1.1, 0.5, 0.1]),
+    weldedProfile(1002, 'one-shot', [4, 10, 12, 2, 1.1, 1, 0.5]),
+    weldedProfile(1009, 'one-shot', [4, 12, 1, 0.5, 1, 1]),
+  ]
+  for (const profile of profiles) {
+    for (const laterSpeed of [1, 10]) {
+      let state = stepSpellKernel(directSpellHarness('ether', 1, null), true,
+        1_000, true, () => true, profile).state
+      let retired = false
+      for (let tick = 0; tick < 100; tick += 1) {
+        state = stepSpellKernel(state, false, 1_000, true, () => true, profile,
+          () => true, laterSpeed).state
+        const cast = state.players[PLAYER_ID]!.primaryCast
+        if (cast.emissionSequence > 0) {
+          assert.equal(cast.oneShotAttackPoseHeld, cast.handCast1 !== null,
+            `${profile.skillId}: released hand owns latch at tick ${tick}, speed ${laterSpeed}`)
+        }
+        if (cast.handCast1 === null) {
+          assert.equal(cast.emissionSequence, 1, `${profile.skillId}: one admitted emission`)
+          assert.equal(cast.actionTick, -1)
+          assert.equal(cast.oneShotAttackPoseHeld, false)
+          retired = true
+          break
+        }
+      }
+      assert.ok(retired, `${profile.skillId}: bounded hand retirement`)
+    }
+  }
+})
+
 test('bare Constant starts directly without the Cast 1 variant draw', () => {
   const initial = directSpellHarness('water', 1, null)
   const state = stepSpellKernel(initial, true, 100).state

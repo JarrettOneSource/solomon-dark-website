@@ -1327,11 +1327,12 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       rng = birth.rng
       primaryCast = { ...primaryCast, handCast1: birth.action }
     }
-    if (!oneShotPrimary && primaryCast.oneShotAttackPoseHeld) {
-      primaryCast = { ...primaryCast, oneShotAttackPoseHeld: false }
-    }
     primaryCast = {
       ...primaryCast,
+      // The admitted HandCast1 can finish before or after the Staff clock.
+      // Update the latch only after the action owner has resolved its lifetime.
+      oneShotAttackPoseHeld: oneShotPrimary && primaryCast.oneShotAttackPoseHeld
+        && (primaryCast.held || primaryCast.actionTick >= 0),
       selectedPrimaryAgeTicks: nativeSelectedPrimaryAge + 1,
       selectedPrimaryId,
       weaponPulse: Math.fround(
@@ -2734,14 +2735,11 @@ function advancePrimaryCast(
     }
   }
   if (acceptedCast) actionTick = 0
-  const oneShotAttackPoseHeld = previous.oneShotAttackPoseHeld
-    && (held || actionTick >= 0)
   return {
     ...previous,
     actionTick,
     castSequence: acceptedCast ? previous.castSequence + 1 : previous.castSequence,
     held,
-    oneShotAttackPoseHeld,
     underpowered: acceptedCast ? false : previous.underpowered,
   }
 }
