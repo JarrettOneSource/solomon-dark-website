@@ -107,7 +107,7 @@ test('diffuse attachment capture restores the ordinary shaft and borrowed aura s
   assert.ok('shader' in aura && aura.shader === previousShader)
   for (const hiddenAura of [input({ learnedSkills: [] }), input({ selector: 2 })]) {
     view.update(hiddenAura, true)
-    const additiveVisible = additive.visible
+    const additiveVisible: boolean = additive.visible
     assert.equal(aura.visible, false)
     view.withDiffuseCapture(() => {
       assert.equal(additive.visible, false)
