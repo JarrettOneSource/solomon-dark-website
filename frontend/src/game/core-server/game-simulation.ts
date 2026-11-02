@@ -2026,7 +2026,7 @@ function stepGameSimulationTickWithScreenFlashes(
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
       combat.cheatDeathPlayerIds, worldManagerOrder.register)
-    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
+    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick, worldManagerOrder.register)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
     // The former drop view followed the continuing death clock on Game Over.
@@ -2911,7 +2911,10 @@ function finishGameSimulationTick(
     world = moved.world
     resolvedPlayers = moved.players
     secondaryAbilities = moved.secondary
-    for (const fieldId of moved.consumedFieldActorIds) secondaryAbilities = pulseNativeEtherDrain(secondaryAbilities, fieldId, 1, tick)
+    for (const fieldId of moved.consumedFieldActorIds) {
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryAbilities,
+        pulseNativeEtherDrain(secondaryAbilities, fieldId, 1, tick), worldManagerOrder.register)
+    }
     const fieldDamage: BoneyardEnemyPlayerDamage[] = secondaryResult.etherDrainContacts.flatMap(contact => {
       if (contact.amount <= 0 || (contact.target.kind !== 'player' && contact.target.kind !== 'golem')) return []
       const field = secondaryAbilities.actors.find(actor => actor.id === contact.sourceActorId)
@@ -3350,8 +3353,9 @@ function finishGameSimulationTick(
       ),
     }
     for (const capture of secondaryCombat.captures) {
-      secondaryAbilities = captureNativeEtherDrainImage(secondaryAbilities, etherDrainFields[capture.fieldIndex]!.id,
-        capture.actor ? nativeEtherDrainCapturedImage(capture.actor, tick) : null, tick)
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryAbilities,
+        captureNativeEtherDrainImage(secondaryAbilities, etherDrainFields[capture.fieldIndex]!.id,
+          capture.actor ? nativeEtherDrainCapturedImage(capture.actor, tick) : null, tick), worldManagerOrder.register)
     }
     world = applyBoneyardSecondaryEnemyKnockbacks(
       world,
@@ -3460,7 +3464,7 @@ function finishGameSimulationTick(
         tick,
       ),
     }
-    const nextSecondaryActorIdBeforeAdvancedBurn = secondaryAbilities.nextActorId
+    const secondaryBeforeAdvancedBurn = secondaryAbilities
     for (const burn of [...secondaryDeaths.flatMap(death => death.burns), ...spellCombat.burns]) {
       const target = boneyardNativeSecondaryTarget(world.enemies, burn.targetId)
       const ownerIndex = playerEntityIndex(playerEntities, burn.ownerId)
@@ -3485,11 +3489,9 @@ function finishGameSimulationTick(
         worldKey: `boneyard:${boneyardWorld.runId}`,
       })
     }
-    if (secondaryAbilities.nextActorId !== nextSecondaryActorIdBeforeAdvancedBurn) {
-      secondaryAbilities = enrollNativeSecondaryPainterOwners(
-        secondaryAbilities,
-        worldManagerOrder.register,
-      )
+    if (secondaryAbilities.nextActorId !== secondaryBeforeAdvancedBurn.nextActorId) {
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryBeforeAdvancedBurn,
+        secondaryAbilities, worldManagerOrder.register)
     }
     for (const effect of [...secondaryDeaths.flatMap(death => death.targetEffects), ...spellCombat.targetEffects]) {
       secondaryAbilities = applyNativeSecondaryTargetEffect(
@@ -3550,7 +3552,7 @@ function finishGameSimulationTick(
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
       combat.cheatDeathPlayerIds, worldManagerOrder.register)
-    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
+    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick, worldManagerOrder.register)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
   }
@@ -3915,12 +3917,26 @@ function applySecondaryPlayerOutcomes(
   return { playerEntities, secondaryAbilities, secondaryPlayers }
 }
 
+function enrollNewSecondaryPainterOwners(
+  before: NativeSecondarySimulationState,
+  after: NativeSecondarySimulationState,
+  register: NativeWorldManagerOrder['register'],
+): NativeSecondarySimulationState {
+  const born = after.actors.filter(actor => actor.id >= before.nextActorId)
+  if (born.length === 0) return after
+  const enrolled = enrollNativeSecondaryPainterOwners({ ...after, actors: born }, register)
+  const owners = new Map(enrolled.actors.map(actor => [actor.id, actor]))
+  return { ...after, actors: Object.freeze(after.actors.map(actor =>
+    actor.id < before.nextActorId ? actor : owners.get(actor.id)!)) }
+}
+
 // Player maintenance0x005339E7..0x00533AAA owns this timer in both death paths.
 function consumeNativeEtherDrainPlayerCorpses(
   world: BoneyardWorldState,
   sourceEntities: PlayerEntityStore,
   sourceSecondary: NativeSecondarySimulationState,
   tick: number,
+  register: NativeWorldManagerOrder['register'],
 ): Readonly<{ playerEntities: PlayerEntityStore; secondaryAbilities: NativeSecondarySimulationState }> {
   let secondaryAbilities = sourceSecondary
   const worldKey = `boneyard:${world.runId}`
@@ -3934,7 +3950,8 @@ function consumeNativeEtherDrainPlayerCorpses(
       const dx = Math.fround(field.position.x - player.position.x)
       const dy = Math.fround(field.position.y - player.position.y)
       if (Math.fround(dx * dx + dy * dy) >= NATIVE_ETHER_DRAIN_CONSUMPTION_DISTANCE_SQUARED) continue
-      secondaryAbilities = pulseNativeEtherDrain(secondaryAbilities, field.id, 2, tick)
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryAbilities,
+        pulseNativeEtherDrain(secondaryAbilities, field.id, 2, tick), register)
       consumed = true
     }
     return consumed ? { ...progression, corpseConsumed: true } : progression

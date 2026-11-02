@@ -5193,6 +5193,39 @@ test('Ether Drain preserves delayed Gold and Sacks, then consumes them without n
   assert.deepEqual(state.world.loot.actors, [])
 })
 
+test('Ether Drain registers late loose-consumption flares in their birth order before snapshot and save', () => {
+  let state = etherDrainSimulation({ x: 400, y: 250 })
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const loot = spawnBoneyardLootSpecs(state.world.loot, [
+    { activationDelayTicks: 0, amount: 7, id: 1, kind: 'gold', nativeTypeId: 2012,
+      phase: 0, position: { x: 400, y: 250 }, source: 'script', tier: 2 },
+    { activationDelayTicks: 0, id: 2, item: miscItem(createNativeLootItemIds(1), 1),
+      kind: 'sack', nativeTypeId: 2013, phase: 0, position: { x: 400, y: 250 }, source: 'script' },
+  ], state.tick, order.register).store
+  state = { ...state, worldManagerOrder: order.state(), world: { ...state.world, loot } }
+  const firstOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.transient
+  const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(state.world.loot.actors, [])
+  const flares = state.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+  assert.equal(flares.length, 2)
+  assert.deepEqual(flares.map(actor => actor.painterRegistrations), [
+    [{ managerLane: 'transient', registrationOrdinal: firstOrdinal }],
+    [{ managerLane: 'transient', registrationOrdinal: firstOrdinal + 1 }],
+  ])
+  assert.equal(state.worldManagerOrder.nextRegistrationOrdinal.transient, firstOrdinal + 2)
+  assert.deepEqual(state.secondaryAbilities.actors.find(actor => actor.id === field.id)!.painterRegistrations, field.painterRegistrations)
+  const snapshot = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+    .map(actor => actor.painterRegistrations), flares.map(actor => actor.painterRegistrations))
+  const restored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only',
+    loadedBoneyard: combatBoneyard('ether-drain-targets'), mods: [], modState: {}, playerId: 'local-player', state })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+    .map(actor => actor.painterRegistrations), flares.map(actor => actor.painterRegistrations))
+})
+
 test('Ether Drain newly notified loot refreshes its ordinary target cache in the same tick', () => {
   let state = stepGameSimulationTick(etherDrainSimulation({ x: 400, y: 250 }), {})
   const initial = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
@@ -5621,9 +5654,18 @@ test('Ether Drain consumes a corpse at native death timer130 and persists that t
     run: { ...state.run, phase: 'game-over' } }, 'victim')
   assert.ok(ordinaryArchive.storage.some(item => item.contents?.some(child => child.name === carried.name)))
   assert.equal(ordinaryArchive.gold, economy.gold + 9)
+  const flareOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.transient
   state = stepGameSimulationTick(state, {})
   assert.equal(getPlayerProgression(state, 'victim').deathTick, 130)
   assert.equal(getPlayerProgression(state, 'victim').corpseConsumed, true)
+  const flare = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain-capture-flare')!
+  assert.deepEqual(flare.painterRegistrations, [{ managerLane: 'transient', registrationOrdinal: flareOrdinal }])
+  assert.equal(state.worldManagerOrder.nextRegistrationOrdinal.transient, flareOrdinal + 1)
+  const snapshot = gameSnapshot(createGameSnapshot(state, 'caster'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
+  const ownerRestored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'caster', state })).state
+  assert.deepEqual(ownerRestored.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
   const restored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
     mods: [], modState: {}, playerId: 'victim', state })).state
   assert.equal(getPlayerProgression(restored, 'victim').corpseConsumed, true)
@@ -5663,6 +5705,13 @@ test('terminal player maintenance consumes the corpse before Last Word and carri
   assert.equal(getPlayerProgression(consumed).deathTick, 130)
   assert.equal(getPlayerProgression(consumed).corpseConsumed, true)
   assert.equal(getPlayerProgression(ordinary).corpseConsumed, false)
+  const flare = consumed.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain-capture-flare')!
+  assert.deepEqual(flare.painterRegistrations, [{ managerLane: 'transient',
+    registrationOrdinal: before.worldManagerOrder.nextRegistrationOrdinal.transient }])
+  assert.equal(consumed.worldManagerOrder.nextRegistrationOrdinal.transient,
+    before.worldManagerOrder.nextRegistrationOrdinal.transient + 1)
+  const snapshot = gameSnapshot(createGameSnapshot(consumed, 'local-player'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
   assert.equal(consumed.secondaryAbilities.actors.find(actor => actor.id === field.id)!.slowFactor, 1.899999976158142,
     'the callback pulse retains the native parent fade in this full-tick projection')
   assert.ok(gameSimulationDurableProfileEconomy(ordinary, 'local-player').storage
@@ -5726,6 +5775,36 @@ test('Ether Drain captures each supported enemy image through the public lethal 
     assert.ok(state.secondaryAbilities.actors.some(actor => actor.kind === 'ether-drain-capture-flare' && actor.scale === 1.5))
     assert.ok(state.secondaryAbilities.events.some(event => event.cue === 'phase' && event.pitch === 1.5))
   }
+})
+
+test('Ether Drain registers a replacement capture flare before unrelated burns or later ticks', () => {
+  let state = stepGameSimulationTick(withEtherDrainEnemy(etherDrainSimulation({ x: 400, y: 250 }), 'SKELETON'), {})
+  const first = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
+  assert.equal(first.etherDrain!.animations.some(animation => animation.kind === 'captured'), true)
+  assert.equal(state.secondaryAbilities.actors.some(actor => actor.kind === 'ether-drain-capture-flare'), false)
+  state = withEtherDrainEnemy(stepGameSimulationTick(state, {}), 'DEMON')
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities,
+    actors: state.secondaryAbilities.actors.map(actor => actor.id === first.id ? { ...actor, quantity: 0 } : actor) } }
+  const flareOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.transient
+  state = stepGameSimulationTick(state, {})
+  const field = state.secondaryAbilities.actors.find(actor => actor.id === first.id)!
+  const image = field.etherDrain!.animations.find(animation => animation.kind === 'captured')!
+  assert.equal(image.kind, 'captured')
+  if (image.kind !== 'captured') throw new Error('expected captured image')
+  assert.equal(image.atlas, 'Demon')
+  const flares = state.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+  assert.equal(flares.length, 1)
+  const flare = flares[0]!
+  assert.equal(flare.scale, 1.5)
+  assert.deepEqual(flare.painterRegistrations, [{ managerLane: 'transient', registrationOrdinal: flareOrdinal }])
+  assert.equal(state.worldManagerOrder.nextRegistrationOrdinal.transient, flareOrdinal + 1)
+  assert.deepEqual(field.painterRegistrations, first.painterRegistrations)
+  assert.equal(state.secondaryAbilities.actors.some(actor => actor.kind === 'fire-burn' || actor.kind === 'ether-burn'), false)
+  const snapshot = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
+  const restored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only',
+    loadedBoneyard: combatBoneyard('ether-drain-targets'), mods: [], modState: {}, playerId: 'local-player', state })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
 })
 
 test('Ether Drain unsupported enemy images retire without ordinary effects, splits or crunch audio', () => {
