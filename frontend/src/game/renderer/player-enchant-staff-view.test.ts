@@ -105,8 +105,17 @@ test('diffuse attachment capture restores the ordinary shaft and borrowed aura s
   }), /capture failed/)
   assert.equal(additive.visible, true)
   assert.ok('shader' in aura && aura.shader === previousShader)
-  view.update(input({ learnedSkills: [] }), true)
-  view.withDiffuseCapture(() => assert.equal(additive.visible, false))
+  for (const hiddenAura of [input({ learnedSkills: [] }), input({ selector: 2 })]) {
+    view.update(hiddenAura, true)
+    const additiveVisible = additive.visible
+    assert.equal(aura.visible, false)
+    view.withDiffuseCapture(() => {
+      assert.equal(additive.visible, false)
+      assert.ok('shader' in aura && aura.shader === previousShader,
+        'a hidden aura must not acquire or rebind a capture shader')
+    })
+    assert.equal(additive.visible, additiveVisible)
+  }
   const other = new PlayerEnchantStaffView(textures())
   other.update(input(), true)
   const otherAura = other.container.children[2]!
