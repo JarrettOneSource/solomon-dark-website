@@ -4437,8 +4437,7 @@ test('private College retires a restored Tutorial when its final actor disconnec
   )
 
   await closeSocket(socket)
-  await waitFor(() => host.humanPlayerCount() === 0)
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await waitFor(() => host.humanPlayerCount() === 0 && host.capacityParticipantCount() === 0)
 
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.runCount(), 0)
@@ -4589,8 +4588,7 @@ test('private College retires an ordinary Boneyard instead of ticking it without
   )
 
   await closeSocket(socket)
-  await waitFor(() => host.humanPlayerCount() === 0)
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await waitFor(() => host.humanPlayerCount() === 0 && host.capacityParticipantCount() === 0)
 
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.runCount(), 0)
@@ -4621,8 +4619,7 @@ test('shared Hub retires the stock Tutorial when its final actor disconnects', a
   assert.equal(loadedMessage.boneyard.choice.id, 'stock-tutorial')
 
   await closeSocket(client.socket)
-  await waitFor(() => host.humanPlayerCount() === 0)
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await waitFor(() => host.humanPlayerCount() === 0 && host.capacityParticipantCount() === 0)
 
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.runCount(), 0)
@@ -5372,7 +5369,8 @@ test('saved party member catches up detached while the live party run continues'
   await waitFor(() => host.humanPlayerCount() === 1)
   assert.equal(host.runCount(), 1)
   await closeSocket(returningSocket)
-  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0)
+  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0
+    && host.capacityParticipantCount() === 0)
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.partyCount(), 0)
   assert.equal(host.partyRejoinTarget(token), null)
@@ -5432,7 +5430,9 @@ test('staged catch-up loses its capability when the final live peer disconnects'
     code: 1000,
     reason: 'active party run ended',
   })
-  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0)
+  // The client close event can precede the host's transport-release callback.
+  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0
+    && host.capacityParticipantCount() === 0)
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.partyCount(), 0)
   assert.equal(host.partyRejoinTarget(token), null)
