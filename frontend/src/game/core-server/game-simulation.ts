@@ -3585,7 +3585,7 @@ function finishGameSimulationTick(
           : [],
         tick,
         worldKey: gameWorldKey(world, response.playerId),
-      }, writeScreenFlash)
+      }, worldManagerOrder.register, writeScreenFlash)
     } else if (world.kind === 'boneyard') {
       const event: BoneyardEnemySemanticEvent = {
         actorId: 0,

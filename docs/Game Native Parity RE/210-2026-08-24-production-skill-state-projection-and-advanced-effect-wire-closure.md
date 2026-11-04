@@ -314,7 +314,7 @@ and owner teardown.
 | EtherBurn per-tick flare | `Mod_EtherBurn`; `ether-burn-flare` | verified-already-at-parity | born inside the secondary step, one transient root, skill 14 retained |
 | Parent painter ownership | native live modifier actor; `nativeSecondaryPainterManagerLane` | exact-ported by this reopening | exactly one `transient` registration allocated at the final actor-birth phase |
 | Parent target light and `MiscLight` ordering | entry 090 complete producer census | verified-already-at-parity | target actor registration remains distinct; per-target append ordinal remains ordered |
-| Flash response grow/fade | pre-secondary harmful-contact phase | out-of-system — the affected profile has no Flash and these births cross the existing enrollment pass | existing row-53 integration and protocol tests |
+| Flash response grow/fade | pre-secondary harmful-contact phase in the incident reviewed here | out-of-system for that incident — its affected profile has no Flash; current contact and poison callbacks enroll children at birth | current row-53 public-session tests cover both late callbacks |
 | Mindblast/Last Word births | explicit `registerWorldPainter` construction | out-of-system — already registered at construction even when born after the secondary step | existing full/frame and Game Over tests |
 | Full snapshot, compact frame, and recovery keyframe | common secondary projection/decoder | exact-ported by one producer invariant | all three carry the same registered parent; strict malformed-state rejection remains |
 | Save checkpoint and resume | schema-24 secondary state | exact-ported by the same invariant | no same-tick empty-root parent can be persisted; valid root identity survives restore |
@@ -357,6 +357,21 @@ The advanced-Burn finalizer likewise enrolls only its own new parents: an
 unrelated Burn birth must never backfill an earlier missing flare registration
 or determine that flare's ordinal. No allocator fallback or relaxed renderer,
 snapshot or save guard is part of this contract.
+
+### Defensive contact birth ownership
+
+`materializeNativePlayerFlashResponse` assigns one transient painter root to
+each of its eight grow and four fade actors in birth order. The same materializer
+serves ordinary enemy contact, post-secondary Ether Drain field contact and the
+later poison-response callback. Every completed snapshot and save therefore
+carries the born roots without relying on another secondary actor pass.
+
+`applyNativeSecondaryPlayerDamage` owns Magic Shield break presentation at the
+same contact boundary. An ordinary break enrolls twenty transient children; an
+explosive break adds one transient explosion, then one transient shockwave with
+a separate actor-lane light registration. A physical Stoneskin contact also
+enrolls its single chip at birth. These registrations use the session's current
+world painter order. No decoder or save fallback supplies missing ownership.
 
 Report129's focused public-session regressions cover replacement capture without
 Burns, two loose-consumption births in order, and active/GameOver corpse births.

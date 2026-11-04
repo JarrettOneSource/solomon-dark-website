@@ -4732,6 +4732,136 @@ test('Flash responds after damage with area Dazzle, twelve children, feedback, a
   assert.ok(getPlayerProgression(state).currentHealth < 50, 'Flash does not block the strike')
 })
 
+function assertCompletedFlashBirth(state: GameSimulationState, loadedBoneyard: LoadedBoneyard): void {
+  const children = state.secondaryAbilities.actors.filter(({ kind }) => (
+    kind === 'flash-response-grow' || kind === 'flash-response-fade'
+  ))
+  assert.deepEqual(children.map(({ kind }) => kind), [
+    ...Array.from({ length: 8 }, () => 'flash-response-grow'),
+    ...Array.from({ length: 4 }, () => 'flash-response-fade'),
+  ])
+  const roots = children.map(({ painterRegistrations }) => {
+    assert.ok(painterRegistrations)
+    assert.equal(painterRegistrations.length, 1, 'each Flash child needs its own root at birth')
+    assert.equal(painterRegistrations[0]!.managerLane, 'transient')
+    return painterRegistrations[0]!.registrationOrdinal
+  })
+  assert.deepEqual(roots, Array.from({ length: 12 }, (_, index) => roots[0]! + index),
+    'grow and fade children must register in birth order')
+  const allRoots = state.secondaryAbilities.actors.flatMap(actor => actor.painterRegistrations ?? [])
+    .filter(root => root.managerLane === 'transient').map(root => root.registrationOrdinal)
+  assert.equal(new Set(allRoots).size, allRoots.length, 'live secondary painters cannot share a root')
+  assert.ok(roots.at(-1)! < state.worldManagerOrder.nextRegistrationOrdinal.transient)
+  const published = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(published.secondaryAbilities.actors.filter(({ kind }) => kind.startsWith('flash-response-'))
+    .map(({ painterRegistrations }) => painterRegistrations), children.map(({ painterRegistrations }) => painterRegistrations))
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'local-player', state,
+  })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.filter(({ kind }) => kind.startsWith('flash-response-'))
+    .map(({ painterRegistrations }) => painterRegistrations), children.map(({ painterRegistrations }) => painterRegistrations))
+}
+
+test('Flash post-secondary Ether Drain contact registers children before snapshot and save', () => {
+  const loadedBoneyard = combatBoneyard('ether-drain-targets')
+  let state = withPlayerSkillRank(etherDrainSimulation({ x: 250, y: 250 }), 'local-player', 53, 1)
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      currentHealth: 100_000, maximumHealth: 100_000,
+    })),
+  } }
+  for (let tick = 0; tick < 300; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (state.secondaryAbilities.events.some(event => event.skillId === 53 && event.tick === state.tick)) break
+  }
+  assert.ok(state.secondaryAbilities.events.some(event => event.skillId === 53 && event.tick === state.tick),
+    'the field must cause a real accepted Flash response')
+  assert.ok(getPlayerProgression(state).currentHealth < 100_000, 'the field contact damaged its owner')
+  assertCompletedFlashBirth(state, loadedBoneyard)
+})
+
+test('post-secondary Ether Drain shield break registers every child before snapshot and save', () => {
+  const loadedBoneyard = combatBoneyard('ether-drain-targets')
+  let state = etherDrainSimulation({ x: 250, y: 250 })
+  const shield = state.secondaryAbilities.players['local-player']!
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities, players: {
+    ...state.secondaryAbilities.players,
+    'local-player': { ...shield, magicShieldAbsorb: 1, magicShieldMaximum: 1, magicShieldExplosionDamage: 12 },
+  } } }
+  for (let tick = 0; tick < 300; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick)) break
+  }
+  assert.ok(state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick),
+    'the field must break the active shield during late magic contact')
+  const children = state.secondaryAbilities.actors.filter(actor =>
+    actor.kind === 'shield-break' || actor.kind === 'shield-explosion'
+      || (actor.kind === 'shockwave' && actor.skillId === 54))
+  assert.deepEqual(children.map(actor => actor.kind), [
+    ...Array(20).fill('shield-break'), 'shield-explosion', 'shockwave',
+  ])
+  const roots = children.map(actor => {
+    assert.equal(actor.painterRegistrations?.length, 1, `${actor.kind} needs its birth painter`)
+    const root = actor.painterRegistrations![0]!
+    assert.equal(root.managerLane, 'transient')
+    return root.registrationOrdinal
+  })
+  assert.ok(roots.every((root, index) => index === 0 || root === roots[index - 1]! + 1))
+  assert.ok(roots.at(-1)! < state.worldManagerOrder.nextRegistrationOrdinal.transient)
+  const wave = children.at(-1)!
+  assert.equal(wave.kind, 'shockwave')
+  assert.ok(wave.lightRegistration)
+  assert.equal(wave.lightRegistration?.managerLane, 'actor', 'the late shockwave also owns a light')
+  assert.ok(wave.lightRegistration.registrationOrdinal < state.worldManagerOrder.nextRegistrationOrdinal.actor)
+  const published = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(published.secondaryAbilities.actors.filter(actor => children.some(child => child.id === actor.id))
+    .map(actor => actor.painterRegistrations), children.map(actor => actor.painterRegistrations))
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'local-player', state,
+  })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.filter(actor => children.some(child => child.id === actor.id))
+    .map(actor => actor.painterRegistrations), children.map(actor => actor.painterRegistrations))
+})
+
+test('post-secondary ordinary Magic Shield break registers twenty transient children', () => {
+  let state = etherDrainSimulation({ x: 250, y: 250 })
+  const shield = state.secondaryAbilities.players['local-player']!
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities, players: {
+    ...state.secondaryAbilities.players,
+    'local-player': { ...shield, magicShieldAbsorb: 1, magicShieldMaximum: 1, magicShieldExplosionDamage: 0 },
+  } } }
+  for (let tick = 0; tick < 300; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick)) break
+  }
+  assert.ok(state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick))
+  const children = state.secondaryAbilities.actors.filter(actor => actor.kind === 'shield-break')
+  assert.equal(children.length, 20)
+  assert.ok(children.every(actor => actor.painterRegistrations?.length === 1
+    && actor.painterRegistrations[0]!.managerLane === 'transient'))
+  assert.ok(!state.secondaryAbilities.actors.some(actor => actor.kind === 'shield-explosion'
+    || (actor.kind === 'shockwave' && actor.skillId === 54)))
+})
+
+test('Flash post-secondary poison response registers children before snapshot and save', () => {
+  const loadedBoneyard = combatBoneyard('flash-poison-registration')
+  let source = withPlayerSkillRank(enterBoneyardWorld(createGameSimulation(), loadedBoneyard), 'local-player', 53, 1)
+  source = { ...source, playerEntities: { ...source.playerEntities,
+    progressions: source.playerEntities.progressions.map(progression => ({ ...progression,
+      currentHealth: 0, poisonDamagePerTick: 1, poisonTicksRemaining: 2,
+    })),
+  } }
+  // Poison cannot kill: a positive raw poison tick at zero health has no health
+  // damage, while seed 18 admits the ordinary defensive Flash chance.
+  const state = stepGameSimulationTick({ ...source,
+    secondaryAbilities: { ...source.secondaryAbilities, rng: createNativeRng(18) },
+  }, {})
+  assert.ok(state.secondaryAbilities.events.some(event => event.skillId === 53 && event.tick === state.tick),
+    'the zero-health poison floor must cause a real Flash response')
+  assert.equal(getPlayerProgression(state).lifeState, 'alive', 'poison cannot kill the player')
+  assertCompletedFlashBirth(state, loadedBoneyard)
+})
+
 test('enemy retirement carries its death-time private seed into one authoritative ground drop', () => {
   for (const [actorSeed, expectedKind] of [
     [9_974_658, 'gold'],
@@ -5294,7 +5424,8 @@ test('Ether Drain routes grounded primary Hail and secondary chips through their
   const shielded = { ...state.secondaryAbilities, players: { ...state.secondaryAbilities.players,
     'local-player': { ...state.secondaryAbilities.players['local-player']!, stoneskinTicksRemaining: 50 } } }
   const chipped = applyNativeSecondaryPlayerDamage(shielded, 'local-player', 1, state.tick,
-    { x: 400, y: 250 }, 'boneyard:ether-drain-targets', { physical: true, enhancedEffects: true }).state
+    { x: 400, y: 250 }, 'boneyard:ether-drain-targets', managers.register,
+    { physical: true, enhancedEffects: true }).state
   const chip = chipped.actors.find(actor => actor.kind === 'stoneskin-chip')!
   assert.ok(chip)
   state = { ...state, primarySpells: { ...state.primarySpells, nextId: hail.id + 1,

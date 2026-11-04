@@ -705,6 +705,7 @@ test('Mindblast Shockwave contacts every target once, Dazzles, pushes, and publi
 })
 
 test('Flash materializes twelve independent children, area Dazzle, feedback, and audio', () => {
+  const painters = createNativeWorldManagerOrder()
   const response = Object.freeze({
     cameraDisplacement: Object.freeze({ x: 1.8, y: -2.4 }),
     durationTicks: 400,
@@ -721,9 +722,14 @@ test('Flash materializes twelve independent children, area Dazzle, feedback, and
       tick: 1,
       worldKey: 'boneyard:test',
     },
+    painters.register,
   )
   assert.equal(state.actors.filter(({ kind }) => kind === 'flash-response-grow').length, 8)
   assert.equal(state.actors.filter(({ kind }) => kind === 'flash-response-fade').length, 4)
+  assert.deepEqual(state.actors.map(actor => actor.painterRegistrations), Array.from(
+    { length: 12 }, (_, registrationOrdinal) => [{ managerLane: 'transient', registrationOrdinal }],
+  ))
+  assert.equal(painters.state().nextRegistrationOrdinal.transient, 12)
   assert.deepEqual(state.actors.slice(0, 8).map(({ scale }) => scale), response.growScales)
   assert.ok(state.actors.slice(0, 8).every(({ position }) => (
     position.x === 30 && position.y === 50
@@ -4635,22 +4641,23 @@ test('Stoneskin requests apply, refresh, and exactly one natural-removal callbac
 })
 
 test('Stoneskin and Magic Shield intercept damage at the authoritative player boundary', () => {
+  const register = createNativeWorldManagerOrder().register
   const stoneskin = cast(46).state
   const blocked = applyNativeSecondaryPlayerDamage(
-    stoneskin, 'player', 500, 2, { x: 0, y: 0 }, 'boneyard:test',
+    stoneskin, 'player', 500, 2, { x: 0, y: 0 }, 'boneyard:test', register,
   )
   assert.equal(blocked.healthDamage, 0)
   assert.equal(blocked.absorbedDamage, 500)
 
   const shield = cast(54).state
   const hit = applyNativeSecondaryPlayerDamage(
-    shield, 'player', 10, 2, { x: 0, y: 0 }, 'boneyard:test',
+    shield, 'player', 10, 2, { x: 0, y: 0 }, 'boneyard:test', register,
   )
   assert.equal(hit.healthDamage, 0)
   assert.equal(hit.state.players.player?.magicShieldAbsorb, 15)
   assert.equal(hit.state.players.player?.magicShieldPulseTicks, 40)
   const broken = applyNativeSecondaryPlayerDamage(
-    hit.state, 'player', 20, 3, { x: 0, y: 0 }, 'boneyard:test',
+    hit.state, 'player', 20, 3, { x: 0, y: 0 }, 'boneyard:test', register,
   )
   assert.equal(broken.state.players.player?.magicShieldAbsorb, 0)
   assert.equal(broken.state.actors.filter(({ kind }) => kind === 'shield-break').length, 20)
@@ -4670,7 +4677,7 @@ test('Stoneskin and Magic Shield intercept damage at the authoritative player bo
     },
   ).state
   const explosiveBreak = applyNativeSecondaryPlayerDamage(
-    explosiveShield, 'player', 30, 2, { x: 4, y: 5 }, 'boneyard:test',
+    explosiveShield, 'player', 30, 2, { x: 4, y: 5 }, 'boneyard:test', register,
   ).state
   const breakActors = explosiveBreak.actors.filter(({ kind }) => kind === 'shield-break')
   assert.equal(breakActors.length, 20)
@@ -4761,8 +4768,14 @@ test('Stoneskin and Magic Shield intercept damage at the authoritative player bo
 
 test('Stoneskin physical hit fragments keep native life two and born shadow through live setting changes', () => {
   const source = cast(46).state
-  const hit = (physical: boolean, enhancedEffects: boolean) => applyNativeSecondaryPlayerDamage(
-    source, 'player', 12, 2, { x: 50, y: 80 }, 'boneyard:test', { physical, enhancedEffects })
+  const hit = (physical: boolean, enhancedEffects: boolean) => {
+    const order = createNativeWorldManagerOrder()
+    const before = order.state().nextRegistrationOrdinal.transient
+    const received = applyNativeSecondaryPlayerDamage(
+      source, 'player', 12, 2, { x: 50, y: 80 }, 'boneyard:test',
+      order.register, { physical, enhancedEffects })
+    return { ...received, before, after: order.state().nextRegistrationOrdinal.transient }
+  }
   assert.strictEqual(hit(false, true).state, source)
   const on = hit(true, true)
   const off = hit(true, false)
@@ -4771,6 +4784,9 @@ test('Stoneskin physical hit fragments keep native life two and born shadow thro
   assert.deepEqual(on.state.rng, off.state.rng)
   const born = on.state.actors.find(actor => actor.kind === 'stoneskin-chip' && actor.variant === 0)!
   const coarse = off.state.actors.find(actor => actor.kind === 'stoneskin-chip' && actor.variant === 0)!
+  assert.deepEqual(born.painterRegistrations, [{ managerLane: 'transient', registrationOrdinal: on.before }])
+  assert.equal(on.after, on.before + 1)
+  assert.equal(off.after, off.before + 1)
   assert.equal(born.alpha, 2)
   assert.equal(coarse.alpha, 2)
   assert.deepEqual({ ...coarse, enhanced: true }, born)

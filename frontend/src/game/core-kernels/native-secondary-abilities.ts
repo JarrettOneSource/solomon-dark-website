@@ -1151,6 +1151,7 @@ export function applyNativeSecondaryPlayerDamage(
   tick: number,
   position: Vector2,
   worldKey: string,
+  registerWorldPainter: RegisterNativeWorldPainter,
   presentation: Readonly<{ physical: boolean; enhancedEffects: boolean; writeScreenFlash?: WriteNativeScreenFlash }> = { physical: false, enhancedEffects: true },
 ): NativeSecondaryPlayerDamageResult {
   if (!Number.isFinite(amount) || amount < 0) {
@@ -1161,7 +1162,8 @@ export function applyNativeSecondaryPlayerDamage(
   if (current.magicShieldAbsorb <= 0) {
     if (current.stoneskinTicksRemaining > 0) {
       return { absorbedDamage: amount, healthDamage: 0, state: presentation.physical
-        ? spawnStoneskinChip(source, playerId, position, worldKey, presentation.enhancedEffects) : source }
+        ? spawnStoneskinChip(source, playerId, position, worldKey, presentation.enhancedEffects,
+          undefined, registerWorldPainter) : source }
     }
     return { absorbedDamage: 0, healthDamage: amount, state: source }
   }
@@ -1215,6 +1217,7 @@ export function applyNativeSecondaryPlayerDamage(
         alpha: Math.fround(0.5 + alpha.value),
         kind: 'shield-break',
         ownerId: playerId,
+        painterRegistrations: [registerWorldPainter('transient')],
         position: { x: position.x, y: position.y - 35 },
         rotationRadians: rotation.value * Math.PI / 180,
         scale: Math.fround(2 + scale.value),
@@ -1238,6 +1241,7 @@ export function applyNativeSecondaryPlayerDamage(
         kind: 'shield-explosion',
         lifetimeTicks: MAGIC_SHIELD_EXPLOSION_PRESENTATION_LIFETIME_TICKS,
         ownerId: playerId,
+        painterRegistrations: [registerWorldPainter('transient')],
         position,
         presentationRng,
         radius: MAGIC_SHIELD_EXPLOSION_CONTACT_RADIUS,
@@ -1248,6 +1252,8 @@ export function applyNativeSecondaryPlayerDamage(
         kind: 'shockwave',
         lifetimeTicks: MAGIC_SHIELD_EXPLOSION_SHOCKWAVE_LIFETIME_TICKS,
         ownerId: playerId,
+        painterRegistrations: [registerWorldPainter('transient')],
+        lightRegistration: registerWorldPainter('actor'),
         phase: SHOCKWAVE_EXPLOSIVE_SHIELD_LIFE,
         position,
         quantity: SHOCKWAVE_RADIUS_GROWTH_PER_TICK,
@@ -5458,7 +5464,8 @@ function spawnStoneskinBurst(state: NativeSecondarySimulationState, ownerId: str
 }
 
 function spawnStoneskinChip(state: NativeSecondarySimulationState, ownerId: string, origin: Vector2,
-  worldKey: string, enhanced: boolean, burstHeading?: number): NativeSecondarySimulationState {
+  worldKey: string, enhanced: boolean, burstHeading?: number,
+  registerWorldPainter?: RegisterNativeWorldPainter): NativeSecondarySimulationState {
   let rng = state.rng
   const random = (maximum: number, signed = false) => {
     const draw = drawNativeFloat(rng, maximum, signed); rng = draw.state; return draw.value
@@ -5479,6 +5486,7 @@ function spawnStoneskinChip(state: NativeSecondarySimulationState, ownerId: stri
   if (burstHeading === undefined) random(.2, true) // Separate physical-contact audio owner.
   return spawn({ ...state, rng }, actorSeed({ kind: 'stoneskin-chip', ownerId, worldKey, skillId: 46,
     enhanced, alpha: burstHeading !== undefined && enhanced ? 10 : 2,
+    painterRegistrations: registerWorldPainter ? [registerWorldPainter('transient')] : [],
     variant: burstHeading === undefined ? 0 : 1, lifetimeTicks: 1000, phase: height, endpoint: { x: bounce, y: bounce },
     position, velocity, rotationRadians, slowFactor, frame: 77 }))
 }
@@ -6498,6 +6506,7 @@ export function materializeNativePlayerFlashResponse(
     tick: number
     worldKey: string
   }>,
+  registerWorldPainter: RegisterNativeWorldPainter,
   writeScreenFlash?: WriteNativeScreenFlash,
 ): NativeSecondarySimulationState {
   if (new Set(input.targetIds).size !== input.targetIds.length) {
@@ -6521,6 +6530,7 @@ export function materializeNativePlayerFlashResponse(
       kind: 'flash-response-grow',
       lifetimeTicks: 20,
       ownerId: input.ownerId,
+      painterRegistrations: [registerWorldPainter('transient')],
       position: input.position,
       scale,
       skillId: 53,
@@ -6533,6 +6543,7 @@ export function materializeNativePlayerFlashResponse(
       kind: 'flash-response-fade',
       lifetimeTicks: 20,
       ownerId: input.ownerId,
+      painterRegistrations: [registerWorldPainter('transient')],
       position: {
         x: input.position.x,
         y: Math.fround(input.position.y - 25),
