@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { createEquipmentInventoryItem, DOWSING_EQUIPMENT_RECIPES } from '../src/game/core-kernels/hub-economy.ts'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import { getPlayerCharacter, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
@@ -169,7 +169,9 @@ async function exerciseScene(region) {
   await page.waitForFunction(region => {
     const canvas = document.querySelector(`.${region}-world-canvas`)
     const frame = region === 'hub' ? canvas?.__sdrHubFrame : canvas?.__sdrBoneyardFrame
-    return frame?.orbSpriteCount === 0
+    return frame?.playerOrdinaryWeaponVisible === false
+      && frame.playerElementEffectPrimaryId === 8
+      && frame.playerAttachmentPose >= 0 && frame.playerAttachmentPose <= 3
   }, region)
   receipts.push({ region, recipeIndex: null, ...await readFrame(region) })
   equip(13, 8)

@@ -20,6 +20,9 @@ export function HubInventoryNotice({ notice, onCommit, onDismiss, onPressedContr
         {notice.title} {'summary' in notice && notice.summary ? `${notice.summary} ` : ''}{notice.body}
       </span>
       <NativeAction
+        data={notice.variant === 'unforge-confirmation'
+          ? undefined
+          : { 'data-native-inventory-notice-dismiss': notice.variant }}
         label={notice.actionLabel}
         rect={notice.variant === 'standard'
           ? hubStandardNoticeActionRect(notice)
@@ -31,6 +34,7 @@ export function HubInventoryNotice({ notice, onCommit, onDismiss, onPressedContr
       />
       {notice.variant === 'unforge-confirmation' ? (
         <NativeAction
+          data={{ 'data-native-inventory-notice-dismiss': notice.variant }}
           gameBack
           label={notice.secondaryActionLabel ?? 'CANCEL'}
           rect={HUB_UNFORGE_CONFIRMATION.secondaryButtonRect}

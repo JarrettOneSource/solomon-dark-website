@@ -80,6 +80,7 @@ export interface PlayerSkillRuntimeComponent {
 
 export interface PlayerSkillDerivedStats {
   readonly castProgressFactor: number
+  readonly handCastFactor: number
   readonly damageResistance: number
   readonly deflectChancePercent: number
   readonly experienceBonus: number
@@ -381,6 +382,14 @@ export function playerSkillDerivedStats(
     ),
     hagatha.castSpeedFactor,
   )
+  const handCastFactor = multiplyNativeHagathaFactor(
+    nativeHandCastSpeed(
+      modifiers,
+      Math.fround(1 + (fasterCaster + (selected(70) ? value(70, 'mConcentration') : 0)) / 100),
+      skillBook.primarySkillId,
+    ),
+    hagatha.castSpeedFactor,
+  )
   const lifeCharmFactor = ownsNativeHagathaSelector(
     economy.ownedPerkSelectors,
     NATIVE_HAGATHA_SELECTORS.life,
@@ -412,6 +421,7 @@ export function playerSkillDerivedStats(
   ))
   return Object.freeze({
     castProgressFactor,
+    handCastFactor,
     damageResistance: clampUnit(modifiers.damageResistance),
     deflectChancePercent: staffEquipped ? value(68, 'mValue') : 0,
     experienceBonus: economy.unforgeBonuses.experience,
@@ -801,6 +811,19 @@ function applyClassCastSpeed(
     + modifiers.castSpeedFlat
   ) * modifiers.classCastSpeedMultiplier[classId]!
     + modifiers.classCastSpeedFlat[classId]!)
+}
+
+function nativeHandCastSpeed(
+  modifiers: NativeEquipmentModifiers,
+  base: number,
+  skillId: number,
+): number {
+  const classId = nativeSkillClass(skillId)
+  const global = Math.fround(Math.fround(modifiers.castSpeedMultiplier * base) + modifiers.castSpeedFlat)
+  return Math.max(0, Math.fround(
+    Math.fround(global * modifiers.classCastSpeedMultiplier[classId]!)
+      + modifiers.classCastSpeedFlat[classId]!,
+  ))
 }
 
 function applyNativeMindstarRanks(

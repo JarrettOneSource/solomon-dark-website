@@ -1,5 +1,6 @@
 import {
   connectGameClientSession,
+  type GameReconnectIdentity,
   type GameSessionConnector,
   type GameClientSession,
   type GameDeploymentRestartRequest,
@@ -45,6 +46,9 @@ export type GameEndpoint =
     }
 
 export interface SessionOptions {
+  reconnect?: (identity: GameReconnectIdentity, signal: AbortSignal) => Promise<GameEndpoint>
+  onReconnecting?: (recovering: boolean) => void
+  onSessionActiveChange?: (active: boolean) => void
   allowModMismatch?: boolean
   beginCollegeIntro?: boolean
   character: PlayerCharacterConfig
@@ -61,7 +65,7 @@ export interface SessionOptions {
   resumeToken?: string
   saveDocument?: string
   saveIntent?: GameSaveIntent
-  transportFactory?: (url: string) => Promise<GameTransport>
+  transportFactory?: (url: string, signal?: AbortSignal) => Promise<GameTransport>
   sessionConnector?: GameSessionConnector
 }
 
@@ -79,7 +83,7 @@ export interface GameObserverOptions {
   readonly endpoint: GameObserverEndpoint
   readonly onEnded?: (reason: string) => void
   readonly onFatal?: (failure: GameConnectionFailure) => void
-  readonly transportFactory?: (url: string) => Promise<GameTransport>
+  readonly transportFactory?: (url: string, signal?: AbortSignal) => Promise<GameTransport>
 }
 
 export type GameConnectionStage =
@@ -91,7 +95,7 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
   validateEndpoint(options.endpoint)
   options.diagnostics?.setEndpoint(options.endpoint.url)
   const createTransport = options.transportFactory
-    ?? ((url: string) => connectWebSocketTransport(url, options.diagnostics))
+    ?? ((url: string, signal?: AbortSignal) => connectWebSocketTransport(url, options.diagnostics, signal))
   options.onProgress?.('connecting_transport')
   options.diagnostics?.info(
     'connection.stage',
@@ -105,6 +109,18 @@ export async function bootGame(options: SessionOptions): Promise<GameSession> {
     'Authenticating the game session.',
   )
   const session = await connectSession({
+    ...(options.onReconnecting ? { onReconnecting: options.onReconnecting } : {}),
+    ...(options.onSessionActiveChange ? { onSessionActiveChange: options.onSessionActiveChange } : {}),
+    ...(options.reconnect && options.endpoint.kind === 'remote' ? {
+      reconnect: async (identity: GameReconnectIdentity, signal: AbortSignal) => {
+        const endpoint = await options.reconnect!(identity, signal)
+        validateEndpoint(endpoint)
+        if (endpoint.url !== options.endpoint.url || endpoint.sessionKind !== options.endpoint.sessionKind) {
+          throw new Error('The reconnect admission selected a different game authority.')
+        }
+        return { credential: endpoint.credential, transport: await createTransport(endpoint.url, signal) }
+      },
+    } : {}),
     ...(options.allowModMismatch ? { allowModMismatch: true } : {}),
     ...(options.beginCollegeIntro ? { beginCollegeIntro: true } : {}),
     character: options.character,

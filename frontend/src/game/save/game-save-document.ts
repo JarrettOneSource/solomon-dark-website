@@ -1,5 +1,7 @@
+import { actorHeadingFromVector } from '../core-kernels/actor-heading.ts'
 import { PLAYER_BELT_SLOT_COUNT, NATIVE_BELT_SLOT_COUNT } from '../core-kernels/native-belt.ts'
 import { nativeScreenFlashes } from '../protocol/codecs/screen-flash.ts'
+import { playerHandCast1, validatePlayerHandCast1Owner } from '../protocol/codecs/player-hand-cast.ts'
 import { nativeSecondaryCameraDisplacements } from '../protocol/codecs/secondary.ts'
 import { createNativeScreenFlashes } from '../core-kernels/native-screen-flash.ts'
 import { hubActionFeedback } from '../protocol/codecs/economy.ts'
@@ -1067,9 +1069,10 @@ function normalizeWorldPainterOwnership(
         `game save primary transient ${index}`,
       )
       // Snapshot construction is a projection, not a decoder. Validate retained
-      // Flame samples here after all legacy painter/quality migrations compose.
+      // Flame and Boulder state here after all legacy migrations compose.
       return normalized.kind === 'weld-channel' || normalized.kind === 'weld-flame-lash-fade'
         || normalized.flameVisual !== undefined
+        || (normalized.kind === 'weld-persistent' && normalized.buildId === 1006)
         ? primarySpellTransient(normalized, `game save primary transient ${index}`)
         : normalized
     },
@@ -1793,6 +1796,27 @@ function normalizePrimarySpells(value: unknown, sourceSchemaVersion: number): un
   const transients = array(source.transients, 'game save primary spell transients').map(
     (value, index) => {
       const saved = record(value, `game save primary spell transient ${index}`)
+      if (sourceSchemaVersion < 52 && saved.kind === 'weld-persistent' && saved.buildId === 1006) {
+        if (['flightSpeed', 'headingDegrees', 'reacquiresTarget', 'targetId',
+          'trackingTicksRemaining', 'turnAccumulator', 'turnInput'].some(field => Object.hasOwn(saved, field))) {
+          throw new Error('saved Boulder mixes legacy and guidance fields')
+        }
+        const { lifetimeTicksRemaining, speedFactor, ...rest } = saved
+        const direction = record(saved.direction, 'saved Boulder direction')
+        const velocity = record(saved.velocity, 'saved Boulder velocity')
+        const turnInput = finiteNumber(speedFactor, 'saved Boulder turn input')
+        const oldClock = integerWithin(lifetimeTicksRemaining, 'saved Boulder guidance clock', 0, Number.MAX_SAFE_INTEGER)
+        return { ...rest,
+          flightSpeed: saved.phase === 'held' ? 2.25 : Math.hypot(
+            finiteNumber(velocity.x, 'saved Boulder velocity X'), finiteNumber(velocity.y, 'saved Boulder velocity Y')),
+          headingDegrees: Math.fround(actorHeadingFromVector(
+            finiteNumber(direction.x, 'saved Boulder direction X'), finiteNumber(direction.y, 'saved Boulder direction Y'))),
+          targetId: null, reacquiresTarget: saved.phase === 'held' && turnInput > 1,
+          trackingTicksRemaining: saved.phase === 'held'
+            ? turnInput > 1 ? Math.trunc(turnInput * 1000 + 250) : 250 : oldClock,
+          turnAccumulator: Math.fround(.01), turnInput,
+        }
+      }
       // Old Flame actors keep their IDs, registration, clocks, geometry and ML row.
       // Missing birth samples cannot be recovered from the saved gameplay RNG.
       const transient = sourceSchemaVersion <= 50 && saved.buildId === 1003
@@ -2201,9 +2225,10 @@ function normalizePrimaryCast(
   skillBook: PlayerSkillBookComponent,
 ): PlayerPrimaryCastState {
   const source = record(value, 'game save primary cast')
-  return {
+  const state = {
     ...createIdlePlayerPrimaryCast(),
     ...source,
+    handCast1: playerHandCast1(source.handCast1 ?? null, 'game save primary handCast1'),
     oneShotAttackPoseHeld: source.oneShotAttackPoseHeld === true,
     selectedPrimaryId: typeof source.selectedPrimaryId === 'number'
       ? source.selectedPrimaryId
@@ -2211,6 +2236,8 @@ function normalizePrimaryCast(
         ? skillBook.weldBuildId ?? -1
         : skillBook.primarySkillId,
   } as PlayerPrimaryCastState
+  validatePlayerHandCast1Owner(state.handCast1, state, 'game save primary handCast1')
+  return state
 }
 
 function normalizeRun(value: unknown): Record<string, unknown> {

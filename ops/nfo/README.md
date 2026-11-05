@@ -135,9 +135,23 @@ is replaced by an authenticated deployment drain for runtime cutover: the
 supervisor rejects new admissions, freezes every host, publishes a final
 owner-only checkpoint to every connected player, waits for bounded browser
 storage acknowledgements, and closes the clients with code `1012` and reason
-`game updating`. Caddy-only reconciliation remains a graceful reload and does
-not disconnect games. The Website stays live until the save grace completes so
-authenticated cloud-slot writes can finish. Root `/deployment.json` identifies Website/PixiJS. `/game-rust/deployment.json`
+`game updating`. Byte-identical Caddy content requires no reload. A real site
+change follows the two-authority save/drain and publication path because Caddy
+closes upgraded game connections when it unloads their configuration. The
+restored PixiJS clients require a different Website revision for that restart;
+same-revision Caddy drift is rejected before the drain or reload. Publish a new
+Website revision to reconcile it through the normal release. Reloads initiated
+by other applications on the shared Caddy service remain outside this game
+save barrier and can still close both sockets. Both maintained browser clients
+can reattach to their same still-live authority after an unexpected `1001`/transport
+loss, within one absolute 30-second lease and at most two attempts. That path
+retains accepted authority state; it does not import a saved checkpoint or
+provision a new game. Account/authentication changes, expired or retired hosts
+and announced deployments stop recovery. See the Report 74 retained-authority
+contract in ledger 145; the proxy reload itself is not interruption-free.
+The Website stays live until
+the save grace completes so authenticated cloud-slot writes can finish. Root
+`/deployment.json` identifies Website/PixiJS. `/game-rust/deployment.json`
 identifies the immutable Rust artifact, while `/game-rust/api/game/deployment`
 exposes its separate ready publication. The root drain announces Website/PixiJS
 revision; the companion drain announces Rust revision. New admissions and PixiJS

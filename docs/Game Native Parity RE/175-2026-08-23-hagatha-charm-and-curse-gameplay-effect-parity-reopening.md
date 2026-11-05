@@ -2502,3 +2502,57 @@ repurchasing it cost1000 after the initial3000 and restored zero cost.
 Chrome153.0.8010.12 used WebGL2/Apple M5 Pro; all page, console, HTTP, host
 and transport error arrays were empty. No platform exception is required.
 Live verification and release closeout remain owned by the combined publisher.
+
+## Report65 — Ether Drain rescue event delivery in the restored PixiJS game
+
+The October20 follow-up `1562279237753241613` reports a missing Cheat Death
+banner during Ether Drain. The recovered Player damage suffix `0x0052F540`
+inserts `CHEAT DEATH!` at `0x005304B0` after the four ordered requests recorded
+above. Ether Drain reaches that receiver through `0x00548150`; its `0x10A`
+contact flags suppress ordinary hit feedback. Accepted charm loss and rescue
+remain separate events. This reuses retained instruction evidence, not a new
+retail runtime observation. The independent Report101 retail disassembly
+(`report101/retail-charm-loss-disassembly.txt` in the November1 campaign)
+confirms the loss-cue and flag-clear branch `0x0052FCEA..0x0052FDEB` precedes
+the common Actor reaction at `0x0052FDF1`, with no ordinary suppression guard.
+Entry299 records the complete until-hurt contract and its presentation policy.
+
+The restored PixiJS source at `f87dd326` correctly accepts the contact, consumes
+the charge, restores health, writes protection/flash and births the rescue
+Shockwave. Its Ether Drain caller in `game-simulation.ts` drops the returned
+`playerDamageSoundEvents`, leaving the banner and four-sound consumers without
+their accepted event. Rust `6aad9630` already retains only `PlayerCheatDeath`
+from this outbox in `session/ether_drain.rs`, with caster/peer coverage and the
+October28 real browser receipt. Its `docs/SPELL-CONTACTS.md` records the rule.
+That filter also drops accepted charm loss; Report101 owns the matching Rust
+allowlist correction and the shared transient-notice consumer.
+
+Boundary: accepted participant rescue delivery from direct damage, resource
+ticks and the shared contact receiver through the existing run event stream.
+No notification, sound, shader, contact or capture model needs replacement.
+
+| Member | Disposition | Evidence and acceptance |
+| --- | --- | --- |
+| Ether Drain lethal caster contact | exact-ported | Public cast consumes one paid charge, retains one addressed rescue event and preserves protection/Shockwave. Existing receiver flash coverage passes. |
+| Ether Drain lethal party-member contact | exact-ported | An independent peer-centered cast retains the peer event through the same receiver and outbox. |
+| Ether Drain nonlethal contact | verified-already-at-parity | Preserve suppression of ordinary `player-damage-sound`; health still declines. |
+| Ether Drain Serendipity, Reverie, combined and loss-before-rescue events | exact-ported | Paid-purchase caster and peer regressions retain one addressed loss, before rescue when both happen. |
+| Direct damage, ordinary enemy contacts and resource ticks | verified-already-at-parity | Existing shared receiver and direct/tick callers retain accepted rescue events; their regression coverage remains applicable. |
+| Four native sounds and local `CHEAT DEATH!` text | verified-already-at-parity | Existing `BoneyardScene` consumer uses `nativePlayerCheatDeathSoundRequests` and the shared notification manager; no new presentation path. |
+| Rust caster/peer rescue delivery | verified-already-at-parity | `session/ether_drain.rs` rescue-only retention and `spell_contact_rules` tests; October28 accepted browser baseline/candidate evidence. |
+| Living-player expansion and capture feedback | out-of-system | Report129 shares the source message but has separate native capture membership; retaining a rescue event must not change it. |
+| Until-hurt charm transient-notice consumer | out-of-system | Report101 owns the authorized visible notice; this caller must deliver its already accepted event. |
+
+The fix belongs at the PixiJS Ether Drain caller: retain only the returned
+`player-charm-lost` and `player-cheat-death` events with the existing Boneyard
+event-retention function. Do not forward the entire ordinary hit outbox.
+Entry/restore/run retirement and once-only event cursors remain with their
+existing owners. Ten public paid-purchase field scenarios first fail with empty
+accepted-event arrays, then pass with the narrow allowlist. The eleventh
+scenario verifies ordinary hit suppression with continued health damage. The
+45 selected Ether Drain, receiver, rescue, sound, notification and client-event
+checks pass, as do test types and focused lint. These establish the source port;
+the combined release owner must run the exact-tree full gate and affected real
+browser journey before claiming installed behavior or marking the shared
+message complete. Rust's additional charm-loss correction remains with
+Report101; its earlier rescue-only behavior is unchanged by this Website port.

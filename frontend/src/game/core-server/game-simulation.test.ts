@@ -78,6 +78,7 @@ import { nativeCocoonPosition } from '../core-kernels/native-webbed.ts'
 import { applyPlayerContacts } from './player-contact-system.ts'
 import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
 import { NativeSecondaryScreenFeedbackPresentation } from '../renderer/native-screen-feedback.ts'
+import { nativeSecondaryPresentationPlan } from '../renderer/native-secondary-presentation.ts'
 import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile } from '../save/game-save-document.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
 import { createGameSnapshotFrame, EntityReplicationReconstructor } from '../protocol/entity-replication.ts'
@@ -3298,6 +3299,40 @@ test('authoritative primary edges write one shared orb and light phase before de
   )
 })
 
+test('accepted Cast2 markers publish the unchanged phase to player and observer snapshots', () => {
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    let state = createGameSimulation({ caster: { displayName: 'Marker', element: 'ether', discipline: 'arcane' } })
+    const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'caster', 11, 1, state.gameRng)
+    state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+    const economy = getPlayerEconomy(state, 'caster')
+    const weapon = weaponKind === 'wand'
+      ? createEquipmentInventoryItem(DOWSING_EQUIPMENT_RECIPES[2]!, economy.nextItemId)
+      : weaponKind === 'staff' ? economy.equipment.weapon : null
+    state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, 'caster', {
+      ...economy, equipment: { ...economy.equipment, weapon },
+      nextItemId: economy.nextItemId + (weaponKind === 'wand' ? 1 : 0),
+    }) }
+    state = enterBoneyardWorld(state, emptyBoneyard())
+    state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', 11, 0)!
+    const player = getPlayerCharacter(state, 'caster')
+    const castInput = { ...gameplayInput(0, 0), aim: { x: player.position.x, y: player.position.y - 200 },
+      cast: { primary: false, quickbar: 0 } }
+    state = stepGameSimulationTick(state, { caster: castInput })
+    const markerUpdate = weaponKind === 'staff' ? 1 : 11
+    for (let update = 1; update <= markerUpdate + 1; update++) {
+      state = stepGameSimulationTick(state, { caster: { ...castInput, cast: { primary: false, quickbar: null } } })
+      const expected = update < markerUpdate ? 0 : update === markerUpdate
+        ? Math.fround(.45) : Math.fround(Math.fround(.45) * NATIVE_PLAYER_LIGHT_OVERLAY_DECAY)
+      assert.equal(getPlayerCharacter(state, 'caster').primaryCast.weaponPulse, expected)
+      for (const hostPlayerId of ['caster', null]) {
+        const snapshot = gameSnapshot(createGameSnapshot(state, hostPlayerId))
+        assert.equal(snapshot.players.caster!.primaryCast.weaponPulse, expected)
+        assert.equal(snapshot.players.caster!.lighting.overlayEffectPhase, expected)
+      }
+    }
+  }
+})
+
 test('Boneyard Air falls back to a Gravestone and publishes the native curved segment', () => {
   let state = createGameSimulation({ caster: {
     discipline: 'arcane',
@@ -4697,6 +4732,136 @@ test('Flash responds after damage with area Dazzle, twelve children, feedback, a
   assert.ok(getPlayerProgression(state).currentHealth < 50, 'Flash does not block the strike')
 })
 
+function assertCompletedFlashBirth(state: GameSimulationState, loadedBoneyard: LoadedBoneyard): void {
+  const children = state.secondaryAbilities.actors.filter(({ kind }) => (
+    kind === 'flash-response-grow' || kind === 'flash-response-fade'
+  ))
+  assert.deepEqual(children.map(({ kind }) => kind), [
+    ...Array.from({ length: 8 }, () => 'flash-response-grow'),
+    ...Array.from({ length: 4 }, () => 'flash-response-fade'),
+  ])
+  const roots = children.map(({ painterRegistrations }) => {
+    assert.ok(painterRegistrations)
+    assert.equal(painterRegistrations.length, 1, 'each Flash child needs its own root at birth')
+    assert.equal(painterRegistrations[0]!.managerLane, 'transient')
+    return painterRegistrations[0]!.registrationOrdinal
+  })
+  assert.deepEqual(roots, Array.from({ length: 12 }, (_, index) => roots[0]! + index),
+    'grow and fade children must register in birth order')
+  const allRoots = state.secondaryAbilities.actors.flatMap(actor => actor.painterRegistrations ?? [])
+    .filter(root => root.managerLane === 'transient').map(root => root.registrationOrdinal)
+  assert.equal(new Set(allRoots).size, allRoots.length, 'live secondary painters cannot share a root')
+  assert.ok(roots.at(-1)! < state.worldManagerOrder.nextRegistrationOrdinal.transient)
+  const published = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(published.secondaryAbilities.actors.filter(({ kind }) => kind.startsWith('flash-response-'))
+    .map(({ painterRegistrations }) => painterRegistrations), children.map(({ painterRegistrations }) => painterRegistrations))
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'local-player', state,
+  })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.filter(({ kind }) => kind.startsWith('flash-response-'))
+    .map(({ painterRegistrations }) => painterRegistrations), children.map(({ painterRegistrations }) => painterRegistrations))
+}
+
+test('Flash post-secondary Ether Drain contact registers children before snapshot and save', () => {
+  const loadedBoneyard = combatBoneyard('ether-drain-targets')
+  let state = withPlayerSkillRank(etherDrainSimulation({ x: 250, y: 250 }), 'local-player', 53, 1)
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      currentHealth: 100_000, maximumHealth: 100_000,
+    })),
+  } }
+  for (let tick = 0; tick < 300; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (state.secondaryAbilities.events.some(event => event.skillId === 53 && event.tick === state.tick)) break
+  }
+  assert.ok(state.secondaryAbilities.events.some(event => event.skillId === 53 && event.tick === state.tick),
+    'the field must cause a real accepted Flash response')
+  assert.ok(getPlayerProgression(state).currentHealth < 100_000, 'the field contact damaged its owner')
+  assertCompletedFlashBirth(state, loadedBoneyard)
+})
+
+test('post-secondary Ether Drain shield break registers every child before snapshot and save', () => {
+  const loadedBoneyard = combatBoneyard('ether-drain-targets')
+  let state = etherDrainSimulation({ x: 250, y: 250 })
+  const shield = state.secondaryAbilities.players['local-player']!
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities, players: {
+    ...state.secondaryAbilities.players,
+    'local-player': { ...shield, magicShieldAbsorb: 1, magicShieldMaximum: 1, magicShieldExplosionDamage: 12 },
+  } } }
+  for (let tick = 0; tick < 300; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick)) break
+  }
+  assert.ok(state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick),
+    'the field must break the active shield during late magic contact')
+  const children = state.secondaryAbilities.actors.filter(actor =>
+    actor.kind === 'shield-break' || actor.kind === 'shield-explosion'
+      || (actor.kind === 'shockwave' && actor.skillId === 54))
+  assert.deepEqual(children.map(actor => actor.kind), [
+    ...Array(20).fill('shield-break'), 'shield-explosion', 'shockwave',
+  ])
+  const roots = children.map(actor => {
+    assert.equal(actor.painterRegistrations?.length, 1, `${actor.kind} needs its birth painter`)
+    const root = actor.painterRegistrations![0]!
+    assert.equal(root.managerLane, 'transient')
+    return root.registrationOrdinal
+  })
+  assert.ok(roots.every((root, index) => index === 0 || root === roots[index - 1]! + 1))
+  assert.ok(roots.at(-1)! < state.worldManagerOrder.nextRegistrationOrdinal.transient)
+  const wave = children.at(-1)!
+  assert.equal(wave.kind, 'shockwave')
+  assert.ok(wave.lightRegistration)
+  assert.equal(wave.lightRegistration?.managerLane, 'actor', 'the late shockwave also owns a light')
+  assert.ok(wave.lightRegistration.registrationOrdinal < state.worldManagerOrder.nextRegistrationOrdinal.actor)
+  const published = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(published.secondaryAbilities.actors.filter(actor => children.some(child => child.id === actor.id))
+    .map(actor => actor.painterRegistrations), children.map(actor => actor.painterRegistrations))
+  const restored = restoreGameSaveDocument(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'local-player', state,
+  })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.filter(actor => children.some(child => child.id === actor.id))
+    .map(actor => actor.painterRegistrations), children.map(actor => actor.painterRegistrations))
+})
+
+test('post-secondary ordinary Magic Shield break registers twenty transient children', () => {
+  let state = etherDrainSimulation({ x: 250, y: 250 })
+  const shield = state.secondaryAbilities.players['local-player']!
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities, players: {
+    ...state.secondaryAbilities.players,
+    'local-player': { ...shield, magicShieldAbsorb: 1, magicShieldMaximum: 1, magicShieldExplosionDamage: 0 },
+  } } }
+  for (let tick = 0; tick < 300; tick += 1) {
+    state = stepGameSimulationTick(state, {})
+    if (state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick)) break
+  }
+  assert.ok(state.secondaryAbilities.events.some(event => event.kind === 'shield-break' && event.tick === state.tick))
+  const children = state.secondaryAbilities.actors.filter(actor => actor.kind === 'shield-break')
+  assert.equal(children.length, 20)
+  assert.ok(children.every(actor => actor.painterRegistrations?.length === 1
+    && actor.painterRegistrations[0]!.managerLane === 'transient'))
+  assert.ok(!state.secondaryAbilities.actors.some(actor => actor.kind === 'shield-explosion'
+    || (actor.kind === 'shockwave' && actor.skillId === 54)))
+})
+
+test('Flash post-secondary poison response registers children before snapshot and save', () => {
+  const loadedBoneyard = combatBoneyard('flash-poison-registration')
+  let source = withPlayerSkillRank(enterBoneyardWorld(createGameSimulation(), loadedBoneyard), 'local-player', 53, 1)
+  source = { ...source, playerEntities: { ...source.playerEntities,
+    progressions: source.playerEntities.progressions.map(progression => ({ ...progression,
+      currentHealth: 0, poisonDamagePerTick: 1, poisonTicksRemaining: 2,
+    })),
+  } }
+  // Poison cannot kill: a positive raw poison tick at zero health has no health
+  // damage, while seed 18 admits the ordinary defensive Flash chance.
+  const state = stepGameSimulationTick({ ...source,
+    secondaryAbilities: { ...source.secondaryAbilities, rng: createNativeRng(18) },
+  }, {})
+  assert.ok(state.secondaryAbilities.events.some(event => event.skillId === 53 && event.tick === state.tick),
+    'the zero-health poison floor must cause a real Flash response')
+  assert.equal(getPlayerProgression(state).lifeState, 'alive', 'poison cannot kill the player')
+  assertCompletedFlashBirth(state, loadedBoneyard)
+})
+
 test('enemy retirement carries its death-time private seed into one authoritative ground drop', () => {
   for (const [actorSeed, expectedKind] of [
     [9_974_658, 'gold'],
@@ -4970,6 +5135,150 @@ test('Ether Drain center contact can kill its living caster', () => {
   assert.ok(progression.currentHealth <= -10)
 })
 
+for (const victim of ['caster', 'peer']) {
+  for (const selectors of [[7], [24], [25], [24, 25], [7, 24, 25]]) {
+    test(`Ether Drain retains accepted charm ${selectors.join('+')} feedback for its ${victim}`, () => {
+      const config = { discipline: 'arcane', displayName: 'Wizard', element: 'ether' } as const
+      const loadedBoneyard = combatBoneyard('ether-drain-rescue')
+      let state = createGameSimulation({ caster: config, peer: config })
+      state = { ...state, playerEntities: replacePlayerCharacter(
+        replacePlayerEconomy(state.playerEntities, victim, {
+          ...getPlayerEconomy(state, victim), gold: 50_000,
+        }), victim, { ...getPlayerCharacter(state, victim), position: { x: 1340, y: 280 } },
+      ) }
+      for (const selector of selectors) {
+        const purchase = applyGameSimulationHubAction(state, victim, { type: 'buy-hagatha', selector })
+        assert.equal(purchase.accepted, true, purchase.reason ?? `charm ${selector} purchase`)
+        state = purchase.state
+      }
+      state = enterBoneyardWorld(state, loadedBoneyard)
+      state = withPlayerSkillRank(state, 'caster', 74, 1)
+      state = bindGameSimulationPlayerSkillQuickbar(state, 'caster', 74, 0)!
+      state = { ...state, playerEntities: {
+        ...state.playerEntities,
+        locomotions: state.playerEntities.locomotions.map((character, index) => ({ ...character,
+          position: { x: state.playerEntities.identities[index]!.playerId === victim ? 250 : 90, y: 250 },
+        })),
+        progressions: state.playerEntities.progressions.map((progression, index) => (
+          state.playerEntities.identities[index]!.playerId === victim
+            ? { ...progression, currentHealth: selectors.includes(7) ? 0.01 : 100_000,
+              maximumHealth: selectors.includes(7) ? progression.maximumHealth : 100_000 } : progression
+        )),
+      } }
+      for (let tick = 0; tick < 120; tick += 1) {
+        state = stepGameSimulationTick(state, tick === 0 ? { caster: {
+          ...gameplayInput(0, 0), aim: { x: 250, y: 250 }, cast: { primary: false, quickbar: 0 },
+        } } : {})
+        const runtime = getPlayerProgression(state, victim).hagathaRuntime
+        if (runtime.cheatDeathCharges === 0 && !runtime.reverieActive && !runtime.serendipityActive) break
+      }
+
+      const progression = getPlayerProgression(state, victim)
+      assert.deepEqual(progression.hagathaRuntime, {
+        cheatDeathCharges: 0, reverieActive: false, serendipityActive: false,
+      })
+      assert.equal(progression.lifeState, 'alive')
+      assert.ok(progression.currentHealth > 0)
+      assert.equal(progression.rescueProtection.fraction, selectors.includes(7) ? 1 : 0)
+      assert.equal(state.secondaryAbilities.actors.filter(actor => actor.kind === 'rescue-shockwave'
+        && actor.ownerId === victim).length, selectors.includes(7) ? 1 : 0)
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const events = state.world.enemyEvents.filter(event => event.type === 'player-charm-lost'
+        || event.type === 'player-cheat-death')
+      assert.deepEqual(events.map(event => event.type), [
+        ...(selectors.some(selector => selector === 24 || selector === 25) ? ['player-charm-lost'] : []),
+        ...(selectors.includes(7) ? ['player-cheat-death'] : []),
+      ], 'accepted charm loss and rescue must reach their consumers in receiver order')
+      assert.ok(events.every(event => event.targetPlayerId === victim))
+      assert.equal(events.at(-1)!.tick, state.tick)
+      assert.equal(state.world.enemyEvents.some(event => event.type === 'player-damage-sound'), false)
+      const repeated = stepGameSimulationTick(state, {})
+      if (repeated.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      assert.deepEqual(repeated.world.enemyEvents.filter(event => event.type === 'player-charm-lost'
+        || event.type === 'player-cheat-death'), events)
+      const restored = restoreGameSaveDocument(createGameSaveDocument({
+        integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: victim, state,
+      })).state
+      assert.deepEqual(getPlayerProgression(restored, victim).hagathaRuntime, progression.hagathaRuntime)
+    })
+  }
+}
+
+test('Ether Drain preserves suppressed ordinary hit feedback while still damaging the caster', () => {
+  let state = etherDrainSimulation({ x: 250, y: 250 })
+  state = { ...state, playerEntities: { ...state.playerEntities,
+    progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+      currentHealth: 100_000, maximumHealth: 100_000,
+    })),
+  } }
+  for (let tick = 0; tick < 120; tick += 1) state = stepGameSimulationTick(state, {})
+  assert.equal(getPlayerProgression(state).lifeState, 'alive')
+  assert.ok(getPlayerProgression(state).currentHealth < 100_000)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.equal(state.world.enemyEvents.some(event => event.type === 'player-damage-sound'), false)
+  assert.equal(state.world.enemyEvents.some(event => event.type === 'player-cheat-death'), false)
+})
+
+for (const enhancedEffects of [false, true]) {
+  for (const victim of ['caster', 'peer']) {
+    test(`Ether Drain living ${victim} contact and caster continuation do not create capture presentation, enhanced=${enhancedEffects}`, () => {
+      const loadedBoneyard = combatBoneyard('ether-drain-living-contact')
+      const config = { discipline: 'arcane', displayName: 'Wizard', element: 'ether' } as const
+      let state = enterBoneyardWorld(createGameSimulation({ caster: config, peer: config }, {
+        enhancedEffects,
+      }), loadedBoneyard)
+      state = withPlayerSkillRank(state, 'caster', 74, 1)
+      for (const playerId of ['caster', 'peer']) {
+        state = { ...state, playerEntities: replacePlayerCharacter(state.playerEntities, playerId, {
+          ...getPlayerCharacter(state, playerId),
+          position: { x: playerId === victim ? 250 : 90, y: 250 },
+        }) }
+      }
+      // Keep this a living-contact case; a dying corpse has a separate native pulse.
+      state = { ...state, playerEntities: { ...state.playerEntities,
+        progressions: state.playerEntities.progressions.map(progression => ({ ...progression,
+          currentHealth: 100_000, maximumHealth: 100_000,
+        })),
+      } }
+      state = stepGameSimulationTick(bindGameSimulationPlayerSkillQuickbar(state, 'caster', 74, 0)!, {
+        caster: { ...gameplayInput(0, 0), aim: { x: 250, y: 250 }, cast: { primary: false, quickbar: 0 } },
+      })
+
+      // Empty scene, before free debris can cross its 1,024-unit spawn radius.
+      for (let tick = 0; tick < 120; tick += 1) {
+        state = stepGameSimulationTick(state, {})
+        const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')
+        assert.ok(field, `tick ${tick}: the actual cast must remain active`)
+        const drain = field.etherDrain
+        assert.ok(drain)
+        assert.ok(drain.queried.some(ref => ref.kind === 'player' && ref.id === victim))
+        assert.equal(field.slowFactor, 0, `tick ${tick}: living contact is not capture`)
+        assert.deepEqual(getPlayerCharacter(state, victim).position, field.position)
+        assert.equal(drain.animations.some(animation => animation.kind === 'captured'), false)
+        assert.equal(state.secondaryAbilities.actors.some(actor => actor.kind === 'ether-drain-capture-flare'), false)
+        assert.equal(nativeSecondaryPresentationPlan(field, state.tick).draws.some(draw =>
+          draw.role === 'ether-drain-capture-pulse' || draw.role === 'ether-drain-captured-image'), false)
+      }
+
+      assert.equal(getPlayerProgression(state, victim).lifeState, 'alive')
+      assert.ok(getPlayerProgression(state, victim).currentHealth < 100_000,
+        'center contact must still apply its native damage')
+      state = restoreGameSaveDocument(createGameSaveDocument({
+        integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'caster', state,
+      })).state
+      assert.deepEqual(state.playerEntities.identities.map(identity => identity.playerId), ['caster'])
+      for (let tick = 0; tick < 20; tick += 1) {
+        const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')
+        assert.ok(field, 'the saved caster retains its field')
+        assert.equal(field.slowFactor, 0, `resumed tick ${tick}: restore is not capture`)
+        assert.equal(nativeSecondaryPresentationPlan(field, state.tick).draws.some(draw =>
+          draw.role === 'ether-drain-capture-pulse' || draw.role === 'ether-drain-captured-image'), false)
+        state = stepGameSimulationTick(state, {})
+      }
+    })
+  }
+}
+
 test('Ether Drain consumes eligible Gold and every item carried by a Sack without pickup credit', () => {
   for (const payload of ['gold', 'potion', 'key', 'element-book', 'random-book'] as const) {
     let state = etherDrainSimulation({ x: 400, y: 250 })
@@ -5012,6 +5321,39 @@ test('Ether Drain preserves delayed Gold and Sacks, then consumes them without n
   for (let tick = 0; tick < 4; tick += 1) state = stepGameSimulationTick(state, {})
   if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard world')
   assert.deepEqual(state.world.loot.actors, [])
+})
+
+test('Ether Drain registers late loose-consumption flares in their birth order before snapshot and save', () => {
+  let state = etherDrainSimulation({ x: 400, y: 250 })
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const order = createNativeWorldManagerOrder(state.worldManagerOrder)
+  const loot = spawnBoneyardLootSpecs(state.world.loot, [
+    { activationDelayTicks: 0, amount: 7, id: 1, kind: 'gold', nativeTypeId: 2012,
+      phase: 0, position: { x: 400, y: 250 }, source: 'script', tier: 2 },
+    { activationDelayTicks: 0, id: 2, item: miscItem(createNativeLootItemIds(1), 1),
+      kind: 'sack', nativeTypeId: 2013, phase: 0, position: { x: 400, y: 250 }, source: 'script' },
+  ], state.tick, order.register).store
+  state = { ...state, worldManagerOrder: order.state(), world: { ...state.world, loot } }
+  const firstOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.transient
+  const field = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(state.world.loot.actors, [])
+  const flares = state.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+  assert.equal(flares.length, 2)
+  assert.deepEqual(flares.map(actor => actor.painterRegistrations), [
+    [{ managerLane: 'transient', registrationOrdinal: firstOrdinal }],
+    [{ managerLane: 'transient', registrationOrdinal: firstOrdinal + 1 }],
+  ])
+  assert.equal(state.worldManagerOrder.nextRegistrationOrdinal.transient, firstOrdinal + 2)
+  assert.deepEqual(state.secondaryAbilities.actors.find(actor => actor.id === field.id)!.painterRegistrations, field.painterRegistrations)
+  const snapshot = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+    .map(actor => actor.painterRegistrations), flares.map(actor => actor.painterRegistrations))
+  const restored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only',
+    loadedBoneyard: combatBoneyard('ether-drain-targets'), mods: [], modState: {}, playerId: 'local-player', state })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+    .map(actor => actor.painterRegistrations), flares.map(actor => actor.painterRegistrations))
 })
 
 test('Ether Drain newly notified loot refreshes its ordinary target cache in the same tick', () => {
@@ -5082,7 +5424,8 @@ test('Ether Drain routes grounded primary Hail and secondary chips through their
   const shielded = { ...state.secondaryAbilities, players: { ...state.secondaryAbilities.players,
     'local-player': { ...state.secondaryAbilities.players['local-player']!, stoneskinTicksRemaining: 50 } } }
   const chipped = applyNativeSecondaryPlayerDamage(shielded, 'local-player', 1, state.tick,
-    { x: 400, y: 250 }, 'boneyard:ether-drain-targets', { physical: true, enhancedEffects: true }).state
+    { x: 400, y: 250 }, 'boneyard:ether-drain-targets', managers.register,
+    { physical: true, enhancedEffects: true }).state
   const chip = chipped.actors.find(actor => actor.kind === 'stoneskin-chip')!
   assert.ok(chip)
   state = { ...state, primarySpells: { ...state.primarySpells, nextId: hail.id + 1,
@@ -5442,9 +5785,18 @@ test('Ether Drain consumes a corpse at native death timer130 and persists that t
     run: { ...state.run, phase: 'game-over' } }, 'victim')
   assert.ok(ordinaryArchive.storage.some(item => item.contents?.some(child => child.name === carried.name)))
   assert.equal(ordinaryArchive.gold, economy.gold + 9)
+  const flareOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.transient
   state = stepGameSimulationTick(state, {})
   assert.equal(getPlayerProgression(state, 'victim').deathTick, 130)
   assert.equal(getPlayerProgression(state, 'victim').corpseConsumed, true)
+  const flare = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain-capture-flare')!
+  assert.deepEqual(flare.painterRegistrations, [{ managerLane: 'transient', registrationOrdinal: flareOrdinal }])
+  assert.equal(state.worldManagerOrder.nextRegistrationOrdinal.transient, flareOrdinal + 1)
+  const snapshot = gameSnapshot(createGameSnapshot(state, 'caster'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
+  const ownerRestored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'caster', state })).state
+  assert.deepEqual(ownerRestored.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
   const restored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
     mods: [], modState: {}, playerId: 'victim', state })).state
   assert.equal(getPlayerProgression(restored, 'victim').corpseConsumed, true)
@@ -5484,6 +5836,13 @@ test('terminal player maintenance consumes the corpse before Last Word and carri
   assert.equal(getPlayerProgression(consumed).deathTick, 130)
   assert.equal(getPlayerProgression(consumed).corpseConsumed, true)
   assert.equal(getPlayerProgression(ordinary).corpseConsumed, false)
+  const flare = consumed.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain-capture-flare')!
+  assert.deepEqual(flare.painterRegistrations, [{ managerLane: 'transient',
+    registrationOrdinal: before.worldManagerOrder.nextRegistrationOrdinal.transient }])
+  assert.equal(consumed.worldManagerOrder.nextRegistrationOrdinal.transient,
+    before.worldManagerOrder.nextRegistrationOrdinal.transient + 1)
+  const snapshot = gameSnapshot(createGameSnapshot(consumed, 'local-player'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
   assert.equal(consumed.secondaryAbilities.actors.find(actor => actor.id === field.id)!.slowFactor, 1.899999976158142,
     'the callback pulse retains the native parent fade in this full-tick projection')
   assert.ok(gameSimulationDurableProfileEconomy(ordinary, 'local-player').storage
@@ -5547,6 +5906,36 @@ test('Ether Drain captures each supported enemy image through the public lethal 
     assert.ok(state.secondaryAbilities.actors.some(actor => actor.kind === 'ether-drain-capture-flare' && actor.scale === 1.5))
     assert.ok(state.secondaryAbilities.events.some(event => event.cue === 'phase' && event.pitch === 1.5))
   }
+})
+
+test('Ether Drain registers a replacement capture flare before unrelated burns or later ticks', () => {
+  let state = stepGameSimulationTick(withEtherDrainEnemy(etherDrainSimulation({ x: 400, y: 250 }), 'SKELETON'), {})
+  const first = state.secondaryAbilities.actors.find(actor => actor.kind === 'ether-drain')!
+  assert.equal(first.etherDrain!.animations.some(animation => animation.kind === 'captured'), true)
+  assert.equal(state.secondaryAbilities.actors.some(actor => actor.kind === 'ether-drain-capture-flare'), false)
+  state = withEtherDrainEnemy(stepGameSimulationTick(state, {}), 'DEMON')
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities,
+    actors: state.secondaryAbilities.actors.map(actor => actor.id === first.id ? { ...actor, quantity: 0 } : actor) } }
+  const flareOrdinal = state.worldManagerOrder.nextRegistrationOrdinal.transient
+  state = stepGameSimulationTick(state, {})
+  const field = state.secondaryAbilities.actors.find(actor => actor.id === first.id)!
+  const image = field.etherDrain!.animations.find(animation => animation.kind === 'captured')!
+  assert.equal(image.kind, 'captured')
+  if (image.kind !== 'captured') throw new Error('expected captured image')
+  assert.equal(image.atlas, 'Demon')
+  const flares = state.secondaryAbilities.actors.filter(actor => actor.kind === 'ether-drain-capture-flare')
+  assert.equal(flares.length, 1)
+  const flare = flares[0]!
+  assert.equal(flare.scale, 1.5)
+  assert.deepEqual(flare.painterRegistrations, [{ managerLane: 'transient', registrationOrdinal: flareOrdinal }])
+  assert.equal(state.worldManagerOrder.nextRegistrationOrdinal.transient, flareOrdinal + 1)
+  assert.deepEqual(field.painterRegistrations, first.painterRegistrations)
+  assert.equal(state.secondaryAbilities.actors.some(actor => actor.kind === 'fire-burn' || actor.kind === 'ether-burn'), false)
+  const snapshot = gameSnapshot(createGameSnapshot(state, 'local-player'))
+  assert.deepEqual(snapshot.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
+  const restored = restoreGameSaveDocument(createGameSaveDocument({ integrity: 'local-only',
+    loadedBoneyard: combatBoneyard('ether-drain-targets'), mods: [], modState: {}, playerId: 'local-player', state })).state
+  assert.deepEqual(restored.secondaryAbilities.actors.find(actor => actor.id === flare.id)?.painterRegistrations, flare.painterRegistrations)
 })
 
 test('Ether Drain unsupported enemy images retire without ordinary effects, splits or crunch audio', () => {

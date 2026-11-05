@@ -50,7 +50,7 @@ import type { DeferredNativeWorldManagerRegistrations, NativeWorldManagerOrder, 
 import { createDeferredNativeWorldManagerRegistrations, createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import type { PlayerCharacterConfig, PlayerCharacterInput, PlayerCharacterState } from '../core-kernels/player-character.ts'
 import { NATIVE_GAMEPLAY_VIEWPORT_WIDTH, PLAYER_CHARACTER_FOOTSTEP_TICK_INTERVAL, PLAYER_CHARACTER_MOVEMENT_TICK_SECONDS, PLAYER_CHARACTER_RADIUS, createIdlePlayerCharacterInput, createIdlePlayerPrimaryCast, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
-import { playerCollisionEnabledAfterCombatTick } from '../core-kernels/player-combat.ts'
+import { playerCollisionEnabledAfterCombatTick, playerMovementScale } from '../core-kernels/player-combat.ts'
 import { NATIVE_FLASH_RESPONSE_RADIUS } from '../core-kernels/player-harmful-contact.ts'
 import { NATIVE_PLAYER_STAFF_CAST_TWO_OVERLAY } from '../core-kernels/player-lighting.ts'
 import type { PlayerLevelUpBarrierState, PlayerProgressionComponent, PlayerSkillBookComponent, PlayerStatBookComponent, SharedPlayerLevelMilestone } from '../core-kernels/player-progression.ts'
@@ -674,7 +674,7 @@ export function selectDetachedGameSimulationPlayerSkill(
     null,
     resolveModBoast,
   )
-  const selected = selectGameSimulationPlayerSkill(staged, detached.playerId, selection)
+  const selected = selectGameSimulationPlayerSkill(staged, detached.playerId, selection, resolveModBoast)
   return selected === null
     ? null
     : commitDetachedGameSimulationPlayerTransaction(target, selected, detached.playerId)
@@ -1854,6 +1854,7 @@ export function selectGameSimulationPlayerSkill(
   state: GameSimulationState,
   playerId: PlayerId,
   selection: { choiceIndex: number; offerSequence: number; skillId: number },
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState | null {
   const applied = applyPlayerEntitySkillChoice(
     state.playerEntities,
@@ -1862,22 +1863,23 @@ export function selectGameSimulationPlayerSkill(
     state.gameRng,
   )
   if (!applied) return null
+  const automatic = assignAutomaticSkillChoices(applied.store, [playerId], applied.rng, resolveModBoast)
   const barrier = state.levelUpBarrier
   if (barrier === null || !barrier.participantIds.includes(playerId)) {
     return {
       ...state,
-      gameRng: applied.rng,
-      playerEntities: applied.store,
+      gameRng: automatic.rng,
+      playerEntities: automatic.store,
     }
   }
-  const pendingPlayerIds = pendingOfferPlayerIds(applied.store, barrier.participantIds)
+  const pendingPlayerIds = pendingOfferPlayerIds(automatic.store, barrier.participantIds)
   return {
     ...state,
-    gameRng: applied.rng,
+    gameRng: automatic.rng,
     levelUpBarrier: pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities: applied.store,
+    playerEntities: automatic.store,
   }
 }
 
@@ -1885,6 +1887,7 @@ export function replaceGameSimulationPlayerSkillWithMod(
   state: GameSimulationState,
   playerId: PlayerId,
   offerSequence: number,
+  resolveModBoast?: BoastResolver,
 ): GameSimulationState | null {
   const applied = replacePlayerEntitySkillChoiceWithMod(
     state.playerEntities,
@@ -1893,17 +1896,18 @@ export function replaceGameSimulationPlayerSkillWithMod(
     state.gameRng,
   )
   if (!applied) return null
+  const automatic = assignAutomaticSkillChoices(applied.store, [playerId], applied.rng, resolveModBoast)
   const barrier = state.levelUpBarrier
   const pendingPlayerIds = barrier === null
     ? []
-    : pendingOfferPlayerIds(applied.store, barrier.participantIds)
+    : pendingOfferPlayerIds(automatic.store, barrier.participantIds)
   return {
     ...state,
-    gameRng: applied.rng,
+    gameRng: automatic.rng,
     levelUpBarrier: barrier === null || pendingPlayerIds.length === 0
       ? null
       : Object.freeze({ ...barrier, pendingPlayerIds }),
-    playerEntities: applied.store,
+    playerEntities: automatic.store,
   }
 }
 
@@ -2022,7 +2026,7 @@ function stepGameSimulationTickWithScreenFlashes(
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
       combat.cheatDeathPlayerIds, worldManagerOrder.register)
-    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
+    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick, worldManagerOrder.register)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
     // The former drop view followed the continuing death clock on Game Over.
@@ -2907,7 +2911,10 @@ function finishGameSimulationTick(
     world = moved.world
     resolvedPlayers = moved.players
     secondaryAbilities = moved.secondary
-    for (const fieldId of moved.consumedFieldActorIds) secondaryAbilities = pulseNativeEtherDrain(secondaryAbilities, fieldId, 1, tick)
+    for (const fieldId of moved.consumedFieldActorIds) {
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryAbilities,
+        pulseNativeEtherDrain(secondaryAbilities, fieldId, 1, tick), worldManagerOrder.register)
+    }
     const fieldDamage: BoneyardEnemyPlayerDamage[] = secondaryResult.etherDrainContacts.flatMap(contact => {
       if (contact.amount <= 0 || (contact.target.kind !== 'player' && contact.target.kind !== 'golem')) return []
       const field = secondaryAbilities.actors.find(actor => actor.id === contact.sourceActorId)
@@ -2922,6 +2929,14 @@ function finishGameSimulationTick(
     const received = applyPlayerContacts({ world, playerEntities, secondaryAbilities, enhancedEffects: previous.enhancedEffects },
       resolvedPlayers, fieldDamage, tick, extensions, worldManagerOrder.register, writeScreenFlash)
     world = received.world
+    // Field flags suppress ordinary hit feedback; charm loss and rescue remain
+    // independent in retail Player damage (0x0052FCEA, 0x005304B0).
+    const feedback = received.playerDamageSoundEvents.filter(event => event.type === 'player-charm-lost'
+      || event.type === 'player-cheat-death')
+    if (world.kind === 'boneyard' && feedback.length > 0) {
+      world = { ...world, enemyEvents: retainBoneyardEnemyEvents(world.enemyEvents,
+        feedback, tick) }
+    }
     playerEntities = received.playerEntities
     secondaryAbilities = received.secondaryAbilities
     resolvedPlayers = received.resolvedPlayers
@@ -3073,8 +3088,10 @@ function finishGameSimulationTick(
         playerId,
         {
           alive: progression.lifeState === 'alive',
+          actionTimeFactor: playerMovementScale(progression),
           availableMana: progression.currentMana,
           castProgressFactor: derived.castProgressFactor,
+          handCastFactor: derived.handCastFactor,
           weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
           eligible: playerEntityCanCast(playerEntities, playerId)
             && progression.pendingOffer === null,
@@ -3336,8 +3353,9 @@ function finishGameSimulationTick(
       ),
     }
     for (const capture of secondaryCombat.captures) {
-      secondaryAbilities = captureNativeEtherDrainImage(secondaryAbilities, etherDrainFields[capture.fieldIndex]!.id,
-        capture.actor ? nativeEtherDrainCapturedImage(capture.actor, tick) : null, tick)
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryAbilities,
+        captureNativeEtherDrainImage(secondaryAbilities, etherDrainFields[capture.fieldIndex]!.id,
+          capture.actor ? nativeEtherDrainCapturedImage(capture.actor, tick) : null, tick), worldManagerOrder.register)
     }
     world = applyBoneyardSecondaryEnemyKnockbacks(
       world,
@@ -3446,7 +3464,7 @@ function finishGameSimulationTick(
         tick,
       ),
     }
-    const nextSecondaryActorIdBeforeAdvancedBurn = secondaryAbilities.nextActorId
+    const secondaryBeforeAdvancedBurn = secondaryAbilities
     for (const burn of [...secondaryDeaths.flatMap(death => death.burns), ...spellCombat.burns]) {
       const target = boneyardNativeSecondaryTarget(world.enemies, burn.targetId)
       const ownerIndex = playerEntityIndex(playerEntities, burn.ownerId)
@@ -3471,11 +3489,9 @@ function finishGameSimulationTick(
         worldKey: `boneyard:${boneyardWorld.runId}`,
       })
     }
-    if (secondaryAbilities.nextActorId !== nextSecondaryActorIdBeforeAdvancedBurn) {
-      secondaryAbilities = enrollNativeSecondaryPainterOwners(
-        secondaryAbilities,
-        worldManagerOrder.register,
-      )
+    if (secondaryAbilities.nextActorId !== secondaryBeforeAdvancedBurn.nextActorId) {
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryBeforeAdvancedBurn,
+        secondaryAbilities, worldManagerOrder.register)
     }
     for (const effect of [...secondaryDeaths.flatMap(death => death.targetEffects), ...spellCombat.targetEffects]) {
       secondaryAbilities = applyNativeSecondaryTargetEffect(
@@ -3536,7 +3552,7 @@ function finishGameSimulationTick(
     world = recordPlayerCheatDeathFeedback(world, playerEntities, combat.cheatDeathPlayerIds, tick, writeScreenFlash)
     secondaryAbilities = spawnAcceptedPlayerRescueWaves(secondaryAbilities, world, playerEntities,
       combat.cheatDeathPlayerIds, worldManagerOrder.register)
-    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick)
+    const consumedCorpses = consumeNativeEtherDrainPlayerCorpses(world, playerEntities, secondaryAbilities, tick, worldManagerOrder.register)
     playerEntities = consumedCorpses.playerEntities
     secondaryAbilities = consumedCorpses.secondaryAbilities
   }
@@ -3569,7 +3585,7 @@ function finishGameSimulationTick(
           : [],
         tick,
         worldKey: gameWorldKey(world, response.playerId),
-      }, writeScreenFlash)
+      }, worldManagerOrder.register, writeScreenFlash)
     } else if (world.kind === 'boneyard') {
       const event: BoneyardEnemySemanticEvent = {
         actorId: 0,
@@ -3901,12 +3917,26 @@ function applySecondaryPlayerOutcomes(
   return { playerEntities, secondaryAbilities, secondaryPlayers }
 }
 
+function enrollNewSecondaryPainterOwners(
+  before: NativeSecondarySimulationState,
+  after: NativeSecondarySimulationState,
+  register: NativeWorldManagerOrder['register'],
+): NativeSecondarySimulationState {
+  const born = after.actors.filter(actor => actor.id >= before.nextActorId)
+  if (born.length === 0) return after
+  const enrolled = enrollNativeSecondaryPainterOwners({ ...after, actors: born }, register)
+  const owners = new Map(enrolled.actors.map(actor => [actor.id, actor]))
+  return { ...after, actors: Object.freeze(after.actors.map(actor =>
+    actor.id < before.nextActorId ? actor : owners.get(actor.id)!)) }
+}
+
 // Player maintenance0x005339E7..0x00533AAA owns this timer in both death paths.
 function consumeNativeEtherDrainPlayerCorpses(
   world: BoneyardWorldState,
   sourceEntities: PlayerEntityStore,
   sourceSecondary: NativeSecondarySimulationState,
   tick: number,
+  register: NativeWorldManagerOrder['register'],
 ): Readonly<{ playerEntities: PlayerEntityStore; secondaryAbilities: NativeSecondarySimulationState }> {
   let secondaryAbilities = sourceSecondary
   const worldKey = `boneyard:${world.runId}`
@@ -3920,7 +3950,8 @@ function consumeNativeEtherDrainPlayerCorpses(
       const dx = Math.fround(field.position.x - player.position.x)
       const dy = Math.fround(field.position.y - player.position.y)
       if (Math.fround(dx * dx + dy * dy) >= NATIVE_ETHER_DRAIN_CONSUMPTION_DISTANCE_SQUARED) continue
-      secondaryAbilities = pulseNativeEtherDrain(secondaryAbilities, field.id, 2, tick)
+      secondaryAbilities = enrollNewSecondaryPainterOwners(secondaryAbilities,
+        pulseNativeEtherDrain(secondaryAbilities, field.id, 2, tick), register)
       consumed = true
     }
     return consumed ? { ...progression, corpseConsumed: true } : progression
@@ -4118,6 +4149,7 @@ function createNativeSecondaryTickContext(
       }
       return [playerId, {
         alive: progression.lifeState === 'alive',
+        actionTimeFactor: playerMovementScale(progression),
         weaponKind: weaponType === 'wand' || weaponType === 'staff' ? weaponType : null,
         belt: playerEntities.belts[index]!,
         character,

@@ -5,6 +5,7 @@ import {
   NATIVE_UI_BUTTON,
   type NativeUiSingleActionMessageLayout,
   measureNativeUiText,
+  fitNativeUiButtonLabel,
   nativeUiRect,
   planNativeUiButtonChrome,
   HUB_CHAT_PANEL,
@@ -360,13 +361,21 @@ export function addNativeButton(
   labelCenterX: number,
   labelBaselineY: number,
 ): number {
+  const bounds = nativeUiRect(left, top, width, height)
   const chrome = planNativeUiButtonChrome({
-    bounds: nativeUiRect(left, top, width, height),
+    bounds,
     id,
     state: pressed ? 'pressed' : 'idle',
   })
   layer.addChild(nativeUiPixiFor(context.textures).render(chrome, `${id}:chrome`))
   const copyOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset : 0
+  const fitted = fitNativeUiButtonLabel({
+    font: 'menu',
+    text: label,
+    tint: HUB_MSGBOX_ART.primaryButtonTextTint,
+    x: labelCenterX,
+    y: labelBaselineY,
+  }, bounds, 1)
   addBitmapText(
     context,
     layer,
@@ -374,7 +383,7 @@ export function addNativeButton(
     'menu',
     labelCenterX + copyOffset,
     labelBaselineY + copyOffset,
-    { tint: HUB_MSGBOX_ART.primaryButtonTextTint },
+    { scale: fitted.scale, tint: fitted.tint },
   )
   return copyOffset
 }

@@ -507,11 +507,9 @@ export default function BoneyardScene({
       for (const request of nativePlayerCheatDeathSoundRequests(pointGain)) {
         audio.playSound(request.cue, { playbackRate: request.playbackRate, volume: request.volume })
       }
-      if (event.targetPlayerId === playerId) {
-        lootMessagePresentation.consumeText({ source: 'combat', eventId: event.eventId,
-          tick: event.tick, text: 'CHEAT DEATH!', tint: 0xffffff })
-        setLootMessages(lootMessagePresentation.sample(snapshot.tick))
-      }
+    }
+    if (lootMessagePresentation.consumeCombat(event, playerId)) {
+      setLootMessages(lootMessagePresentation.sample(samplePresentation().tick))
     }
     const sound = nativeEnemyEventSoundRequest(event)
     if (sound || event.stream !== undefined) {
@@ -593,6 +591,7 @@ export default function BoneyardScene({
         && event.target.closest('input, textarea, [contenteditable="true"], [data-sack-rename-dialog]')) return
       if (
         inputBlocked
+        || inventorySurface !== null
         || tutorialAccess?.skills === false
         || run.phase !== 'active'
         || event.code !== settings.controls.openSkills
@@ -608,7 +607,7 @@ export default function BoneyardScene({
     }
     window.addEventListener('keydown', openSkills, { capture: true })
     return () => window.removeEventListener('keydown', openSkills, { capture: true })
-  }, [inputBlocked, onOpenSkills, run.phase, settings.controls.openSkills, tutorialAccess?.skills])
+  }, [inputBlocked, inventorySurface, onOpenSkills, run.phase, settings.controls.openSkills, tutorialAccess?.skills])
 
   useEffect(() => {
     const toggleDigIndicator = (event: KeyboardEvent) => {

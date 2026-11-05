@@ -1,5 +1,101 @@
 # 2026-08-29 — Complete Region world-painter layering audit
 
+## Report 132 — beam occlusion and live split quality
+
+The original October 20 report describes Blizzard Beam interruptions against
+graves, distant scenery and mobs with every advanced option enabled. Its
+November 1 source recheck is unchanged and unwithdrawn. The original MP4 is
+2,279,655 bytes, SHA-256
+`cffa3ceb621438b51cb7d4ba66239bea045094c94e80c00cd1181485bc62ca04`.
+The existing Rust same-scene Shadows On/Off/On comparison reproduces the
+interruptions while directional ground wedges disappear and return. This
+falsifies a directional-shadow-only cause; normal scenery and its class-local
+flat shadow still participate in the queue. It does not establish equal retail
+pixels or close the all-enabled report.
+
+The native system in this follow-up is **ZAnimSplit presentation**, from a
+retained child and its immutable factory geometry through live quality selection,
+clipped queue insertion and teardown. The complete four-installer inventory
+below includes the subsequently implemented Faculty child and the body-only
+ElectricBurn producer that uses the shared Air wrapper. Earlier absent-Faculty
+wording in this entry describes its historical audit base; entry 301 and current
+source now materialize it.
+
+| Member / branch | Native and current source | November 1 contract and validation state |
+| --- | --- | --- |
+| Shared draw quality and clip | `0x005E0233..0x005E031B`, `0x0064EB30`, `0x006298A0` | Verified: current quality selects 25/50, clip width 10,000, bottom-Y insertion and clip restoration. |
+| Player Air, including chain and weak branches | Factory `0x00531640`; Pixi `primary-spell-world-view.ts` / `primary-spell-air-view.ts`; Rust `spells.rs::append_air` | Pixi is `verified-already-at-parity` for the source contract. Rust's born-quality wrapper input is corrected to current quality and composed red/green passes; final integrated/browser acceptance is pending. |
+| Flame Lash | Factory `0x00531F00`; Pixi `buildNativeFlameLashSplitBands`; Rust `flame_split.rs` / `append_weld` | `verified-already-at-parity` for live 25/50 selection, native padded/fround progression and separate Region clipping. |
+| Blizzard Beam | Factory `0x005328D0`; Pixi `WeldPrimarySpellView`; Rust `append_weld` / `spells::split` | `verified-already-at-parity` for live 25/50 selection. The earlier Rust OFF-setting repair is accepted separately from the original all-enabled appearance. |
+| Faculty Blightning | Installer `0x00451DC0`, body `0x0045B530` / draw `0x00457690`; entry 301; Pixi `NativeBossSpellViews`; Rust `enemies::prepare` / `meshes` | Pixi is `verified-already-at-parity` for current split quality. Rust now receives the scene mode through `EnemyViewFrame` and uses the shared 25/50 selector; composed red/green passes. Normal blend and born white/red ribbons are preserved; final integrated/browser acceptance is pending. |
+| ElectricBurn body-only arcs | `Mod_ElectricBurn`, positive arc-capacity branches; settings entry 130; Pixi `NativeElectricBurnArcView`; Rust `native_electric_burn_arc_plan` | `verified-already-at-parity`: immutable born ribbons, current 25/50 bands, no invented corona, two-tick retirement. |
+| Direct Skeleton Mage and Storm bodies | Direct shared-Air constructors; `NativeMageLightningPulseView` / Storm secondary view and Rust counterparts | `out-of-system`: embedded/direct body painters do not install ZAnimSplit; preserve their unsplit ownership. |
+| Scenery, mobs, directional and flat shadows | Shared Region queue and entry 090 | `verified-already-at-parity` for the inspected ordering contract: shadows immediately precede owner art, and intervening roots can cover earlier bands. Exact visual equality is unproven. |
+
+### Evidence and implications
+
+The pinned retail executable is 4,723,200 bytes, preferred base `0x00400000`,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+A November 1 read-only PE section mapping rechecks the retained instruction
+bytes and constants: `0x005E0233` reads the current process-global quality byte
+`0x00B3BCAD`; `0x005E023A` loads 25 from `0x007DE968`; the OFF branch at
+`0x005E0249` loads 50 from `0x00784CF8`; `0x005E0280` loads 10,000 from
+`0x00786C08`. The pointer initializer at `0x0064EC94..0x0064EC9C` stores
+clip Y plus height as the painter Y. The delegate installs its clip at
+`0x0062990D`, calls the shared child at `0x0062991D`, then restores clipping.
+This is instruction evidence, not a new clean-stock capture.
+
+Settings entry 130 independently distinguishes the live `0x005E0233` split
+from birth-geometry readers such as shared ribbon construction `0x005346E2`.
+Changing quality must therefore change retained painter masks without rerolling
+birth geometry, actor identity, lifetime, registration, RNG or spell contacts.
+Both maintained clients already model those as separate values. The Rust Air
+caller and Faculty presentation frame now connect the accepted session mode to
+the existing shared 25/50 selector. No gameplay, protocol or save change is
+needed.
+
+The earlier Rust source correction covered fresh Air and Blizzard casts under
+each setting. Its accepted browser receipt did not test an already-born Air
+body while the live setting differs. The Faculty sibling was also absent from
+that repair. This follow-up closes those omitted quality members rather than
+altering the reported all-enabled beam to draw last or removing native bands.
+
+### Validation contract
+
+Exercise the real prepared Air and Faculty ribbon paths with independent
+scenery rows between bands. For each immutable born-quality mode, change live
+quality On/Off/On: require 25/50/25-unit bands, unchanged clipped UV/color
+content, registration and blend, and the expected change in which slices paint
+before the crossing root. Include the existing Blizzard/Flame and ElectricBurn
+checks; direct Mage/Storm bodies remain unsplit. Record meaningful red/green
+results before claiming the new connections ported.
+
+The two exact-source Rust composed regressions first fail at born On/live Off
+with 25 instead of 50, then pass after the live input is connected. They use
+the actual prepared root emitters, native born-quality Air/Faculty ribbons,
+clipped vertices/UVs/materials and the shared scenery queue. The Air cases
+include direct, chained and weak bodies. Pixi's two matching world-view
+regressions pass without a runtime correction; the focused 58-check batch also
+covers Flame, Blizzard, ElectricBurn, painter ordering and teardown. Test
+TypeScript and focused lint pass. Rust native all-targets/all-features Clippy,
+WASM Clippy and workspace formatting also pass. These are source-level checks,
+not the final integrated gate or an actual game journey.
+
+The coordinator still owns exact integrated M2 gates and actual game acceptance.
+The live journey must exercise both quality settings and a retained-body quality
+transition in both clients, plus a Faculty crossing witness. A matched retail
+scene/cast or per-draw attribution at an interrupted pixel is still needed to
+resolve the original all-enabled pixel concern. Preserve that uncertainty and
+withhold its completion mark.
+
+Private original media, live source snapshots, byte checks and reusable prior
+comparison hashes are retained under
+`/Users/jarrett/codex-runs/solomon-discord-reports-20261101/report132/`.
+The earlier comparison remains under
+`solomon-discord-rust-20261028/visual-hud/beam-shadow-comparison/` and the accepted
+fresh-cast quality journey under
+`solomon-fixes-deploy-20261028/visual-2ed-navigation/`.
+
 ## 2026-09-04 — retain the Hub Region planner
 
 At Website `3c5e76d6`, the Courtyard and all private College rooms called

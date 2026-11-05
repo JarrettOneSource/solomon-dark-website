@@ -22,6 +22,10 @@ import { bindGameSimulationPlayerSkillQuickbar, createGameSimulation, enterBoney
 import { applyPlayerContacts } from './player-contact-system.ts'
 import { grantPlayerEntitySkillRanks, stepPlayerEntityOverlayLightingTick } from './player-entity-store.ts'
 
+function contactRegistrar(source: GameSimulationState) {
+  return createNativeWorldManagerOrder(source.worldManagerOrder).register
+}
+
 test('accepted Cheat Death emits one participant cue and the shared white flash', () => {
   for (const [charges, damage, rescued] of [[1, 60, true], [1, 1, false], [0, 60, false]] as const) {
     const initial = mageContactState('FLAG_CASTFIRE')
@@ -36,7 +40,7 @@ test('accepted Cheat Death emits one participant cue and the shared white flash'
     const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
       actorId: 1, physicalDamage: damage, magicDamage: 0, playerId: 'local-player', eventId: 1,
       coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
-    }], 1, undefined, undefined, flashes.write)
+    }], 1, undefined, contactRegistrar(source), flashes.write)
     const cues = result.playerDamageSoundEvents.filter(event => event.type.startsWith('player-cheat-death'))
     assert.equal(cues.length, rescued ? 1 : 0)
     if (!rescued) continue
@@ -101,7 +105,7 @@ test('Faculty damage carries a separate mana lane that shield interception cance
     const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
       actorId: 1, physicalDamage: 0, magicDamage: 10, playerId: 'local-player', eventId: 1,
       coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, manaDamageMaximumFraction: .15,
-    }], 1, undefined)
+    }], 1, undefined, contactRegistrar(source))
     const before = source.playerEntities.progressions[0]!
     const after = result.playerEntities.progressions[0]!
     assert.equal(after.currentMana, shield > 0 ? before.currentMana : Math.fround(before.currentMana - before.maximumMana * .15))
@@ -124,7 +128,7 @@ test('deflect faces a boss projectile contact and cannot reflect damage into its
     coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, manaDamageMaximumFraction: .15,
     source: { position: { x: 520, y: 500 }, collisionRadius: 20, reflectableActorId: null },
   }
-  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [damage], 1, undefined)
+  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [damage], 1, undefined, contactRegistrar(source))
   assert.ok(result.deflectPitchesByEventId.has(1))
   assert.equal(result.resolvedPlayers['local-player']!.headingIndex, 6, 'contact is east, caster is west')
   assert.deepEqual(result.reflectedEnemyDamage, [])
@@ -137,7 +141,7 @@ test('Tragic Circle drains mana through its direct path and keeps its slow separ
   const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
     actorId: 1, physicalDamage: 0, magicDamage: 0, playerId: 'local-player', eventId: 1,
     coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, tragicCircle: true,
-  }], 1, undefined)
+  }], 1, undefined, contactRegistrar(source))
   const before = source.playerEntities.progressions[0]!
   const after = result.playerEntities.progressions[0]!
   assert.equal(after.currentHealth, before.currentHealth)
@@ -191,7 +195,7 @@ test('Crow blindness uses post-contact health and the remaining shield, survives
     const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
       actorId: 1, physicalDamage: 10, magicDamage: 0, playerId: 'local-player', eventId: 1,
       coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, crowBlindChancePercent: 100,
-    }], 1, undefined)
+    }], 1, undefined, contactRegistrar(source))
     const duration = result.playerEntities.lightings[0]!.blindnessTicksRemaining
     assert.equal(duration > 0, expectedBlind)
     assert.equal(result.playerDamageSoundEvents.some(({ sound }) => sound === 'blind'), expectedBlind)
@@ -265,7 +269,7 @@ test('a mixed contact chips Harden before the shield and Stoneskin intercept its
     const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
       actorId: 1, physicalDamage: 10, magicDamage: 3, playerId: 'local-player', eventId: 1,
       coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
-    }], 1, undefined)
+    }], 1, undefined, contactRegistrar(source))
     assert.equal(result.hardenChips.length, 1)
     assert.equal(result.hardenChips[0]!.ownerId, 'local-player')
     assert.equal(result.hardenChips[0]!.worldKey, 'boneyard:mage-contact')
@@ -482,25 +486,25 @@ test('damage filters receive physical, magic and poison lanes and can reject the
   }
   const contact = { actorId: 1, physicalDamage: 4, magicDamage: 6, poisonContactDamage: 1,
     playerId: 'local-player', eventId: 1, coldSlowTicks: 250, dazzleTicks: 0, poisonDamage: 2.4, poisonDuration: 10 }
-  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [contact], 1, extensions)
+  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [contact], 1, extensions, contactRegistrar(source))
   assert.deepEqual(received, [{ amount: 4, kind: 'physical' }, { amount: 6, kind: 'magic' }, { amount: 1, kind: 'poison' }])
   assert.equal(result.playerEntities.progressions[0]!.currentHealth, 50)
   assert.deepEqual(result.appliedPlayerDamage, [])
   assert.deepEqual(result.playerDamageSoundEvents, [])
   for (const invalid of [NaN, Infinity, 1_000_001]) {
     assert.throws(() => applyPlayerContacts(source, gameSimulationPlayerRecords(source), [contact], 1,
-      { ...extensions, filterDamage: () => invalid }), /must be finite and within/)
+      { ...extensions, filterDamage: () => invalid }, contactRegistrar(source)), /must be finite and within/)
   }
   const expired = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [
     { ...contact, playerId: 'expired-player' }, { ...contact, playerId: 'golem:999' },
-  ], 1, undefined)
+  ], 1, undefined, contactRegistrar(source))
   assert.equal(expired.playerEntities, source.playerEntities)
   assert.deepEqual(expired.appliedPlayerDamage, [])
   if (source.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   const protectedSource = { ...source, world: { ...source.world,
     tutorial: createNativeTutorialState({ x: 500, y: 500 }, 0, 'protected'),
   } }
-  const protectedResult = applyPlayerContacts(protectedSource, gameSimulationPlayerRecords(protectedSource), [contact], 1, undefined)
+  const protectedResult = applyPlayerContacts(protectedSource, gameSimulationPlayerRecords(protectedSource), [contact], 1, undefined, contactRegistrar(protectedSource))
   assert.equal(protectedResult.playerEntities, protectedSource.playerEntities)
   assert.deepEqual(protectedResult.appliedPlayerDamage, [])
 })
@@ -518,7 +522,7 @@ test('later poison and cold refreshes preserve their existing status instances',
   const refreshed = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [
     { ...common, actorId: 1, eventId: 100, poisonContactDamage: 1, coldSlowTicks: 0, poisonDamage: 2.4, poisonDuration: 10 },
     { ...common, actorId: 2, eventId: 101, poisonContactDamage: 0, coldSlowTicks: 250, poisonDamage: 0, poisonDuration: 0 },
-  ], source.tick + 1, undefined)
+  ], source.tick + 1, undefined, contactRegistrar(source))
   assert.equal(refreshed.appliedPlayerDamage.length, 2)
   if (refreshed.world.kind !== 'boneyard') throw new Error('expected Boneyard')
   assert.equal(refreshed.world.enemies.deathEffects.length, effectCount)
@@ -538,7 +542,7 @@ test('active or queued tutorial narration suppresses Wizard ouch while damage st
     const result = applyPlayerContacts({ ...source, world }, gameSimulationPlayerRecords(source), [{
       actorId: 1, physicalDamage: 2, magicDamage: 2, playerId: 'local-player', eventId: 1,
       coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
-    }], 1, undefined)
+    }], 1, undefined, contactRegistrar(source))
     assert.equal(result.playerEntities.progressions[0]!.currentHealth, 46)
     assert.deepEqual(result.playerDamageSoundEvents, [])
   }
@@ -556,7 +560,7 @@ test('Solomon speech suppresses Wizard ouch until the dialogue ends', () => {
     const result = applyPlayerContacts({ ...source, world }, gameSimulationPlayerRecords(source), [{
       actorId: 1, physicalDamage: 2, magicDamage: 2, playerId: 'local-player', eventId: 1,
       coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
-    }], 1, undefined)
+    }], 1, undefined, contactRegistrar(source))
     assert.equal(result.playerEntities.progressions[0]!.currentHealth, 46)
     assert.equal(result.playerDamageSoundEvents.length, phase === 'speaking' ? 0 : 1)
   }
@@ -595,7 +599,7 @@ test('a Coffin-owned Maggot uses the same player defense and reflection rules', 
   const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
     actorId: maggot.id, physicalDamage: 2, magicDamage: 0, playerId: 'local-player', eventId: 100,
     coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
-  }], source.tick + 1, undefined)
+  }], source.tick + 1, undefined, contactRegistrar(source))
   assert.deepEqual(result.reflectedEnemyDamage, [{ actorId: maggot.id, amount: 10, playerId: 'local-player' }])
   assert.equal(result.playerEntities.progressions[0]!.currentHealth, source.playerEntities.progressions[0]!.currentHealth)
 })
@@ -628,7 +632,7 @@ test('Tragic Circle reaches a newly assembled Golem without changing player mana
   assert.ok(golem.ageTicks < 400)
   const contact = { actorId: 1, physicalDamage: 0, magicDamage: 0, playerId: `golem:${golem.id}`,
     eventId: 1, coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0, tragicCircle: true }
-  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [contact], source.tick + 1, undefined)
+  const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [contact], source.tick + 1, undefined, contactRegistrar(source))
   const affected = result.secondaryAbilities.actors.find(actor => actor.id === golem.id)!
   assert.equal(affected.golem!.circleSlowTicks, 20)
   assert.equal(affected.golem!.currentHealth, golem.golem.currentHealth)
@@ -666,7 +670,7 @@ test('the shared contact receiver applies both channels to Golems and reflects p
   const result = applyPlayerContacts(source, gameSimulationPlayerRecords(source), [{
     actorId: mage.id, physicalDamage: 10, magicDamage: 5, playerId: `golem:${golem.id}`,
     eventId: 1, coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0,
-  }], source.tick + 1, undefined)
+  }], source.tick + 1, undefined, contactRegistrar(source))
   assert.equal(result.secondaryAbilities.actors.find(actor => actor.id === golem.id)?.golem?.currentHealth, golemHealth - 15)
   assert.deepEqual(result.reflectedEnemyDamage, [{ actorId: mage.id, amount: 20, playerId: 'local-player' }])
   assert.equal(result.playerEntities.progressions[0]!.currentHealth, 50)

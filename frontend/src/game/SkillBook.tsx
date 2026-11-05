@@ -12,6 +12,7 @@ import {
 } from 'react'
 
 import { NATIVE_SKILL_CATALOG } from './core-kernels/player-progression.ts'
+import { boastProgressPresentation } from './boast-progress-presentation.ts'
 import {
   nativeBeltEntryItem,
   type PlayerBeltComponent,
@@ -54,6 +55,7 @@ import {
   dragNativeUiSwipeBoxOffset,
   NATIVE_UI_SWIPE_BOX,
 } from './native-ui/core.ts'
+import { NativeUiButton } from './native-ui/react.ts'
 import './skill-book.css'
 
 interface SkillBookProps {
@@ -100,7 +102,7 @@ export default function SkillBook(props: SkillBookProps) {
 
 function SkillBookSurface({
   audio,
-  model: { belt: allBeltEntries, economy, element, progression },
+  model: { belt: allBeltEntries, economy, element, modContent, progression },
   inputSuspended,
   inventoryKeyCode,
   inventoryScreenOpen,
@@ -129,6 +131,9 @@ function SkillBookSurface({
   const [targetQuickbarSlot, setTargetQuickbarSlot] = useState<number | null>(null)
   const [drag, setDrag] = useState<SkillBookDragState | null>(null)
   const [hoveredSkill, setHoveredSkill] = useState<SkillBookHoverState | null>(null)
+  const [boastsOpen, setBoastsOpen] = useState(false)
+  const boastProgress = useMemo(() => boastProgressPresentation(economy.npc.boast, modContent),
+    [economy.npc.boast, modContent])
   const hoveredSkillId = hoveredSkill?.skillId ?? null
   const [pullOffBurst, setPullOffBurst] = useState<SkillBookPullOffBurstState | null>(null)
   const [openProgress, setOpenProgress] = useState(0)
@@ -146,6 +151,7 @@ function SkillBookSurface({
   const hudProgress = nativeOptionalBookHudProgress(openProgress, inventoryScreenOpen)
   const presentation = useMemo((): SkillBookRendererPresentation => ({
     belt: beltEntries,
+    boastProgress: boastsOpen ? boastProgress : null,
     dragPosition: drag?.position ?? null,
     draggedSkillId: drag?.skillId ?? null,
     economy,
@@ -157,9 +163,9 @@ function SkillBookSurface({
     placements,
     progression,
     scrollX,
-    showHelp: layout.rowCount < 2,
+    showHelp: !boastsOpen && layout.rowCount < 2,
     targetQuickbarSlot,
-  }), [beltEntries, drag, economy, element, hoveredSkill, hoveredSkillId, hudProgress,
+  }), [beltEntries, boastProgress, boastsOpen, drag, economy, element, hoveredSkill, hoveredSkillId, hudProgress,
     layout.rowCount, openProgress, placements, progression, scrollX, targetQuickbarSlot])
   const presentationRef = useRef(presentation)
   presentationRef.current = presentation
@@ -281,6 +287,7 @@ function SkillBookSurface({
       beginClose('inventory')
       return
     }
+    if (boastsOpen) return
     const maximumScrollX = Math.max(0, layout.contentWidth - NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width)
     if (maximumScrollX > 0) {
       let next: number | null = null
@@ -337,7 +344,7 @@ function SkillBookSurface({
         style={style}
         role="dialog"
         aria-modal="true"
-        aria-label="Skills"
+        aria-label={boastsOpen ? 'Boasts' : 'Skills'}
         inert={inputSuspended || phase === 'closing' || undefined}
         tabIndex={-1}
         data-transition-phase={phase}
@@ -348,6 +355,7 @@ function SkillBookSurface({
         data-drag-position-y={drag?.position.y ?? ''}
         data-hovered-skill-id={hoveredSkillId ?? ''}
         data-skill-book-scroll-x={scrollX}
+        data-boasts-open={boastsOpen}
         data-skill-book-scroll-max={Math.max(0, layout.contentWidth - NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width)}
         data-input-suspended={inputSuspended}
         data-renderer-state={rendererState}
@@ -369,14 +377,18 @@ function SkillBookSurface({
         <button
           type="button"
           className="skill-book-close-action"
-          aria-label="Close skills"
+          aria-label={boastsOpen ? 'Back to skills' : 'Close skills'}
           data-skill-book-resume="true"
           data-game-back="true"
           style={{ height: tome.height, left: tome.x, top: tome.y, width: tome.width }}
-          onClick={() => beginClose()}
+          onClick={() => {
+            if (boastsOpen) setBoastsOpen(false)
+            else beginClose()
+          }}
         />
         <div
           className="skill-book-viewport"
+          hidden={boastsOpen}
           data-scrollable={layout.contentWidth > NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.width}
           style={{
             left: NATIVE_SKILL_SCREEN_PAGE_VIEWPORT.x,
@@ -477,7 +489,30 @@ function SkillBookSurface({
             ))}
           </div>
         </div>
-        <span className="skill-book-semantic-help">
+        <NativeUiButton
+          name="boasts"
+          nativeBounds={{ left: 1090, top: 5, width: 220, height: 50 }}
+          aria-expanded={boastsOpen}
+          aria-controls="skill-book-boast-progress"
+          style={{ opacity: openProgress ** 3 }}
+          onClick={() => {
+            setBoastsOpen(current => !current)
+            setHoveredSkill(null)
+            setDrag(null)
+            setTargetQuickbarSlot(null)
+            panRef.current = null
+            audio.playSound('click')
+          }}
+        >{boastsOpen ? 'Skills' : 'Boasts'}</NativeUiButton>
+        {boastsOpen ? (
+          <section id="skill-book-boast-progress" className="skill-book-semantic-help"
+            role="status" data-boast-status={boastProgress.status}>
+            <h3>{boastProgress.name}</h3>
+            <p>{boastProgress.status}</p>
+            <p>{boastProgress.statement}</p>
+          </section>
+        ) : null}
+        <span className="skill-book-semantic-help" hidden={boastsOpen}>
           Hover over a skill icon for more information about a skill.
           Skills with a gold or green border can be dragged into your belt.
         </span>
@@ -499,7 +534,7 @@ function SkillBookSurface({
           onTarget={setTargetQuickbarSlot}
           targetSlot={targetQuickbarSlot}
         />
-        <ModSkillBook session={session} />
+        {boastsOpen ? null : <ModSkillBook session={session} />}
         {pullOffBurst ? (
           <NativeBeltPullOffBurst
             key={pullOffBurst.sequence}

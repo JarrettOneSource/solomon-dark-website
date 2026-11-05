@@ -7,7 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { chromium } from 'playwright-core'
 import { openBoneyardCombat, waitUntil } from './game-smoke-navigation.mjs'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { startGameHost } from '../src/game/host/game-host.ts'
 import { getPlayerBelt, getPlayerCharacter, getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { bindPlayerEntityBeltItem, bindPlayerEntitySkillQuickbar, replacePlayerEconomy } from '../src/game/core-server/player-entity-store.ts'

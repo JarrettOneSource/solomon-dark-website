@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { NativePlayerWeaponKind } from './native-player-weapon.ts'
+import { createNativePlayerHandCast1, stepNativePlayerHandCast1 } from './native-player-hand-action.ts'
 import { actorHeadingFromVector, actorHeadingIndex } from './actor-heading.ts'
 import { drawNativeFlameCameraDisplacement } from './native-weld-flame-camera.ts'
 
@@ -345,6 +346,133 @@ function stepSpellKernel(
     },
   }
 }
+
+test('bare Cast 1 admits one shared RNG word and retains its native born hand program', () => {
+  const initial = directSpellHarness('ether', 1, null)
+  const denied = stepSpellKernel(initial, true, 100, false).state
+  assert.equal(denied.players[PLAYER_ID]!.primaryCast.handCast1, null)
+  assert.deepEqual(denied.rng, initial.rng)
+  let state = stepSpellKernel(initial, true, 100).state
+  const born = state.players[PLAYER_ID]!.primaryCast.handCast1
+  assert.ok(born)
+  assert.equal(born.progress, 0)
+  assert.equal(born.pose, 0)
+  assert.equal(born.done, false)
+  assert.deepEqual(state.rng, advanceNativeRngWords(initial.rng, 1))
+  for (let tick = 1; tick <= 10; tick++) {
+    state = stepSpellKernel(state, true, 100).state
+    assert.equal(state.players[PLAYER_ID]!.primaryCast.emissionSequence, 0)
+    assert.deepEqual(state.rng, advanceNativeRngWords(initial.rng, 1))
+  }
+  state = stepSpellKernel(state, true, 100).state
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1?.pose, 1)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.emissionSequence, 1)
+})
+
+test('bare Cast 1 keeps its born rate across equipment speed changes and retires after its terminal pose', () => {
+  let state = stepSpellKernel(directSpellHarness('ether', 1, null), true, 100).state
+  for (let tick = 1; tick <= 42; tick++) {
+    state = stepSpellKernel(state, false, 100, true, () => true, state.primarySkill,
+      () => true, 10).state
+  }
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1?.done, false)
+  state = stepSpellKernel(state, false, 100).state
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1?.done, true)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1?.pose, 2)
+  state = stepSpellKernel(state, false, 100).state
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1, null)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.actionTick, -1)
+})
+
+test('bare one-shot release keeps the pose latch until the admitted hand action retires', () => {
+  const profiles = [
+    primarySkillRankStats('ether', 1),
+    primarySkillRankStats('fire', 1),
+    weldedProfile(1000, 'one-shot', [4, 10, 12, 2, 1.25, 3, 8, 2, 3]),
+    weldedProfile(1001, 'one-shot', [4, 10, 12, 2, 1.1, 0.5, 0.1]),
+    weldedProfile(1002, 'one-shot', [4, 10, 12, 2, 1.1, 1, 0.5]),
+    weldedProfile(1009, 'one-shot', [4, 12, 1, 0.5, 1, 1]),
+  ]
+  for (const profile of profiles) {
+    for (const laterSpeed of [1, 10]) {
+      let state = stepSpellKernel(directSpellHarness('ether', 1, null), true,
+        1_000, true, () => true, profile).state
+      let retired = false
+      for (let tick = 0; tick < 100; tick += 1) {
+        state = stepSpellKernel(state, false, 1_000, true, () => true, profile,
+          () => true, laterSpeed).state
+        const cast = state.players[PLAYER_ID]!.primaryCast
+        if (cast.emissionSequence > 0) {
+          assert.equal(cast.oneShotAttackPoseHeld, cast.handCast1 !== null,
+            `${profile.skillId}: released hand owns latch at tick ${tick}, speed ${laterSpeed}`)
+        }
+        if (cast.handCast1 === null) {
+          assert.equal(cast.emissionSequence, 1, `${profile.skillId}: one admitted emission`)
+          assert.equal(cast.actionTick, -1)
+          assert.equal(cast.oneShotAttackPoseHeld, false)
+          retired = true
+          break
+        }
+      }
+      assert.ok(retired, `${profile.skillId}: bounded hand retirement`)
+    }
+  }
+})
+
+test('bare Constant starts directly without the Cast 1 variant draw', () => {
+  const initial = directSpellHarness('water', 1, null)
+  const state = stepSpellKernel(initial, true, 100).state
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.channelActive, true)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1, null)
+  assert.equal(state.rng.indexA, initial.rng.indexA)
+  const updated = stepSpellKernel(state, true, 100, true, () => true, state.primarySkill,
+    () => true, 0).state
+  assert.equal(updated.players[PLAYER_ID]!.primaryCast.actionTick, 1)
+})
+
+test('bare Cast 1 retains terminal pose on repeat and draws only at each admission', () => {
+  let state = stepSpellKernel(directSpellHarness('ether', 1, null), true, 100).state
+  while (!state.players[PLAYER_ID]!.primaryCast.handCast1?.done) {
+    state = stepSpellKernel(state, true, 100).state
+  }
+  const previousRng = state.rng
+  state = stepSpellKernel(state, true, 100).state
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.castSequence, 2)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1?.progress, 0)
+  assert.equal(state.players[PLAYER_ID]!.primaryCast.handCast1?.pose, 2)
+  assert.deepEqual(state.rng, advanceNativeRngWords(previousRng, 1))
+  const cancelled = stepSpellKernel(state, true, 100, false).state
+  assert.equal(cancelled.players[PLAYER_ID]!.primaryCast.handCast1, null)
+  assert.deepEqual(cancelled.rng, state.rng)
+})
+
+test('retail hand constructors preserve both opening variants and every one-shot profile rate', () => {
+  const rng = { indexA: 0, indexB: 31, words: Array<number>(55).fill(0) }
+  for (const [word, firstPose] of [[0, 0], [64, 3]] as const) {
+    const words = [...rng.words]
+    words[0] = word
+    const born = createNativePlayerHandCast1(primarySkillRankStats('ether', 1), 1, 2, { ...rng, words })
+    assert.equal(born.action.pose, 2)
+    assert.equal(born.action.firstPose, firstPose)
+    const paused = stepNativePlayerHandCast1(born.action, 0).action!
+    assert.equal(paused.progress, 0)
+    assert.equal(paused.pose, firstPose)
+  }
+  const rows = [
+    [primarySkillRankStats('ether', 1), .0949999988079071],
+    [primarySkillRankStats('fire', 1), .07124999910593033],
+    [weldedProfile(1000, 'one-shot', [1, 1, 1]), .08264999836683273],
+    [weldedProfile(1001, 'one-shot', [1, 1, 1]), .0949999988079071],
+    [weldedProfile(1002, 'one-shot', [1, 1, 1]), .12349999696016312],
+    [weldedProfile(1009, 'one-shot', [1, 1, 1, 1, 1, Math.fround(1.2)]), .11400000005960464],
+  ] as const
+  for (const [profile, rate] of rows) {
+    assert.equal(createNativePlayerHandCast1(profile, 1, 0, rng).action.rate, rate, `${profile.skillId}`)
+  }
+  const atMarker = { firstPose: 0 as const, progress: 1, rate: Math.fround(.095), pose: 1 as const, done: false }
+  assert.equal(stepNativePlayerHandCast1(atMarker, 0).emitted, false)
+  assert.equal(stepNativePlayerHandCast1(atMarker).emitted, true)
+})
 
 test('one-shot clocks use insertion-relative native marker and repeat ticks', () => {
   assert.equal(PRIMARY_CAST_ETHER_EMISSION_TICK, 14)

@@ -37,8 +37,11 @@ export async function compareNativeStaffFrames() {
             headingIndex: 6, pose: 0, learnedSkills: [[65, 1, 1]], living: true,
             nativeStaff: true, selectedPrimarySkillId: 16, selector: 0, weldBuildId: null, ...variation,
           }
+          const beforeUpdate = positionBufferUpdates
           view.update(input, true)
+          const afterUpdate = positionBufferUpdates
           const actual = capture(app, target, app.stage)
+          const renderPositionUpdates = positionBufferUpdates - afterUpdate
           const plan = nativeEnchantStaffDrawPlan(input)
           const reference = new MeshSimple({
             texture, vertices: new Float32Array(plan.vertices),
@@ -61,7 +64,8 @@ export async function compareNativeStaffFrames() {
             if (Math.abs(actual[i] - expected[i]) > 1) changedChannels += 1
             if (i % 4 === 3 && expected[i] > 0) visiblePixels += 1
           }
-          frames.push({ mode, frame, changedChannels, visiblePixels })
+          frames.push({ mode, frame, changedChannels, visiblePixels,
+            updatePositionUpdates: afterUpdate - beforeUpdate, renderPositionUpdates })
           const referenceGeometry = reference.geometry
           parent.destroy({ children: true })
           referenceGeometry.destroy(true)

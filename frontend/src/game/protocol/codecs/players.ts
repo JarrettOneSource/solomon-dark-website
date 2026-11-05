@@ -13,6 +13,7 @@ import {
   vector,
 } from './native-state.ts'
 import { playerProgression } from './stats.ts'
+import { playerHandCast1, validatePlayerHandCast1Owner } from './player-hand-cast.ts'
 import {
   GameProtocolError,
   boolean,
@@ -140,6 +141,7 @@ function playerPrimaryCastState(
     'etherBlastCharge',
     'etherBlastChargeCueSequence',
     'fizzleSequence',
+    'handCast1',
     'held',
     'lastWeldPlaybackRate',
     'lastWeldSoundVariant',
@@ -219,6 +221,8 @@ function playerPrimaryCastState(
     || selectedPrimaryId === 1001
     || selectedPrimaryId === 1002
     || selectedPrimaryId === 1009
+  const handCast1 = playerHandCast1(source.handCast1, `${field}.handCast1`)
+  validatePlayerHandCast1Owner(handCast1, { actionTick, channelActive, selectedPrimaryId }, `${field}.handCast1`)
   if (oneShotAttackPoseHeld && (
     !selectedOneShot
     || channelActive
@@ -253,6 +257,7 @@ function playerPrimaryCastState(
       source.fizzleSequence,
       `${field}.fizzleSequence`,
     ),
+    handCast1,
     held,
     lastWeldPlaybackRate,
     lastWeldSoundVariant,

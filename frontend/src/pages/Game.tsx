@@ -25,6 +25,7 @@ import {
   admitBrowserGame,
   admitGameObserver,
   configuredGameEndpoint,
+  reconnectBrowserGame,
   type BrowserGameAdmission,
 } from '../game/game-bootstrap.ts'
 import { gameOnlinePreferences, readGameSettings } from '../game/game-settings.ts'
@@ -81,6 +82,12 @@ export default function Game() {
     if (!workshop && returnToBoneyards) setReturnToBoneyards(false)
   }, [returnToBoneyards, workshop])
   const preparedEndpoint = useRef<GameEndpoint | null>(null)
+  const activeSession = useRef<{ session: GameSession; accountId: number | null } | null>(null)
+  const accountId = user?.id ?? null
+  const accountOwner = useRef(accountId)
+  accountOwner.current = accountId
+  const [sessionActive, setSessionActive] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
   const diagnosticsRef = useRef<ReturnType<typeof createGameClientDiagnostics> | null>(null)
   diagnosticsRef.current ??= createGameClientDiagnostics()
   const diagnostics = diagnosticsRef.current
@@ -103,10 +110,18 @@ export default function Game() {
     return diagnostics.attachBrowserListeners()
   }, [diagnostics])
 
+  useEffect(() => {
+    const current = activeSession.current
+    if (!current || current.accountId === accountId) return
+    current.session.destroy()
+    activeSession.current = null
+    setFatal(GameConnectionFailure.from(new Error('The game account changed. Return to the menu to continue.')))
+  }, [accountId])
+
   useEffect(() => trackPlaytime(), [])
 
   useEffect(() => {
-    if (desktopRuntime()) return
+    if (desktopRuntime() || !deploymentRestart && (sessionActive || fatal)) return
     const currentRevision = TITLE_BUILD_REVISION.full
     if (!currentRevision) return
     const controller = new AbortController()
@@ -129,7 +144,7 @@ export default function Game() {
       }
     })
     return () => controller.abort()
-  }, [deploymentRestart, diagnostics])
+  }, [deploymentRestart, diagnostics, sessionActive, fatal])
 
   useEffect(() => {
     if (authLoading) return
@@ -332,6 +347,15 @@ export default function Game() {
         diagnostics,
         ...(declineTutorial ? { declineTutorial: true } : {}),
         endpoint,
+        ...(endpoint.kind === 'remote' ? { reconnect: async (identity, signal) => {
+          if (accountOwner.current !== accountId) throw new Error('The game account changed.')
+          return reconnectBrowserGame(endpoint, identity, getToken(), signal)
+        } } : {}),
+        onReconnecting: setReconnecting,
+        onSessionActiveChange: active => {
+          setSessionActive(active)
+          if (!active) activeSession.current = null
+        },
         onFatal: setFatal,
         onDeploymentRestart: saveForDeployment,
         onlinePreferences: gameOnlinePreferences(readGameSettings()),
@@ -346,6 +370,11 @@ export default function Game() {
         ...(saveIntent ? { saveIntent } : {}),
         ...(resumeToken ? { resumeToken } : {}),
       })
+      if (accountOwner.current !== accountId) {
+        session.destroy()
+        throw new Error('The game account changed. Return to the menu to continue.')
+      }
+      activeSession.current = { session, accountId }
       preparedEndpoint.current = null
       return session
     } catch (error) {
@@ -355,7 +384,7 @@ export default function Game() {
       setFatal(failure)
       throw failure
     }
-  }, [accountUsername, diagnostics, saveForDeployment])
+  }, [accountUsername, accountId, diagnostics, saveForDeployment])
 
   const connectObserver = useCallback(async (
     matchId: string,
@@ -474,6 +503,10 @@ export default function Game() {
   return (
     <>
       <DesktopUpdateNotice />
+      {reconnecting && <div role="status" aria-live="polite" style={{
+        position: 'fixed', inset: 0, zIndex: 10000, display: 'grid', placeItems: 'center',
+        background: 'rgba(0, 0, 0, 0.55)', color: 'white', fontSize: '1.4rem',
+      }}>Reconnecting…</div>}
       {readiness === 'ready' && !authLoading && saveReady && modsReady
         ? (
             <MainMenuScene

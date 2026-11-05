@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import {
   DOWSING_EQUIPMENT_RECIPES, FOMENTIUS_STOCK_DEFINITIONS, NATIVE_SKILL_BOOK_DEFINITIONS,
   createEquipmentInventoryItem, createFomentiusInventoryItem, createNativeSkillBookInventoryItem,
@@ -184,6 +184,7 @@ async function journey(scenario) {
     await inventory.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${ids.outer}"]`).waitFor()
     await openSack(page, inventory, ids.outer, [ids.outer], scenario)
     await openSack(page, inventory, ids.inner, [ids.outer, ids.inner], scenario)
+    await noticeJourney(page, inventory, host, playerId, ids, scenario, sentActions, receipt)
     await activate(inventory.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${ids.robe}"]`), scenario)
     assert.equal(await inventory.locator('[data-inventory-rename-open]').count(), 0,
       'A selected non-Sack must not fall back to renaming its open parent')
@@ -270,7 +271,7 @@ async function journey(scenario) {
     assert.equal(findInventoryItem(getPlayerEconomy(restored.state, restored.playerId).backpack, ids.inner)?.name, '火の袋')
     receipt.persisted = true
     if (!scenario.portrait) {
-      await serviceJourney(page, host, playerId, ids, scenario, receipt)
+      await serviceJourney(page, host, playerId, ids, scenario, sentActions, receipt)
       await dyeJourney(page, host, playerId, ids, scenario)
       lifecyclePhase = 'navigation/reload'
       intentionalOperation = 'Enter the Boneyard from the College'
@@ -283,6 +284,7 @@ async function journey(scenario) {
       inventory = await openInventory(page, scenario)
       await openSack(page, inventory, ids.outer, [ids.outer], scenario)
       await openSack(page, inventory, ids.inner, [ids.outer, ids.inner], scenario)
+      await noticeJourney(page, inventory, host, playerId, ids, scenario, sentActions, receipt)
       const tick = host.state().tick
       await page.waitForTimeout(450)
       assert.equal(host.state().tick, tick, 'Inventory did not hold the Boneyard tick')
@@ -302,17 +304,26 @@ async function journey(scenario) {
       await page.keyboard.press('Escape')
       await inventory.waitFor({ state: 'hidden' })
       await ready(page)
+      inventory = await openInventory(page, scenario)
       await page.keyboard.press(scenario.skills)
       const skills = page.locator('.skill-book-stage[data-transition-phase="settled"]')
       await skills.waitFor({ timeout: 10000 })
+      await inventory.waitFor({ state: 'hidden' })
       await page.keyboard.press(scenario.menu)
       await skills.waitFor({ state: 'hidden' })
       await ready(page)
-      await page.keyboard.press(scenario.skills)
-      await skills.waitFor()
-      await page.keyboard.press('Escape')
-      await skills.waitFor({ state: 'hidden' })
-      await ready(page)
+      for (const closeKey of ['Escape', scenario.menu, scenario.skills]) {
+        await page.keyboard.press(scenario.skills)
+        await skills.waitFor()
+        await activate(skills.getByRole('button', { name: 'Boasts', exact: true }), scenario)
+        const boasts = page.getByRole('dialog', { name: 'Boasts', exact: true })
+        await boasts.waitFor()
+        // Report 22 closes the whole optional interface from this view too.
+        await page.keyboard.press(closeKey)
+        await boasts.waitFor({ state: 'hidden' })
+        await skills.waitFor({ state: 'hidden' })
+        await ready(page)
+      }
       inventory = await openInventory(page, scenario)
       await doubleActivate(inventory.locator(`[data-inventory-item-id="${ids.book}"]`).first(), scenario)
       const picker = page.getByRole('dialog', { name: /Select a skill/ })
@@ -395,7 +406,7 @@ function grantFixture(host, playerId) {
   return ids
 }
 
-async function serviceJourney(page, host, playerId, ids, scenario, receipt) {
+async function serviceJourney(page, host, playerId, ids, scenario, sentActions, receipt) {
   for (const trader of ['fomentius', 'hagatha', 'luthacus', 'shlorio']) {
     await activate(page.locator(`[data-hub-shortcut="${trader}"]`), scenario)
     const inventory = page.locator('.hub-native-ui-overlay[data-surface-kind="service"] .hub-native-ui-stage')
@@ -430,6 +441,12 @@ async function serviceJourney(page, host, playerId, ids, scenario, receipt) {
       assert.equal(findInventoryItem(getPlayerEconomy(host.state(), playerId).backpack, ids.outer)?.name, 'Travel gear')
       receipt.renameTargets.push({ id: ids.outer, owner: 'backpack root', name: 'Travel gear' })
     }
+    if (trader === 'luthacus') {
+      await openSack(page, inventory, ids.inner, [ids.outer, ids.inner], scenario)
+      await noticeJourney(page, inventory, host, playerId, ids, scenario, sentActions, receipt)
+      await page.keyboard.press(scenario.inventory)
+      await settlePath(inventory, String(ids.outer))
+    }
     await page.keyboard.press(scenario.inventory)
     await settlePath(inventory, '')
     await openSack(page, inventory, ids.outer, [ids.outer], scenario)
@@ -450,6 +467,68 @@ async function serviceJourney(page, host, playerId, ids, scenario, receipt) {
     }
     receipt.services.push(trader)
   }
+  await activate(page.locator('[data-hub-shortcut="luthacus"]'), scenario)
+  const inventory = page.locator('.hub-native-ui-overlay[data-surface-kind="service"] .hub-native-ui-stage')
+  await inventory.locator('.hub-inventory-native-canvas[data-native-reveal="settled"]').waitFor()
+  await page.keyboard.press(scenario.skills)
+  await inventory.waitFor({ state: 'hidden' })
+  const skills = page.locator('.skill-book-stage[data-transition-phase="settled"]')
+  await skills.waitFor()
+  await page.keyboard.press(scenario.menu)
+  await skills.waitFor({ state: 'hidden' })
+  await ready(page)
+  receipt.scenes.push('Luthacus replacement by optional Skills')
+}
+
+async function noticeJourney(page, inventory, host, playerId, ids, scenario, sentActions, receipt) {
+  const path = `${ids.outer}/${ids.inner}`
+  const before = structuredClone(getPlayerEconomy(host.state(), playerId))
+  const belt = structuredClone(getPlayerBelt(host.state(), playerId))
+  for (const variant of ['unforge-confirmation', 'standard']) {
+    for (const key of new Set([scenario.inventory, scenario.skills, scenario.menu, 'Escape'])) {
+      if (variant === 'unforge-confirmation') {
+        const item = inventory.locator(`[data-inventory-owner="backpack"][data-inventory-item-id="${ids.robe}"]`)
+        const source = await item.boundingBox(), stage = await inventory.boundingBox()
+        assert.ok(source && stage, 'Unforge drag needs the actual item and Inventory geometry')
+        await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2)
+        await page.mouse.down()
+        try {
+          await page.mouse.move(stage.x + 1550 * stage.width / 1600,
+            stage.y + 850 * stage.height / 900, { steps: 12 })
+        } finally {
+          await page.mouse.up()
+        }
+        await inventory.getByRole('button', { name: 'CANCEL', exact: true }).waitFor()
+      } else {
+        await clearInventorySelection(inventory)
+        await doubleActivate(inventory.locator('[data-inventory-owner="equipment"][data-equipment-slot="hat"]'), scenario)
+        await inventory.getByRole('button', { name: 'OKAY', exact: true }).waitFor()
+      }
+      const notice = inventory.getByRole('alert')
+      await notice.waitFor()
+      const observed = { owner: await inventory.getAttribute('aria-label'), variant, key, path }
+      ;(receipt.noticeNavigation ??= []).push(observed)
+      const actionCount = sentActions.length
+      await page.keyboard.down(key)
+      try {
+        await notice.waitFor({ state: 'hidden', timeout: 5000 })
+        await page.keyboard.down(key)
+        await settlePath(inventory, path)
+        assert.equal(await inventory.isVisible(), true, `${key} closed the parent behind ${variant}`)
+        assert.equal(await page.locator('.skill-book-stage').count(), 0, `${key} opened Skills behind ${variant}`)
+        assert.equal(sentActions.length, actionCount, `${key} committed an action through ${variant}`)
+        const current = getPlayerEconomy(host.state(), playerId)
+        assert.deepEqual(current.backpack, before.backpack)
+        assert.deepEqual(current.equipment, before.equipment)
+        assert.equal(current.gold, before.gold)
+        assert.deepEqual(getPlayerBelt(host.state(), playerId), belt)
+        observed.dismissedWithoutParentNavigation = true
+      } finally {
+        await page.keyboard.up(key)
+      }
+    }
+  }
+  await clearInventorySelection(inventory)
 }
 
 async function dyeJourney(page, host, playerId, ids, scenario) {

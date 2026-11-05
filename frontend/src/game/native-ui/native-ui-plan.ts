@@ -3,11 +3,14 @@ import {
   type NativeUiAtlasName,
   type NativeUiFontName,
 } from './native-ui-catalog.ts'
+import { NATIVE_UI_BUTTON, fitNativeUiButtonLabel } from './native-ui-button-label.ts'
 import {
   layoutNativeUiText,
   wrapNativeUiMsgBoxText,
   type NativeUiTextSpec,
 } from './native-ui-text.ts'
+
+export { NATIVE_UI_BUTTON } from './native-ui-button-label.ts'
 
 export interface NativeUiRect {
   readonly height: number
@@ -207,19 +210,6 @@ export interface NativeUiSimpleMenuSpec {
   readonly rows: readonly NativeUiSimpleMenuRow[]
   readonly width: number
 }
-
-export const NATIVE_UI_BUTTON = Object.freeze({
-  disabledAlpha: 0.5,
-  idleRecord: 101,
-  labelYOffset: 9,
-  minWidth: 140,
-  pressedOffset: 6,
-  pressedRecord: 102,
-  surround: 6,
-  surroundEndRecord: 54,
-  surroundEdgeUvOrigin: 0.95,
-  textTint: 0xd9ba70,
-})
 
 export const NATIVE_UI_STONE_BUTTON = Object.freeze({
   idleRecord: 105,
@@ -521,20 +511,29 @@ export function planNativeUiButton(spec: NativeUiButtonSpec): NativeUiFragment {
   const scale = nativeUiButtonScale(spec.scale)
   const labelOffset = pressed ? NATIVE_UI_BUTTON.pressedOffset * scale : 0
   const chrome = planNativeUiButtonChrome(spec)
+  const label = fitNativeUiButtonLabel(
+    {
+      alpha,
+      font: 'menu',
+      text: spec.label,
+      tint: NATIVE_UI_BUTTON.textTint,
+      x: spec.bounds.left + spec.bounds.width / 2,
+      y: spec.bounds.top + spec.bounds.height / 2 + NATIVE_UI_BUTTON.labelYOffset * scale,
+      ...(scale === 1 ? {} : { scale }),
+    },
+    spec.bounds,
+    scale,
+  )
   const nodes: NativeUiNode[] = [
     ...chrome.nodes,
     {
       kind: 'text',
       label: `${spec.id}:label`,
       text: {
-        alpha,
-        font: 'menu',
-        text: spec.label,
-        tint: NATIVE_UI_BUTTON.textTint,
-        x: spec.bounds.left + spec.bounds.width / 2 + labelOffset,
+        ...label,
+        x: label.x + labelOffset,
         y: spec.bounds.top + spec.bounds.height / 2
-          + NATIVE_UI_BUTTON.labelYOffset * scale + labelOffset,
-        ...(scale === 1 ? {} : { scale }),
+          + NATIVE_UI_BUTTON.labelYOffset * (label.scale ?? 1) + labelOffset,
       },
     },
   ]

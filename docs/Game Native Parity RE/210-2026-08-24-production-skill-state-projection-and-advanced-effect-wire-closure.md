@@ -314,7 +314,7 @@ and owner teardown.
 | EtherBurn per-tick flare | `Mod_EtherBurn`; `ether-burn-flare` | verified-already-at-parity | born inside the secondary step, one transient root, skill 14 retained |
 | Parent painter ownership | native live modifier actor; `nativeSecondaryPainterManagerLane` | exact-ported by this reopening | exactly one `transient` registration allocated at the final actor-birth phase |
 | Parent target light and `MiscLight` ordering | entry 090 complete producer census | verified-already-at-parity | target actor registration remains distinct; per-target append ordinal remains ordered |
-| Flash response grow/fade | pre-secondary harmful-contact phase | out-of-system — the affected profile has no Flash and these births cross the existing enrollment pass | existing row-53 integration and protocol tests |
+| Flash response grow/fade | pre-secondary harmful-contact phase in the incident reviewed here | out-of-system for that incident — its affected profile has no Flash; current contact and poison callbacks enroll children at birth | current row-53 public-session tests cover both late callbacks |
 | Mindblast/Last Word births | explicit `registerWorldPainter` construction | out-of-system — already registered at construction even when born after the secondary step | existing full/frame and Game Over tests |
 | Full snapshot, compact frame, and recovery keyframe | common secondary projection/decoder | exact-ported by one producer invariant | all three carry the same registered parent; strict malformed-state rejection remains |
 | Save checkpoint and resume | schema-24 secondary state | exact-ported by the same invariant | no same-tick empty-root parent can be persisted; valid root identity survives restore |
@@ -326,11 +326,10 @@ fallback is needed.
 
 ### Native ownership thread and recovered behavioral contract
 
-- `finishGameSimulationTick` has two relevant construction phases. The common
-  secondary phase steps category-2 actors and enrolls its complete actor list.
-  Primary spell contact resolves later and may add the pure Fire/Ether advanced
-  modifier parent. That later phase requires its own shared painter-enrollment
-  edge before the state becomes snapshot- or save-observable.
+- The common secondary phase steps category-2 actors and enrolls its actor list.
+  Later session callbacks can still create secondary presentation actors. Their
+  owning callback must enroll its newly allocated actors through the same
+  `worldManagerOrder.register` before any later callback, snapshot or save.
 - Every secondary presentation actor owns exactly one painter root. Burn and
   EtherBurn use the transient manager. Their `lightRegistration` is instead
   the struck target's actor-manager registration and must not be reused as the
@@ -341,16 +340,59 @@ fallback is needed.
 - The protocol rejection is correct and remains fail-closed. The producer must
   finish the authoritative state before the common full/frame decoder sees it.
 
+### Session callback birth boundaries
+
+Ether Drain replacement capture can emit a capture flare when it replaces the
+field's retained image. Loose Gold/Sack consumption emits its own flares after
+the secondary step, and player-corpse consumption emits them during both active
+and GameOver maintenance. `game-simulation.ts` owns these integration edges;
+the kernel's recorded actor/RNG goldens remain unchanged.
+
+At each callback, retain its pre-operation `nextActorId`, enroll only the actors
+born at or above that ID using `enrollNativeSecondaryPainterOwners`, then merge
+them back in their existing actor order. Existing owners keep their registrations;
+new owners use the canonical kind-specific manager lane and root count. Corpse
+maintenance receives the current session registrar in both lifecycle branches.
+The advanced-Burn finalizer likewise enrolls only its own new parents: an
+unrelated Burn birth must never backfill an earlier missing flare registration
+or determine that flare's ordinal. No allocator fallback or relaxed renderer,
+snapshot or save guard is part of this contract.
+
+### Defensive contact birth ownership
+
+`materializeNativePlayerFlashResponse` assigns one transient painter root to
+each of its eight grow and four fade actors in birth order. The same materializer
+serves ordinary enemy contact, post-secondary Ether Drain field contact and the
+later poison-response callback. Every completed snapshot and save therefore
+carries the born roots without relying on another secondary actor pass.
+
+`applyNativeSecondaryPlayerDamage` owns Magic Shield break presentation at the
+same contact boundary. An ordinary break enrolls twenty transient children; an
+explosive break adds one transient explosion, then one transient shockwave with
+a separate actor-lane light registration. A physical Stoneskin contact also
+enrolls its single chip at birth. These registrations use the session's current
+world painter order. No decoder or save fallback supplies missing ownership.
+
+Report129's focused public-session regressions cover replacement capture without
+Burns, two loose-consumption births in order, and active/GameOver corpse births.
+They assert existing-owner stability, immediate allocator membership and strict
+snapshot decoding; active owned continuations also round-trip the new roots.
+The coordinator's preserved-source red run fails at all four callback cases
+with empty painter lists. With the correction, the complete session file passes
+271 tests; test typechecking and focused Oxlint also pass. The new exact-source
+full gate and actual Report129 acceptance remain pending with the coordinator;
+the earlier validation receipts below do not qualify this correction.
+
 ### Nearby-system findings
 
 - Diagnostic row 99 is the earlier schema-24 Road-link restore failure already
   closed by Website `f1c46c02`; it is not part of this actor crash.
 - Ordinary code-1000 closes and peer-going-away code 1001 entries in the same
   journal window have no paired decoder failure and are not crash signatures.
-- The complete post-secondary mutation sweep found only the pure Fire and Ether
-  Burn parents using deferred actor construction. Later Last Word/Mindblast
-  already passes the world-manager registrar; target-effect-only mutations do
-  not create painter actors.
+- The earlier post-secondary mutation sweep covered pure Fire/Ether Burn parents
+  but omitted the Ether Drain callback births described above. Later
+  Last Word/Mindblast already passes the world-manager registrar;
+  target-effect-only mutations do not create painter actors.
 
 ### Confidence and open questions
 
@@ -365,11 +407,11 @@ fallback is needed.
 
 ### Web implementation consequence
 
-- Put one shared secondary painter-enrollment barrier after the final
-  cross-system actor-birth phase, using the authoritative
-  `worldManagerOrder.register` owner.
-- Allocate only missing roots and keep the existing manager-lane assertion, so
-  Fire/Ether merges cannot duplicate or reorder roots.
+- Enroll each session callback's newly born secondary actors at its own mutation
+  boundary using the authoritative `worldManagerOrder.register` owner.
+- Limit enrollment to that callback's allocated IDs and retain the canonical
+  manager-lane/root-count assertions, so refreshes cannot duplicate or reorder
+  existing roots and unrelated later births cannot conceal an invalid owner.
 - Preserve strict protocol count/lane validation, target light ownership,
   `MiscLight` order, combat timing, damage, audio, saves, and actor IDs. Do not
   widen the decoder or normalize malformed frames.

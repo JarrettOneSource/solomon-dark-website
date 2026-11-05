@@ -3,6 +3,7 @@ import {
   type PlayerBeltComponent,
 } from './core-kernels/native-belt.ts'
 import type { WizardElement } from './core-kernels/player-character.ts'
+import type { ModContentProjection } from './protocol/game-mod-contract.ts'
 import type {
   GameSnapshot,
   ProtocolPlayerEconomy,
@@ -13,12 +14,15 @@ export interface SkillBookModel {
   readonly belt: PlayerBeltComponent
   readonly economy: ProtocolPlayerEconomy
   readonly element: WizardElement
+  readonly modContent: ModContentProjection | null
   readonly progression: ProtocolPlayerProgression
 }
 
 interface SkillBookModelSource {
   getSnapshot(): Pick<GameSnapshot, 'players'>
+  getModContent(): ModContentProjection | null
   onSnapshot(listener: () => void): () => void
+  onModContent(listener: (projection: ModContentProjection) => void): () => void
 }
 
 /**
@@ -29,22 +33,32 @@ interface SkillBookModelSource {
 export function createSkillBookModelStore(source: SkillBookModelSource, playerId: string) {
   let current: SkillBookModel | null = null
   return {
-    subscribe: (listener: () => void) => source.onSnapshot(listener),
+    subscribe: (listener: () => void) => {
+      const unsubscribeSnapshot = source.onSnapshot(listener)
+      const unsubscribeContent = source.onModContent(listener)
+      return () => {
+        unsubscribeSnapshot()
+        unsubscribeContent()
+      }
+    },
     getSnapshot(): SkillBookModel | null {
       const player = source.getSnapshot().players[playerId]
       if (!player) {
         current = null
         return null
       }
+      const modContent = source.getModContent()
       if (current
         && nativePlayerBeltsEqual(current.belt, player.belt)
         && current.economy.revision === player.economy.revision
         && current.element === player.config.element
+        && current.modContent === modContent
         && sameSkillBookProgression(current.progression, player.progression)) return current
       current = {
         belt: player.belt,
         economy: player.economy,
         element: player.config.element,
+        modContent,
         progression: player.progression,
       }
       return current

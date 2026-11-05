@@ -447,6 +447,81 @@ managed deployment and scoped live checks remain separate pending steps.
 
 Scope: Report 57 prediction only; the stock-compatible bench-pocket behavior remains a separate pending product decision.
 
+## November 1, 2026: Rust fixed-body prediction port gap
+
+Fresh original-message and nine-message-context reads preserve the reporter's
+unchanged, unedited wording: escape is possible but difficult; a permanent
+softlock is tentative. The original MP4 still hashes to the value above.
+Native AVFoundation samples at 0.065933, 1.967533, 4.0193 and 7.021867 seconds
+show movement within the left fountain alcove, without establishing its entry,
+escape input or a permanent lock. The earlier supported-pocket experiment and
+October 8 installed PixiJS prediction acceptance remain qualified as recorded.
+
+The maintained Rust client at `6aad9630` repeats the earlier client omission:
+`crates/web/src/presentation/prediction.rs` resolves fixed bodies only for
+scripted movement; ordinary movement calls scenery collision directly. Rust
+authority in `crates/sim/src/hub/world.rs` already resolves the same 27 permanent
+bodies, conditional Office polisher and present Skorcha through the shared actor
+solver. This is a source-proved port gap, separate from the recovered authority
+rule that retains a root move when scenery rejects its full circle correction.
+The existing retail functions, geometry and membership inventory above are
+reused; no new retail execution or instruction recovery is claimed.
+
+The implementation boundary is Rust's display-only local Hub prediction and
+the canonical fixed-body layout consumed by it and authority. All 27 listed
+permanent bodies, both Office admission states, all three Skorcha placements,
+accepted-snapshot appearance/removal, ordinary input, release/reversal and
+scripted wall exemption have focused verification below. PixiJS remains on its
+accepted shared fixed-body path. Students, remote players and Boneyard actors are outside this
+prediction change and retain their accepted snapshot/authority owners.
+
+Rust uses one canonical fixed-body inventory for authority and prediction,
+with ordinary scenery placement and scripted wall exemption unchanged. The
+prediction captures Skorcha's latest accepted position/presence and does not
+advance its appearance timer. The canonical inventory preserves the authority's
+complete registration order and also supplies the older standalone Student
+epoch, replacing three five-Courtyard-body tables with one inventory.
+
+The new public `NativePresentationTimeline` contact regression failed against
+unchanged Rust runtime at approach tick 29: displayed `(875.3768065076971,
+480.95460339724144)` versus authority `(874.972526019608,481.46599337565056)`.
+Those are the same coordinates as the earlier PixiJS failure above. After the
+port, seven public timeline regressions pass. Every one of the 27 permanent
+members has a valid exercised contact and exact predicted/authoritative position
+and collision RNG comparisons; both Office admission states, all three present
+Skorcha placements, accepted-snapshot appearance/removal, unreceived timer expiry,
+input release/reversal, scripted wall exemption and desk contact are covered.
+Three unchanged timeline goldens and four focused Hub/room/Student goldens pass
+without changing recorded expectations. Both affected library clippy checks and
+the new test's clippy check pass with warnings denied.
+
+One intermediate completed-Office test started at the nontraversable point
+`(606.5,735)` and therefore could not move. A valid southern approach with an
+explicit initial-placement assertion corrects that fixture; no runtime change
+was made for it. Two redundant test-helper borrows were subsequently removed
+for clippy, and all seven regressions pass on the final test source.
+
+Current PixiJS passes its 35 existing prediction cases and the Skorcha snapshot
+session regression. Its prediction, fixed-layout, scenery, region and authority
+source files are byte-identical to installed `850064c8`; the shared actor kernel
+and session have later unrelated changes and are verified by the current checks.
+The current public controlled normal-input route again reaches minimum annalist
+distance `7.56908064267906`, south pocket `(842.9961464554825,
+440.6021311517868)` and east escape `(1087.0684937033707,
+454.09655484275385)`, with zero prediction error at every tick. Rust's new
+normal-input pocket/east-escape regression preserves that policy as well.
+
+Automated member dispositions are `exact-ported` for Rust fixed-body prediction
+and `verified-already-at-parity` for PixiJS's unchanged fixed-body path. These are
+focused source/behavior receipts, not a claim of composed browser/native, full
+gate, publication or installation acceptance; the coordinator owns those gates.
+The controlled route is not a replay of the original save/input or a full
+dialogue journey. The retail-compatible reachable pocket and difficult escape
+remain separate from the repaired Rust display omission. Preventing entry would
+be a deliberate rule change requiring a defined product decision and retained
+pocket/save validation; no permanent softlock has been proved. This entry does
+not close the whole report or authorize a completion reaction.
+
 ## October 9, 2026: physical recipient eligibility (Report 105)
 
 ### Reopened cause and evidence

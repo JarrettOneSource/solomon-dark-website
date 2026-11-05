@@ -1,5 +1,137 @@
 # Staff and orb rendering
 
+## 2026-11-01 — Bare-hand accepted action state for reports 125/130/135
+
+Recorded before implementation. This supersedes earlier exclusion of bare
+hands from the selected-element helper family. Retail PE SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`
+was read directly with Capstone; exact bytes, hashes, all 120 hand socket/depth
+rows and the report's original media remain in the private campaign
+`/Users/jarrett/codex-runs/solomon-discord-reports-20261101/report135/`.
+
+- `0052DA80/0052DB04` selects action mode 6 for accepted no-item one-shots.
+  HandCast1 `0044B400` consumes one shared gameplay `Integer(4,false)` at
+  birth: result 1 chooses first pose 3; other results choose 0. It authors
+  `[first,1,2,2,2]`, then zero-filled grown entries. Construction clears the
+  neutral pose field, but retains the previous displayed pose until a step.
+- The stored rate is float32 `.095`, multiplied by the class/global caster
+  query `00656580`. Pure Fire then multiplies by `.75`; Ether has no extra
+  factor. Weld 1000 multiplies by double `.8700000047683716`, 1001 has no
+  extra factor, 1002 multiplies by `1.2999999523162842`, and 1009 multiplies
+  by its accepted native vector element 5. Each native store rounds to f32.
+- `0044B580` samples actor `+120`, steps float32 progress, writes the pose,
+  then dispatches a crossing of marker 1. `004486E0` sets done at
+  progress **greater than or equal to 4**; that terminal pose is still
+  written. `00483000` removes the done action before stepping it next tick.
+  This refines older prose that called the boundary strictly greater.
+- Actor `+120` is an independent time scale: Puppet tick `00625680` resets
+  it to 1, then modifiers such as `006231B0` multiply it. It is not another
+  Faster Caster query. The supported player cast factor belongs in the born
+  rate; it must not also be sampled as a live multiplier on that same rate.
+- Channels directly select HandConstant mode 8 in `00548A00`; no preceding
+  HandCast1 and no variant draw occurs. Its pose is 2. HandCast2 is the
+  independent existing secondary action, with `[1,3,3,3,3,3,3]` and end 6;
+  spin mode 21 writes 3 for an empty weapon. Neither draws a HandCast1 variant.
+- The planned authoritative `primaryCast.handCast1` record carries first
+  pose, stored rate, progress, current pose and done status. Birth draws once;
+  snapshots and save continuations retain the record; old saves default null
+  without RNG use. Release does not cancel an occupied one-shot. Repeated
+  held admission retains the previous terminal pose at progress zero.
+- Renderer worker 130 owns all hand/body/helper rendering. The helper guard
+  at `0053B1E5` suppresses Staff, Wand, bare hands and Damage x4 inside Stone
+  capture; the outer Stone helper is one independent invocation. The hand
+  effect uses A `484+24*K+heading` point 1, depth max(A,B) with B at
+  `676+24*K+heading`, and raw argument true admits depth <=15.5 while false
+  admits >=15.5. Its bob is a degree sine of doubled game tick, not RNG.
+- The ordinary angle query `0053B830` uses bare pose-zero point 1. Wand and
+  bare return native X for both coordinates; Staff's virtual point retains
+  XY. Main rendering adds actor scale times 10 for bare, times **20** for
+  equipped, before its angle test. Helper effect sockets themselves keep XY.
+
+Required acceptance: public admission/RNG/marker/repeat tests, exact terminal
+retention and cancellation, strict player/observer projection, save/checkpoint
+continuation and old-save defaults. Historical fixtures remain unchanged.
+The actor-local opening circle in report 135 is not proved caused by these
+gaps. Its native Region white flash is separate; no brightness reduction or
+whole-report completion is claimed by this action-state repair.
+
+### Cast2 pulse marker refinement, recorded before correction
+
+The complete action-factory and constructor census refines entry 185's claim
+that every Cast2 pulse belongs to the first action update. Mode 4 selects
+StaffCast2 `0044B7E0`, which writes **marker 0** at `0044B85B`. Mode 7 selects
+HandCast2 `0044B5E0`, writing **marker 1** at `0044B673`. Mode 10 selects
+WandCast2 `0044E0D0`, writing **marker 1** at `0044E169`. Generic progress
+`004486E0 ->00410E40` sets delivery; subclass steps write pose and deliver
+through `PlayerWizard::Action` `00550180`. Their respective callback rows
+write the same float32 `.45` at `00550362/005503F6`; magnitude and decay stay
+unchanged. Therefore ordinary Staff first-update pulse is preserved; admitted
+Wand and bare actions pulse at their marker crossing (neutral update 11).
+
+Membership: every admitted category-2 action, including Dampen's independent
+Cast2 beside CastSpin, uses its weapon-selected marker. Regenerate, channel
+and other actionless paths have no Cast2 pulse. A marker crossed on a terminal
+step still delivers before removal. `00410E40` includes both endpoints for
+positive progress: `previous <= marker <= next` and `next > previous`. Thus
+landing exactly on a marker can deliver again on the next positive step;
+stalled progress does not deliver. No guessed once flag is added. Normal
+neutral-rate clocks cross the marker once. Ineligible/interrupted actions do
+not emit a pulse. The existing
+primary Cast1 and Constant pulse owners remain independent. Retained-world
+reconnect keeps accepted action progress, including the exact endpoint rule;
+disk save deliberately retires secondary transient actions. Neither route
+redraws an opening variant. This timing refinement still does not prove
+the cause of report 135's historical actor-local circle.
+
+The isolated Website implementation carries `primaryCast.handCast1` with the
+recovered first pose, f32 rate/progress, current pose and done flag. Bare
+secondary actions require `handPose/handDone`; Staff/Wand keep their existing
+action shapes and rate programs. The canonical action step returns marker
+delivery independently of retirement, so a terminal overshoot retains its
+callback. Protocol 154 validates the new state for players and observers.
+Save normalization shares its hand-state validator, preserves valid primary
+continuations and defaults legacy missing state to null without RNG. Existing
+disk projection still retires secondary transient actions.
+
+M2 focused validation: 285 kernel/protocol tests pass, including the complete
+23-row/three-weapon Cast2 marker matrix, Dampen, interruption and terminal
+delivery; eight targeted lifecycle checks pass, including actual accepted
+phase/lighting projection and checkpoint continuation. Test TypeScript,
+changed-file Oxlint, architecture import boundaries and diff whitespace pass.
+These are source and focused simulation receipts. Combined browser/material
+and actual-game acceptance remain owned by workers 125/130 and coordinator;
+Report 135 stays open until its supported scope is accepted.
+
+### Successor and idle pose after hand-action retirement
+
+The retirement rule does not imply that displayed K persists indefinitely.
+For the ordinary living/control-admitted path, native PlayerTick first saves
+the action-list count (`actor+E4`, the list at `actor+DC`) at
+`00549008..0054900E`, then steps/removes actions through `00483000` at
+`00549022`. The current list count is queried again during input admission.
+Local primary request is loaded into BL from input `+1E4` at `005493C1`;
+the remote-control branch derives the corresponding request from its aim
+program. When BL is false, `0054961C ->005496C8` checks current count zero
+and **explicitly writes float K0 to actor+238 at `005496D0..005496D2`**.
+Therefore the tick removing the sole done HandCast1 or HandCast2 action also
+restores ordinary unheld idle K0; it does not retain terminal K2/K3.
+
+Held one-shot input takes the other successor branch:
+`005496B7..005496C1` admits the next action when current count is zero.
+HandCast1 construction clears neutral `+23C` but does not write displayed
+`+238`, so this successor retains the previous terminal pose until its first
+step. Channels and concurrent Spin/other actions remain separate owners;
+the explicit idle write is skipped while the action list is nonempty. The
+later neutral-copy writer `0054B6BB..0054B6C1` additionally requires no active
+channel and both old/current action counts zero. It is not the decisive writer
+on the ordinary unheld retirement tick: the earlier explicit K0 write is.
+
+This bounded direct-PE audit confirms the candidate's K0 fallback for ordinary
+unheld idle and inherited terminal pose for held repeat. It requires no action
+or renderer patch, no new state, and no historical fixture/golden change.
+Death/control-gated paths and another active action are not ordinary idle;
+their existing owners are not redefined by this conclusion.
+
 ## 2026-09-22 — Report 14: equipped Wand selected-element effect
 
 ### Evidence and recovered contract (recorded before implementation)
@@ -94,9 +226,10 @@ built-browser journey on the rebased candidate under the campaign lock.
 Fresh `0x0054BC5B..0x0054BDA1` and `0x0053B830` falsify another shared
 assumption in entry 160: the angular gate is the **socket vector**, not body
 heading. For equipped items it computes integer degrees from
-`atan2(socket.x, -(socket.y+20))`, normalizes negative angles, then truncates.
-The double at `0x007DE920` is exactly 20. All Staff poses and all Wand poses
-must therefore use their authored socket for admission. This corrects the
+`atan2(socket.x, -(socket.y+20))` for Staff, normalizes negative angles, then truncates.
+The double at `0x007DE920` is exactly 20. The later complete recovery below
+corrects this query for Wand and bare hands; their effect emission remains
+at the authored full-XY socket. This corrects the
 same assumption across both equipped families, including the 90/270 edge
 tests. No extra point extraction is needed.
 
@@ -629,3 +762,63 @@ pass must not be removed or retuned. The shared renderer correction and full
 context membership are owned by entry 287. Staff acceptance must cover Ether,
 Fire, Air, Water, Earth, selected-primary changes, Hub, Create, Hub Inventory,
 Memorial portraits, and Boneyard without changing painter data or Staff scale.
+
+
+## Reports 130/135 — complete guarded helper and bare action presentation, 2026-11-01
+
+The complete retail census corrects the earlier query claim above. Helper
+`0x0053B830` returns Staff's virtual point1 with XY. Its Wand/no-item path
+stores point1.x at stack+C and point1.y at stack+10, but the final actor-Y
+addition at `0x0053B9DF` reads stack+C again. Preserve this native X/X
+query: Wand uses its current clamped pose and reference20; bare uses pose0
+and reference10. Actual emitted helper output still uses the full XY socket.
+
+The angle caller stores atan2 to float32, stores degrees after
+`radians*180/nativePI`, wraps negative degrees with a float32 store, then
+truncates. Native PI is 3.141592502593994: literal bytes DA0F4940 at
+`0x007DE8A8`, initialized into `0x00B4027C` by valid instructions
+`0x004100D0..0x004100DC`. Private report125/native-pi-writer.json independently
+verifies the same exact retail executable hash used by ledger083.
+
+| Main call | Native condition | Raw front argument | Transform/order |
+| --- | --- | --- | --- |
+| 0054BDE4 | no item; angle<=90 or >270 | true | untranslated; before body |
+| 0054C09E | K!=9; phase<=float32(.1); back angle | false | attachment translation; after back attachment, before body/head |
+| 0054C7FE | K==9; phase<=float32(.1) | false | attachment translation; after head/hit |
+| 0054C842 | K!=9; 90<=angle<=270 | false | untranslated; after head/hit |
+| 0054C8AE | phase>float32(.1) | false | attachment translation; after the untranslated base |
+
+Staff/Wand have no additional raw-front admission inside `0053B1D0`.
+Bare additionally applies the two-hand authored depth predicate and K2
+channel guard from ledger083. The ordinary calls are suppressed inside a
+Stone capture. Mutually exclusive Stone/Harden/Webbed special calls
+`00546E44/0054734E/00547DE0` each submit exactly one raw-front=true helper
+after their material passes. Webbed's severe cocoon follows that helper,
+then the common independent Magic Shield tail follows the material branch.
+Harden/Webbed retain their captured ordinary helpers and shell.
+
+`player-element-effect-presentation.ts` owns the shared angle/scale and bare
+socket/depth/bob plan. The authored bare program has 96 active rows from
+Clothes banks484 and676; K4 stays the unselected fallback. Body/robe fixed
+poses use accepted HandCast1.pose, secondary handPose, Constant's accepted
+0/1 step bit, and Spin3. Report135 owns action admission, born rate, shared
+RNG, replication and save compatibility. No painter RNG or Staff fallback
+is used to reconstruct bare action state.
+
+The renderer's early helper uses its pre-body position; its late translated
+helper has a distinct index after the base. A composed sequence from low to
+high phase exposed the old equal-index sort retaining overlay before base.
+The complete real-WebGL regression now compares 1,232 ordinary compositions
+exactly against the independent call matrix, plus the 3,696 Stone and 312
+sibling controls in ledger083. Its retained Enchant check independently submits
+diffuse shaft, texture-RGB gradient, then diffuse hands, with no extra additive
+shaft. One attachment crosses all six selectors, ten poses and 24 headings
+(1,440 cases), changing tick/width and comparing exactly. A 478-case preimage
+failure proves the explicit position-buffer upload needed by the standalone
+aura; cross-view destruction retains its shared compiled program. The canonical
+renderer probe requires one geometry upload per changed Staff frame and none
+during rendering. Its texture-RGB capture cases cover cropped straight and
+premultiplied sources, preserving color inside a diffuse-only body capture.
+Same-harness preimage red and raw differences
+remain private report130 evidence. Actual integrated scene/native acceptance
+and the campaign gate remain parent-owned before completion marking.

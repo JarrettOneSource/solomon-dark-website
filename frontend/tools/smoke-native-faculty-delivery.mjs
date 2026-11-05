@@ -5,7 +5,7 @@ import { once } from 'node:events'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright-core'
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { createGameSaveDocument } from '../src/game/save/game-save-document.ts'
 import { createNativeFacultyDeathSaveFixture } from './native-faculty-save-fixture.ts'
 

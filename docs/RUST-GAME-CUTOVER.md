@@ -111,9 +111,12 @@ health, database and configuration checks pass are both publications made ready.
 A failed transaction restores prior runtime, units, Caddy and publication files,
 then restarts the prior admission owners. Database saves remain in place.
 
-Caddy-only drift reconciles without interrupting games. Ordinary worker
-reconciliation checks both publications, the original artifact identity, all
-three managed game/companion service units and canonical Caddy. `/game-stg`
+Real Caddy site changes require the two-authority save/restart boundary;
+byte-identical content needs no reload. Same-revision route drift cannot bypass
+the restored PixiJS protocol guard. The [NFO guide](../ops/nfo/README.md) describes
+the required new Website revision and the remaining shared-proxy limitation.
+Ordinary worker reconciliation checks both publications, the original artifact
+identity, all three managed game/companion service units and canonical Caddy. `/game-stg`
 retains its separate services, storage and artifact ownership.
 
 ## Validation

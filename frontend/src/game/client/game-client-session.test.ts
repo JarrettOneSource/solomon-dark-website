@@ -42,6 +42,7 @@ import type {
   LoadedBoneyard,
 } from '../core-kernels/boneyard.ts'
 import { PlayerCardRequests } from '../player-card-request.ts'
+import { NativeLootMessagePresentation } from '../loot-message-presentation.ts'
 import { connectGameClientSession } from './game-client-session.ts'
 import { connectGameObserverSession } from './game-observer-session.ts'
 import type { GameConnectionFailure } from './game-connection-failure.ts'
@@ -109,6 +110,277 @@ function loadedBoneyardFixture(runId: string): LoadedBoneyard {
     sourceSha256: '2118053783606f5ef9dc848671d6eecd8e87aa0a3610c8c2119f08452e15a22f',
   }
 }
+
+test('hosted transport loss replaces only the transport and preserves listeners without replaying accepted commands', async context => {
+  const first = new MemoryTransport()
+  const replacement = new MemoryTransport()
+  const recovery: boolean[] = []
+  const admissions: Array<{ playerId: string; resumeToken: string; requestId: string }> = []
+  const fatal: GameConnectionFailure[] = []
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'first-ticket', transport: first, onFatal: error => fatal.push(error),
+    onReconnecting: value => recovery.push(value),
+    reconnect: async (identity, _signal) => {
+      admissions.push(identity)
+      return { credential: 'fresh-ticket', transport: replacement }
+    },
+  })
+  const initial = createGameSimulation({ 'player-1': CHARACTER })
+  first.receive(encodeGameMessage({ ...welcomeMessage(createGameSnapshot(initial, 'player-1')), sessionKind: 'private-college' }))
+  const session = await connecting
+  context.after(() => session.destroy())
+  const snapshots: number[] = []
+  session.onSnapshot(snapshot => snapshots.push(snapshot.tick))
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, { x: 20, y: 30 }, true))
+  first.disconnect({ code: 1001, reason: 'proxy reload', wasClean: true })
+  session.sendInput(gameplayInput({ x: 1, y: 0 }, null, true))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(admissions.length, 1)
+  assert.equal(admissions[0].playerId, session.playerId)
+  assert.equal(admissions[0].resumeToken, session.resumeToken)
+  assert.deepEqual(recovery, [true])
+  const hello = decodeClientGameMessage(replacement.sent[0])
+  assert.equal(hello.type, 'client-hello')
+  if (hello.type !== 'client-hello') assert.fail('expected fresh hello')
+  assert.equal(hello.credential, 'fresh-ticket')
+  assert.equal(hello.save, undefined)
+  assert.equal(hello.resumeToken, session.resumeToken)
+  replacement.receive(encodeGameMessage({ ...welcomeMessage(createGameSnapshot({ ...initial, tick: 74 }, 'player-1')),
+    sessionKind: 'private-college', snapshotSequence: 74 }))
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(fatal, [])
+  assert.deepEqual(recovery, [true, false])
+  assert.equal(session.getSnapshot().tick, 74)
+  assert.deepEqual(snapshots, [74])
+  assert.equal(replacement.sent.some(payload => decodeClientGameMessage(payload).type === 'client-input'), false,
+    'the held movement/cast is not resent into the new transport')
+})
+
+test('hosted recovery stops on terminal close and invalid delivery', async context => {
+  for (const code of [1000, 1008, 1011, 1012, 4001, 4002]) {
+    const transport = new MemoryTransport()
+    let attempts = 0
+    const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+      credential: 'ticket', transport, reconnect: async () => { attempts += 1; throw new Error('must not recover') } })
+    transport.receive(encodeGameMessage({ ...welcomeMessage(createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')),
+      sessionKind: 'private-college' }))
+    const session = await connecting
+    transport.disconnect({ code, reason: 'terminal', wasClean: true })
+    assert.equal(attempts, 0)
+    session.destroy()
+  }
+  const first = new MemoryTransport()
+  const replacement = new MemoryTransport()
+  let attempts = 0
+  const failures: GameConnectionFailure[] = []
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'ticket', transport: first, onFatal: error => failures.push(error),
+    reconnect: async () => { attempts += 1; return { credential: 'fresh', transport: replacement } } })
+  first.receive(encodeGameMessage({ ...welcomeMessage(createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')),
+    sessionKind: 'private-college' }))
+  const session = await connecting
+  context.after(() => session.destroy())
+  first.disconnect({ code: 1006, reason: '', wasClean: false })
+  await new Promise(resolve => setImmediate(resolve))
+  replacement.receive('invalid host delivery')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(attempts, 1, 'invalid host data never becomes a transport retry')
+  assert.equal(failures.length, 1)
+})
+
+test('uncertain reconnect HTTP response reuses its request and permits at most two attempts', async context => {
+  const first = new MemoryTransport()
+  const replacement = new MemoryTransport()
+  const identities: string[] = []
+  const failures: GameConnectionFailure[] = []
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'ticket', transport: first, onFatal: error => failures.push(error),
+    reconnect: async identity => {
+      identities.push(identity.requestId)
+      if (identities.length === 1) throw new TypeError('network response lost')
+      return { credential: 'fresh', transport: replacement }
+    } })
+  first.receive(encodeGameMessage({ ...welcomeMessage(createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')),
+    sessionKind: 'private-college' }))
+  const session = await connecting
+  context.after(() => session.destroy())
+  first.disconnect({ code: 1001, reason: 'proxy reload', wasClean: true })
+  await new Promise(resolve => setTimeout(resolve, 1_100))
+  assert.equal(identities.length, 2)
+  assert.equal(identities[0], identities[1])
+  replacement.disconnect({ code: 1006, reason: '', wasClean: false })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(identities.length, 2)
+  assert.equal(failures.length, 1)
+  assert.equal(failures[0].transport?.code, 1001, 'retain the original diagnostic')
+})
+
+test('one absolute recovery deadline cancels pending admission and never provisions another world', async context => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const transport = new MemoryTransport()
+  let attempts = 0
+  let cancelled = false
+  const failures: GameConnectionFailure[] = []
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'ticket', transport, onFatal: error => failures.push(error),
+    reconnect: (_identity, signal) => new Promise((_resolve, reject) => {
+      attempts += 1
+      signal.addEventListener('abort', () => { cancelled = true; reject(new DOMException('Cancelled', 'AbortError')) })
+    }) })
+  transport.receive(encodeGameMessage({ ...welcomeMessage(createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')),
+    sessionKind: 'private-college' }))
+  const session = await connecting
+  context.after(() => session.destroy())
+  transport.disconnect({ code: 1001, reason: 'proxy reload', wasClean: true })
+  context.mock.timers.tick(29_999)
+  assert.equal(failures.length, 0)
+  context.mock.timers.tick(1)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(cancelled, true)
+  assert.equal(attempts, 1)
+  assert.equal(failures.length, 1)
+})
+
+test('a second recovery Welcome replaces the ping interval and destroy releases every callback', async context => {
+  context.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] })
+  const startInterval = globalThis.setInterval
+  let intervalCallbacks = 0
+  context.mock.method(globalThis, 'setInterval', (...args: Parameters<typeof globalThis.setInterval>) => {
+    const [callback, delay, ...parameters] = args
+    return startInterval(() => { intervalCallbacks += 1; callback(...parameters) }, delay)
+  })
+  const first = new MemoryTransport()
+  const replacements = [new MemoryTransport(), new MemoryTransport()]
+  let attempts = 0
+  const failures: GameConnectionFailure[] = []
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'ticket', transport: first, onFatal: error => failures.push(error),
+    reconnect: async () => ({ credential: 'fresh', transport: replacements[attempts++] }) })
+  const boneyard = loadedBoneyardFixture('ping-owner')
+  const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }), boneyard)
+  const welcome = { ...welcomeMessage(createGameSnapshot(state, 'player-1')), sessionKind: 'private-college' as const }
+  first.receive(encodeGameMessage(welcome))
+  const session = await connecting
+  context.after(() => session.destroy())
+  first.disconnect({ code: 1001, reason: 'proxy reload', wasClean: true })
+  await new Promise(resolve => setImmediate(resolve))
+  replacements[0].receive(encodeGameMessage(welcome))
+  replacements[0].disconnect({ code: 1006, reason: 'lost before renderer readiness', wasClean: false })
+  await new Promise(resolve => setImmediate(resolve))
+  context.mock.timers.tick(1_000)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(attempts, 2)
+  replacements[1].receive(encodeGameMessage(welcome))
+  replacements[1].receive(encodeGameMessage({ type: 'server-boneyard-loaded', boneyard }))
+  session.readyBoneyard(boneyard.runId)
+  await new Promise(resolve => setImmediate(resolve))
+  const previous = replacements[1].sent.filter(payload => decodeClientGameMessage(payload).type === 'client-ping').length
+  context.mock.timers.tick(2_000)
+  const current = replacements[1].sent.filter(payload => decodeClientGameMessage(payload).type === 'client-ping').length
+  assert.equal(current - previous, 1, 'only the current transport owns a ping interval')
+  session.destroy()
+  const afterDestroy = intervalCallbacks
+  context.mock.timers.tick(4_000)
+  assert.equal(intervalCallbacks, afterDestroy, 'destroy releases intervals, including failed replacement attempts')
+  assert.deepEqual(failures, [])
+})
+
+test('a replacement Welcome cannot change the retained admission or wizard', async context => {
+  const snapshot = createGameSnapshot(createGameSimulation({ 'player-1': CHARACTER }), 'player-1')
+  const original = { ...welcomeMessage(snapshot), sessionKind: 'private-college' as const }
+  for (const change of [
+    { sessionKind: 'global-hub' as const }, { developerAccess: true },
+    { resumeToken: 'different-retained-capability' },
+    { content: { manifestSha256: 'a'.repeat(64), mods: [] } },
+  ]) {
+    const first = new MemoryTransport()
+    const replacement = new MemoryTransport()
+    const failures: GameConnectionFailure[] = []
+    let attempts = 0
+    const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+      credential: 'ticket', transport: first, onFatal: error => failures.push(error),
+      reconnect: async () => { attempts += 1; return { credential: 'fresh', transport: replacement } } })
+    first.receive(encodeGameMessage(original))
+    const session = await connecting
+    context.after(() => session.destroy())
+    first.disconnect({ code: 1001, reason: 'proxy reload', wasClean: true })
+    await new Promise(resolve => setImmediate(resolve))
+    replacement.receive(encodeGameMessage({ ...original, ...change }))
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(failures.length, 1, JSON.stringify(change))
+    assert.equal(attempts, 1)
+    assert.equal(replacement.readyState, 'closed')
+  }
+})
+
+test('announced deployment takes ownership from reconnect until its actual storage barrier completes', async context => {
+  context.mock.timers.enable({ apis: ['setTimeout'] })
+  const first = new MemoryTransport()
+  const replacement = new MemoryTransport()
+  const failures: GameConnectionFailure[] = []
+  const recovering: boolean[] = []
+  let releaseSave!: () => void
+  const saving = new Promise<void>(resolve => { releaseSave = resolve })
+  let attempts = 0
+  const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+    credential: 'ticket', transport: first, onFatal: error => failures.push(error),
+    onReconnecting: value => recovering.push(value), onDeploymentRestart: () => saving,
+    reconnect: async () => { attempts += 1; return { credential: 'fresh', transport: replacement } } })
+  const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }), loadedBoneyardFixture('retained'))
+  const welcome = { ...welcomeMessage(createGameSnapshot(state, 'player-1')), sessionKind: 'private-college' as const }
+  first.receive(encodeGameMessage(welcome))
+  const session = await connecting
+  context.after(() => session.destroy())
+  first.disconnect({ code: 1001, reason: 'proxy reload', wasClean: true })
+  await new Promise(resolve => setImmediate(resolve))
+  replacement.receive(encodeGameMessage(welcome))
+  // Actual Boneyard renderer readiness has not yet arrived.
+  replacement.receive(encodeGameMessage({ type: 'server-save-checkpoint', save: '{"deployment":true}',
+    reason: 'progress', sequence: 74 }))
+  replacement.receive(encodeGameMessage({ type: 'server-deployment-restart', checkpointSequence: 74,
+    targetRevision: 'a'.repeat(40) }))
+  await new Promise(resolve => setImmediate(resolve))
+  context.mock.timers.tick(31_000)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(failures, [])
+  assert.equal(replacement.readyState, 'open', 'recovery expiry cannot close the deployment save owner')
+  assert.deepEqual(recovering, [true, false])
+  assert.equal(attempts, 1)
+  assert.equal(replacement.sent.some(payload => decodeClientGameMessage(payload).type === 'client-deployment-ready'), false)
+  releaseSave()
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(replacement.sent.some(payload => decodeClientGameMessage(payload).type === 'client-deployment-ready'), true)
+  replacement.disconnect({ code: 1012, reason: 'game updating', wasClean: true })
+  assert.deepEqual(failures, [])
+})
+
+test('destroy cancels reconnect both before Welcome and while awaiting renderer readiness', async context => {
+  for (const welcomed of [false, true]) {
+    const first = new MemoryTransport()
+    const replacement = new MemoryTransport()
+    const failures: GameConnectionFailure[] = []
+    const recovering: boolean[] = []
+    let signal!: AbortSignal
+    const connecting = connectGameClientSession({ character: CHARACTER, profile: NULL_PROFILE,
+      credential: 'ticket', transport: first, onFatal: error => failures.push(error),
+      onReconnecting: value => recovering.push(value),
+      reconnect: async (_identity, current) => { signal = current; return { credential: 'fresh', transport: replacement } } })
+    const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }), loadedBoneyardFixture('retained'))
+    const welcome = { ...welcomeMessage(createGameSnapshot(state, 'player-1')), sessionKind: 'private-college' as const }
+    first.receive(encodeGameMessage(welcome))
+    const session = await connecting
+    context.after(() => session.destroy())
+    first.disconnect({ code: 1006, reason: '', wasClean: false })
+    await new Promise(resolve => setImmediate(resolve))
+    if (welcomed) replacement.receive(encodeGameMessage(welcome))
+    session.destroy()
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(signal.aborted, true)
+    assert.deepEqual(recovering, [true, false])
+    assert.equal(replacement.readyState, 'closed')
+    assert.deepEqual(failures, [])
+  }
+})
 
 test('client carries character config, publishes authority, and tears down', async () => {
   const transport = new MemoryTransport()
@@ -1308,7 +1580,7 @@ test('client consumes each run-scoped Boneyard enemy event exactly once', async 
   session.destroy()
 })
 
-test('charm loss is silent on initial load and reconnect, and delivered once for a fresh event', async () => {
+test('charm loss has no notice on initial load or reconnect, and notifies only a fresh owner loss once', async () => {
   const state = enterBoneyardWorld(createGameSimulation({ 'player-1': CHARACTER }),
     loadedBoneyardFixture('charm-reconnect'))
   const initial = createGameSnapshot(state, 'player-1')
@@ -1327,16 +1599,28 @@ test('charm loss is silent on initial load and reconnect, and delivered once for
     receiveWelcome(transport, initial)
     const session = await connecting
     const received: number[] = []
-    session.onEnemyEvent(event => received.push(event.eventId))
-    receiveSnapshot(transport, { ...initial, tick: 5 }, 0)
-    assert.deepEqual(received, [], `${attempt} must seed its cursor without replaying loss`)
-    const next = { ...initial, tick: 10, world: { ...initial.world,
-      enemyEvents: [loss, { ...loss, eventId: 8, tick: 6 }],
-    } }
-    receiveSnapshot(transport, next, 0)
-    receiveSnapshot(transport, { ...next, tick: 15 }, 0)
-    assert.deepEqual(received, [8])
-    session.destroy()
+    const presentation = new NativeLootMessagePresentation(initial.tick)
+    try {
+      session.onEnemyEvent(event => {
+        received.push(event.eventId)
+        presentation.consumeCombat(event, session.playerId)
+      })
+      receiveSnapshot(transport, { ...initial, tick: 5 }, 0)
+      assert.deepEqual(received, [], `${attempt} must seed its cursor without replaying loss`)
+      assert.deepEqual(presentation.sample(5), [])
+      const next = { ...initial, tick: 10, world: { ...initial.world,
+        enemyEvents: [loss, { ...loss, eventId: 8, tick: 6 },
+          { ...loss, eventId: 9, tick: 7, targetPlayerId: 'peer' }],
+      } }
+      receiveSnapshot(transport, next, 0)
+      receiveSnapshot(transport, { ...next, tick: 15 }, 0)
+      assert.deepEqual(received, [8, 9])
+      assert.deepEqual(presentation.sample(15).map(({ key, text }) => ({ key, text })), [
+        { key: 'combat:8', text: 'CHARM EFFECT LOST!' },
+      ])
+    } finally {
+      session.destroy()
+    }
   }
 })
 
@@ -2059,6 +2343,7 @@ test('client accepts cast-owned heading and prevents movement prediction from re
           etherBlastCharge: 0,
           etherBlastChargeCueSequence: 0,
           fizzleSequence: 0,
+          handCast1: null,
           held: false,
           lastWeldPlaybackRate: null,
           lastWeldSoundVariant: null,

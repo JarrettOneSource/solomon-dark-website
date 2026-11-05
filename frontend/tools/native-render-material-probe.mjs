@@ -1,9 +1,9 @@
 import {
   Application, BufferImageSource, Container, Graphics, MeshSimple, Particle, ParticleContainer,
-  RenderTexture, Sprite, Texture,
+  Rectangle, RenderTexture, Sprite, Texture,
 } from 'pixi.js'
 import {
-  installNativeFixedFunctionRenderPipeline,
+  createNativeTexturedVertexMeshShader, installNativeFixedFunctionRenderPipeline,
 } from '../src/game/renderer/native-fixed-function-render-pipeline.ts'
 import {
   createNativeArenaUnpremultipliedParticleShader, installNativeArenaRenderPipeline,
@@ -118,6 +118,7 @@ export async function renderNativeMaterialSamples() {
       samples.push(...retainedColorModeSamples(app, target, mode, retainedTextures))
       samples.push(...drawableColorModeSamples(app, target, mode, retainedTextures))
       samples.push(...textureOpacitySamples(app, target, mode, retainedTextures))
+      samples.push(...texturedCaptureSamples(app, target, mode, retainedTextures))
       for (const alpha of [0, 1, 128, 255]) {
         const texture = textureFromPixel([128, 64, 192, alpha])
         retainedTextures.push(texture)
@@ -309,6 +310,39 @@ function textureOpacitySamples(app, target, mode, retainedTextures) {
     explicit.update([0.25, 0.25, 0.25, 0.25])
     samples.push({ mode, role: 'explicit-shader', pixel: drawSample(app, target, explicit.mesh) })
     explicit.destroy()
+  }
+  return samples
+}
+
+function texturedCaptureSamples(app, target, mode, retainedTextures) {
+  const samples = []
+  for (const premultiplied of [false, true]) {
+    const rgba = premultiplied ? [102, 51, 26, 128] : [204, 102, 51, 128]
+    const texture = new Texture({
+      source: new BufferImageSource({
+        resource: new Uint8Array([255, 255, 255, 255, ...rgba]), width: 2, height: 1,
+        alphaMode: premultiplied ? 'premultiplied-alpha' : 'no-premultiply-alpha',
+        scaleMode: 'nearest',
+      }),
+      frame: new Rectangle(1, 0, 1, 1),
+    })
+    retainedTextures.push(texture)
+    const mesh = new MeshSimple({ indices: indices.slice(), texture, uvs: uvs.slice(), vertices: vertices.slice() })
+    mesh.geometry.batchMode = 'no-batch'
+    mesh.blendMode = 'add'
+    setNativeVertexColors(mesh, new Uint32Array(4).fill(pack([128, 192, 255, 128])))
+    const shader = createNativeTexturedVertexMeshShader(texture)
+    mesh.shader = shader
+    try {
+      for (const masked of [false, true]) {
+        samples.push({ mode, premultiplied, rgba, masked, role: 'textured-capture',
+          pixel: drawSample(app, target, mesh, [0, 0, 0, 0], masked) })
+      }
+    } finally {
+      mesh.geometry.destroy(true)
+      mesh.destroy()
+      shader.destroy()
+    }
   }
   return samples
 }

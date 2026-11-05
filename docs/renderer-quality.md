@@ -1,13 +1,14 @@
 # Game renderer validation ownership
 
-The TypeScript/Pixi renderer and its exclusive mutation/coverage tooling were
-removed with the game cutover. The canonical Rust renderer, source presentation
-kernels, native/WASM checks and ordinary browser/GPU acceptance are maintained
-in the Rust game repository. See [the complete ownership map](RUST-GAME-CUTOVER.md#validation-ownership).
+The Website maintains the TypeScript/Pixi game at `/game` and embeds the
+independently built Rust game at `/game-rust`. Its complete gate is
+`/opt/homebrew/bin/bash ./scripts/validate.sh` on the Mac mini. The gate includes
+the Pixi renderer's scoped coverage, complexity, mutation and GPU checks,
+alongside the shared editor, authoring shelf, frontend and backend checks.
+`frontend/tools/quality/scope.mjs` defines the renderer scope; its results do not
+claim coverage of every Website module.
 
-The Website still validates its retained canvas editor, native Boneyard parser,
-authoring shelf, Site frontend and backend. A Website artifact hash check does
-not claim a new renderer or desktop acceptance result. Historical renderer
-metrics and equivalent-mutant reviews remain available at Website commit
-`fa08ae249ff5563570bdb2a653e2ef9358ce7b83`; those metrics are not relabeled as Rust
-coverage or mutation results.
+The Rust repository owns its renderer, native/WASM checks, desktop packages and
+browser/GPU acceptance. A Website artifact hash check verifies the supplied
+Rust payload's identity; it does not replace those Rust checks. Each maintained
+client also requires actual browser acceptance for affected game behavior.

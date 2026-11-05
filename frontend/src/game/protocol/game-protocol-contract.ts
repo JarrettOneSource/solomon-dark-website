@@ -1,10 +1,14 @@
 import { MAX_WEB_GAME_SAVE_BYTES } from '../save/game-save-contract.ts'
 
-export const GAME_PROTOCOL_VERSION = 153
+export const GAME_PROTOCOL_VERSION = 155
 
 export const GAME_WEBSOCKET_MAX_PAYLOAD_BYTES = MAX_WEB_GAME_SAVE_BYTES * 2 + 64 * 1024
 
 export const GAME_PROTOCOL_NAME = `solomon-dark/${GAME_PROTOCOL_VERSION}`
+
+/** One absolute retained-authority recovery episode; admission/progress never renew it. */
+export const GAME_RECONNECT_LEASE_MS = 30_000
+export const GAME_RECONNECT_MAX_ATTEMPTS = 2
 
 export const GAME_CONNECTION_TIMEOUT_CLOSE_CODE = 4000
 

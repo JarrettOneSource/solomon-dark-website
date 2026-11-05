@@ -9,7 +9,7 @@ import { createRequire } from 'node:module'
 
 import { chromium } from 'playwright-core'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { grantPlayerEntityInventoryItems } from '../src/game/core-server/player-entity-store.ts'
 import { getPlayerEconomy } from '../src/game/core-server/game-simulation.ts'
 import { startGameHost } from '../src/game/host/game-host.ts'

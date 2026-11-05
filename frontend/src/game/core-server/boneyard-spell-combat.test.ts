@@ -2183,52 +2183,54 @@ test('Blizzard push arms after a gap, ramps on sustained roots, and respects its
   assert.equal(blocked.enemies.actors[0]!.blizzardPushAccumulator, 0)
 })
 
-test('Steam particle contact installs its ten-tick Steamed payload on a risen Coffin', () => {
-  const spawned = riseCoffins(spawnEnemies([
-    { position: { x: 0, y: 0 }, token: 'COFFIN' },
-  ]))
-  const actor = spawned.actors[0]!
-  const enemies = {
-    ...spawned,
-    actors: [{ ...actor, currentHealth: 100, maximumHealth: 100 }],
-  }
-  const profile = weldProfile(1005, [300, 10, 5, 0.1, 4, 6, 2, 3], 'channel')
-  const steam = spawnNativeWeldSteamActor({
-    damage: 3,
-    direction: { x: 1, y: 0 },
-    id: 12,
-    origin: { x: 0, y: 0 },
-    ownerId: 'wizard',
-    queryOrigin: { x: 0, y: 0 },
-    rng: createNativeRng(0),
-    tick: 2,
-    underpowered: false,
-    vector: profile.vector.values,
-    worldKey: WORLD_KEY,
-  }).actor
-  assert.ok(steam?.kind === 'weld-steam' && steam.variant === 'normal')
-  const applied = resolveCombatWithAuthority(
-    enemies,
-    spellState({ transients: [{ ...steam, contactDue: true }] }),
-    [],
-    1,
-  )
-  assert.deepEqual(applied.targetEffects, [{
-    patch: { steamed: {
-      damagePerTick: 3,
-      emberDamage: 2,
-      emberFragments: 3,
-      explodeDamage: 4,
-      explodeRadius: 6,
+test('funded and weak Steam contact install their ten-tick learned payload on a risen Coffin', () => {
+  for (const underpowered of [false, true]) {
+    const spawned = riseCoffins(spawnEnemies([
+      { position: { x: 0, y: 0 }, token: 'COFFIN' },
+    ]))
+    const actor = spawned.actors[0]!
+    const enemies = {
+      ...spawned,
+      actors: [{ ...actor, currentHealth: 100, maximumHealth: 100 }],
+    }
+    const profile = weldProfile(1005, [300, 10, 5, 0.1, 4, 6, 2, 3], 'channel')
+    const steam = spawnNativeWeldSteamActor({
+      damage: underpowered ? 1.5 : 3,
+      direction: { x: 1, y: 0 },
+      id: 12,
+      origin: { x: 0, y: 0 },
       ownerId: 'wizard',
-      sourceActorId: 12,
-      ticks: 10,
-    } },
-    targetId: 1,
-    worldKey: WORLD_KEY,
-  }])
+      queryOrigin: { x: 0, y: 0 },
+      rng: createNativeRng(0),
+      tick: 2,
+      underpowered,
+      vector: profile.vector.values,
+      worldKey: WORLD_KEY,
+    }).actor
+    assert.ok(steam?.kind === 'weld-steam' && steam.variant === 'normal')
+    const applied = resolveCombatWithAuthority(
+      enemies,
+      spellState({ transients: [{ ...steam, contactDue: true }] }),
+      [],
+      1,
+    )
+    assert.deepEqual(applied.targetEffects, [{
+      patch: { steamed: {
+        damagePerTick: underpowered ? 1.5 : 3,
+        emberDamage: 2,
+        emberFragments: 3,
+        explodeDamage: 4,
+        explodeRadius: 6,
+        ownerId: 'wizard',
+        sourceActorId: 12,
+        ticks: 10,
+      } },
+      targetId: 1,
+      worldKey: WORLD_KEY,
+    }])
 
-  // Steamed deaths are resolved by the secondary receiver, not free pulses here.
+    // Steamed deaths are resolved by the secondary receiver, not free pulses here.
+  }
 })
 
 test('Meteor impact owns its 45-unit half-damage contact and ten-tick rooted pulse', () => {
@@ -2332,7 +2334,9 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     id: 31,
     kind: 'weld-persistent',
     lightRegistration: { managerLane: 'actor', registrationOrdinal: 31 },
-    lifetimeTicksRemaining: 1_000,
+    trackingTicksRemaining: 1_000,
+    headingDegrees: 90, flightSpeed: 3, targetId: 'enemy:1',
+    reacquiresTarget: false, turnAccumulator: Math.fround(.01), turnInput: 1,
     maximumScale: 0.5,
     origin: { x: 0, y: 0 },
     ownerId: 'wizard',
@@ -2343,12 +2347,22 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
     remainingDamage: 10,
     scale: 0.5,
     shellScale: 0.5,
-    speedFactor: 1,
     toughness: 2,
     vector: [10, 2, 1, 1, 2, 1],
     velocity: { x: 3, y: 0 },
     worldKey: WORLD_KEY,
   }
+  const distant = { ...enemies, actors: enemies.actors.map(actor => ({ ...actor,
+    position: { x: 400, y: -100 } })) }
+  const untouched = resolveCombatWithAuthority(distant, spellState({ transients: [{
+    ...boulder, shellScale: .49, assemblyScale: .49,
+  }] }), [], 3)
+  const uncontacted = untouched.spells.transients.find(({ id }) => id === 31)
+  assert.ok(uncontacted?.kind === 'weld-persistent' && uncontacted.buildId === 1006)
+  assert.equal(uncontacted.shellScale, .49, 'guidance without accepted contact preserves the shell rebuild bucket')
+  assert.equal(uncontacted.assemblyScale, .49)
+  assert.equal(uncontacted.scale, .5)
+  assert.ok(uncontacted.headingDegrees < 90, 'the empty contact gather still reaches guidance')
   const resolved = resolveCombatWithAuthority(
     enemies,
     spellState({ transients: [boulder] }),
@@ -2366,6 +2380,8 @@ test('released Ethereal Boulder pieces own independent native residual pools', (
   assert.equal(retained.shellScale, retained.scale)
   assert.equal(retained.assemblyScale, 0.5)
   assert.deepEqual(retained.hitTargetIds, ['enemy:1', 'enemy:2'])
+  assert.equal(retained.targetId, null, 'contact-killed target is cleared after its final steering sample')
+  assert.equal(retained.headingDegrees, Math.fround(90 + Math.fround(.01) * Math.fround(.7)))
   assert.equal(resolved.spells.transients.filter(({ kind }) => (
     kind === 'weld-boulder-debris'
   )).length, 2)

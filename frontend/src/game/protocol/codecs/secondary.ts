@@ -27,6 +27,7 @@ import { nativeSecondaryActor, nativeSecondarySkillId } from './secondary-actors
 import {
   GameProtocolError,
   boolean,
+  boundedInteger,
   finite,
   limitedArray,
   limitedString,
@@ -237,16 +238,29 @@ export function nativeSecondaryPlayer(value: unknown, field: string): NativeSeco
   let castAction: NativeSecondaryPlayerState['castAction'] = null
   if (source.castAction !== null) {
     const action = record(source.castAction, `${field}.castAction`)
-    onlyKeys(action, `${field}.castAction`, ['weaponKind', 'progress'])
     const weaponKind = action.weaponKind
     if (weaponKind !== null && weaponKind !== 'staff' && weaponKind !== 'wand') {
       throw new GameProtocolError(`${field}.castAction.weaponKind is not supported`)
     }
+    onlyKeys(action, `${field}.castAction`, weaponKind === null
+      ? ['weaponKind', 'progress', 'handPose', 'handDone']
+      : ['weaponKind', 'progress'])
     const progress = nonnegativeFinite(action.progress, `${field}.castAction.progress`)
-    if (progress > (weaponKind === 'staff' ? 5 : 6)) {
+    if (weaponKind !== null && progress > (weaponKind === 'staff' ? 5 : 6)) {
       throw new GameProtocolError(`${field}.castAction.progress exceeds the native action end`)
     }
-    castAction = { weaponKind, progress }
+    if (weaponKind === null) {
+      const handPose = boundedInteger(action.handPose, `${field}.castAction.handPose`, 0, 3)
+      const handDone = boolean(action.handDone, `${field}.castAction.handDone`)
+      if (Math.fround(progress) !== progress || handDone !== (progress >= 6)
+        || (progress > 0 && handPose !== (progress < 1 ? 1 : progress < 7 ? 3 : 0))) {
+        throw new GameProtocolError(`${field}.castAction is inconsistent with HandCast2 progress`)
+      }
+      if (handPose !== 0 && handPose !== 1 && handPose !== 2 && handPose !== 3) {
+        throw new GameProtocolError(`${field}.castAction.handPose is outside HandCast2`)
+      }
+      castAction = { weaponKind, progress, handPose, handDone }
+    } else castAction = { weaponKind, progress }
   }
   onlyKeys(source, field, [
     'castSequence', 'castSpinTicksRemaining', 'cooldownTicksBySkill', 'firewalker',

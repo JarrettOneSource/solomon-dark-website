@@ -1,5 +1,12 @@
 # 2026-08-20 — Welded-primary runtime and presentation closure
 
+> **2026-11-01 correction — report 133:** every earlier assertion in this entry
+> that weak Steam lacks the Steamed contact lane is superseded. The normal
+> particle contact grant tests the caster bank, not the low-mana byte. Weak
+> Steam forces normal particles, halves their direct damage and quarters
+> their alpha; it retains the contact clock and learned Fire payload. The
+> instruction-derived contract and independent regressions are below.
+
 > **2026-10-13 correction — report 118:** the Flame Lash and Steam special-death
 > contracts below are reopened. A live hit supplies a per-damage payload; only
 > an admitted terminal death consumes it. The historical per-tick Steam-burst,
@@ -257,9 +264,9 @@ The same adjacency sweep closes the three channel draw families:
   `5.4*(1+widen*.02)` Normal or `6*(1+widen*.02)` Over speed, weak quarter
   alpha, and birth-time terrain terminal. Tick owns remaining-distance snap,
   `.25` tint loss, `.125` secondary-color loss, and the complete long tail.
-  Normal non-weak particles alone retain `Integer(10)` contact clocks; due
+  Normal particles, including weak particles, retain `Integer(10)` contact clocks; due
   contacts query `scale*50` and install ten-tick Steamed with the particle's
-  stored Fire payload. Over and weak particles own no Steamed contact lane.
+  stored Fire payload. Over particles own no Steamed contact lane; weak normal particles do.
   Positive normal tint draws two additive record-76 copies; after tint reaches
   zero one ordinary copy remains. Over draws one ordinary quarter-alpha copy.
 
@@ -832,7 +839,7 @@ member, color-overlay class, child factory, and non-recursive contact branch.
 | --- | --- | --- | --- |
 | Submitted web capture | player capture above, received 2026-08-30 | A sustained target contact keeps large ordinary Fire stacks resident while the report identifies intolerable repeated audio. | high-web |
 | Retail image | `SolomonDark.exe` 0.72.5, 4,723,200 bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred base `0x00400000` | Source of every address and constant below. | high |
-| Steam actor and modifier | `Anim_SteamJetEffect::Tick 0x0045B940`; `Mod_Steamed` RTTI/vtable `0x0079E3C0`, type `0x1B6C`, constructor `0x006232F0`, tick `0x00625F40`, merge `0x00625C80` | Normal non-weak particles install a ten-tick target modifier. Each live modifier tick dispatches Fire damage and writes special event type 2 when stored Explosion radius is positive. | high |
+| Steam actor and modifier | `Anim_SteamJetEffect::Tick 0x0045B940`; `Mod_Steamed` RTTI/vtable `0x0079E3C0`, type `0x1B6C`, constructor `0x006232F0`, tick `0x00625F40`, merge `0x00625C80` | Normal particles, including weak particles, install a ten-tick target modifier. Each live modifier tick dispatches Fire damage and writes special event type 2 when stored Explosion radius is positive. | high |
 | Event producer/consumer census | all five `DAT_0081C70C` xrefs; type-2 write `0x00625FDA`; receiver branch `0x0047704D..0x004770B7`; sole `0x00643CA0` xref at `0x004770B7` | Steam does not call shared Fire helper `0x00642BF0`. Type 2 has exactly one consumer: the distinct Steam detonation helper `0x00643CA0`. | high |
 | Steam detonation instructions | `0x00643CA0..0x0064445D`; `Anim_SpriteArray_ColorOverlay::Draw 0x0045DA80`; `Anim_SteamJetEffect` constructor/tick/draw `0x00453CE0/0x0045B940/0x00458550` | The burst has the shared three visual clocks but gray overlays and optional normal Steam-particle children, not ordinary Embers. | high |
 | Audio registry and call | `0x00643D35..0x00643D86`; registry offset `+0x4BC`, index 27, `sounds\\explodesteam`; source SHA-256 `f93fca2917072811b96f4ec4c3c864c66f0bb785f05c6113e1931661471df090` | Each Steam detonation birth requests only `explodesteam` with signed `Float(.1)+1` pitch and doubled point gain. It does not request `fireballhit` or `throwfire`. | high |
@@ -854,7 +861,7 @@ teardown**.
 | --- | --- | --- | --- |
 | normal full-power Steam particle | `0x00453CE0`, `0x0045B940` | `exact-ported` | random `Integer(10)` contact clock, ten-tick recurrence, target query, modifier install |
 | Over Steam particle | constructor/handler Over branch | `verified-already-at-parity` | no `Mod_Steamed` contact lane |
-| underpowered normal particle | handler weak branch | `verified-already-at-parity` | quarter alpha and no `Mod_Steamed` contact lane |
+| underpowered normal particle | handler weak branch | `recovered-pending-port` (report 133) | half direct damage, quarter alpha, normal contact clock and retained learned payload |
 | target-owned `Mod_Steamed` lifetime/tick | `0x006232F0`, `0x00625F40` | `exact-ported` | ten ticks, per-tick direct Fire damage, owner/source identity |
 | repeated modifier merge | `0x00625C80` | `exact-ported` | maximum duration, damage, radius, fragment count, and fragment damage; strongest source ownership |
 | Explosion radius zero | `0x00625FCE` strict positive gate | `exact-ported` | direct Steam damage only; no type-2 VFX, audio, or learned fragments |
@@ -875,9 +882,9 @@ No member is blocked by the browser platform.
 
 ### Native ownership thread and recovered behavioral contract
 
-- Only a normal, full-power Steam particle owns the contact clock. Its first
+- Every normal Steam particle, including weak, owns the contact clock. Its first
   clock is `Integer(10)` and each due edge resets to ten while life remains
-  above `.5`. Over and weak particles cannot install the modifier.
+  above `.5`. Only Over particles cannot install the modifier.
 - `Mod_Steamed` begins with duration ten. Before submitting direct Fire damage,
   its tick, only when stored Explosion radius is positive, writes event type 2 with
   visual scale `float32((radius-10)*.180000007+1)`, Explosion damage, fragment
@@ -1508,7 +1515,7 @@ audio or post-fix acceptance.
 | Normal chain contact | target query `0x00641340`, write `0x00541710` | Valid first contact, positive arcs, nearest distinct mask-2 root within 200; direct damage multiplies by `0.6000000238418579`; visited membership preserved |
 | Underpowered Flame | `0x005409ED..0x00540A05`, `0x00540CDE`, `0x005412BD..C2` | Direct damage and handler strength halve; main Stun and the entire chain loop are skipped; main type-1 payload remains eligible |
 | Flame cached Ember count | conversion `0x0054A424`, store `0x0054A42D` | `trunc(vector[7])` is cached before use; chain uses `trunc(cachedInteger * .5)`, not truncation of an unrounded half vector |
-| Normal Steam contact | `0x0045B940`, modifier `0x006232F0/0x00625F40` | Normal full-power particles install the ten-tick modifier; Over and weak particles have no modifier contact lane |
+| Normal Steam contact | `0x0045B940`, modifier `0x006232F0/0x00625F40` | Normal particles, including weak, install the ten-tick modifier; only Over particles have no modifier contact lane |
 | Steamed type-2 event | `0x00625FDA` | Radius-positive per-damage payload; live surviving ticks never detonate |
 | Steamed maximum merge | `0x00625C80` | Retain duration/damage/radius/count/fragment maxima and source ownership; zero-own-payload children can refresh a stronger resident modifier |
 | Common terminal consumer | `0x0048A290 -> 0x00477020` | Actual terminal dispatch, family gate and target alignment are required; entry 162 has all 21 native vtable members and exceptions |
@@ -1928,3 +1935,363 @@ are empty; the strict driver's only warning is the owned host's normal
 server-shutdown disconnect, and all owned resources closed. Roughly 100 ms
 headless frame intervals with most sampled CPU time idle remain an observation,
 not a demonstrated client bottleneck or report-resolution claim.
+
+## 2026-11-01 — Report 133: weak Steam contact permission correction
+
+### Evidence and corrected boundary
+
+The original seven-second web clip has an empty-looking mana bar, vapor over
+nearby skeletons and gold pickup notices. It exposes neither target HP nor
+accepted damage values. Its SHA-256 is
+`fdce43582f03ac923c2044baf683eb8a796d684ee2873fe6e7d1b995daedfbcf`.
+This is evidence of the report, not proof of zero damage or its historical cause.
+
+Fresh read-only disassembly of the hash-matching retail 0.72.5 PE (4,723,200
+bytes, SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`) falsifies the previous weak-no-contact claim.
+The [instruction catalog](report133-native-steam-low-mana-evidence.json)
+retains the byte-range hashes, raw instructions, constants, vtable members and
+complete direct-call census of both Steam constructors. No original executable,
+Ghidra project, clean-stock runtime or injected runtime was executed in this pass.
+
+Native system: **Steam Jet mana admission, normal/Over allocation, particle
+contact permission and clock, target-owned Steamed damage, learned terminal
+payload, presentation and teardown**. Its authored vector, recorded constructor
+RNG, stock record 76 and learned fragment/explosion families remain the previously
+recovered complete Steam membership; no new authored row or cosmetic family is
+invented here. The earlier pass stopped at a decompiler-level weak/normal
+classification and did not trace the actual writer of particle byte `+0x50`.
+
+### Reachable native contract
+
+- Mana adjustment `0x0052B150` returns 1 on the underflow branch at
+  `0x0052B337`; the empty local reserve also reaches that return through
+  `0x0052B496..0x0052B4A7`. The handler saves its return in local byte
+  `[esp+0x17]` at `0x00542DB7`. That byte controls the low-mana branch.
+- At `0x00542DE8..0x00542E05`, account for the outstanding four-byte sound
+  argument: the weak branch zeroes cached strength/widen and writes **0.5**
+  into the retained damage multiplier. Normal particle assignment
+  `0x00543279..0x00543283` multiplies base damage `PlayerWizard+0x28C` by
+  that retained multiplier. Weak direct damage is therefore half strength.
+- The selector calls `Integer(7)` and admits Over only for selector 1 with
+  weak byte zero (`0x00542F45..0x00542F60`). Weak always takes the normal
+  constructor `0x00453CE0` at `0x0054310C`; normal and Over use the same
+  tick `0x0045B940`, with different draw slots `0x00458550/0x00458750`.
+- Constructor `0x00453CE0` initially clears contact byte `+0x50`, retains
+  `Integer(10)` at `+0x54` and zeroes payload fields. At
+  `0x00543266..0x005432A7`, the handler tests **caster bank `+0x5C == 0`**,
+  then grants particle contact `+0x50 = 1`, source/world and all learned
+  fields. This block has no low-mana test. Player bank assignment is explicit
+  at `0x005CB907..0x005CB90E`; it is not an underpowered boolean.
+  The authority ports decide each participant's contacts once, rather than
+  reproducing retail's local-client duplication by suppressing host peers.
+- Weak alpha is separately multiplied by **0.25** at
+  `0x0054345F..0x0054346F`. It does not undo the contact grant. Over skips
+  the normal grant and remains a visual particle. The other direct normal
+  constructor caller is the learned Steam helper `0x0064420C`; that caller
+  explicitly grants contact and zeroes its own learned payload as already
+  recovered. The inherited Over constructor is the third normal call site.
+- Tick `0x0045BAC2..0x0045BB08` requires life strictly greater than **0.5**,
+  contact byte set and the decremented clock at most zero. It resets to ten.
+  The target query uses radius `scale*50`, center `(x,y+15)`, bank mask 2;
+  it installs a ten-tick `Mod_Steamed` with
+  `f32(min(life,1)*particleDamage)` and the stored learned fields.
+- Modifier `0x00625F40` owns Fire damage and the already recovered source-bank
+  exclusion, max merge and type-2 terminal payload. Weak does not erase the
+  learned payload. Over, an expired particle, a wrong world, or a target
+  rejected by the existing root/category query does not gain a contact.
+  A funded particle already in flight and a resident modifier keep their
+  original strength when the owner subsequently runs out of mana.
+
+### Membership and implementation consequences
+
+| Member | Disposition before code | Required proof |
+| --- | --- | --- |
+| Funded normal stream and first/random/recurrent contact | verified-already-at-parity | Existing constructor/motion/contact coverage |
+| Weak normal stream at zero or insufficient mana | recovered-pending-port | Half-damage contact reaches the real enemy receiver; quarter-alpha motion unchanged |
+| Over selector and particle | verified-already-at-parity | Same selector is forced to normal when weak; Over remains contact-disabled |
+| Normal/weak learned Explosion and fragment fields | recovered-pending-port | Weak contact retains fields; terminal-only shared receiver and zero-payload children remain protected |
+| Contact life edge, ten-tick clock and target/world/category rejection | verified-already-at-parity | Independent edge/contact tests, including weak recurrence |
+| Funded-to-weak transition, release and retained modifier expiry | recovered-pending-port | New particles use half damage; existing particles/modifiers are not rewritten |
+| Normal/weak record-76 drawing, terrain terminal and retirement | verified-already-at-parity | Existing exact visual/motion fixtures plus independent contact-clock coverage |
+| Owner/peer/observer, snapshots and saves | recovered-pending-port | Authority contact once per participant; transmitted/saved contact fields retain the new branch |
+| Other welded and ordinary primaries | out-of-system | Their distinct low-mana owners are unchanged |
+
+Both clients incorrectly required `!underpowered` in normal particle contact
+permission. Remove that condition at the constructor owner in each maintained
+client. Preserve the existing half-damage producer, quarter-alpha painter,
+normal/Over RNG, learned fields, world filtering and terminal-only detonation.
+No protocol or save shape changes. Frozen Website-derived fixtures must retain
+original bytes; their weak Steam contact-enabled/clock/due fields are explicitly
+superseded only where independent instruction-derived regressions cover them.
+
+### Validation boundary
+
+Add failure-first constructor/clock and real held-input enemy regressions in both
+clients. Cover funded, zero and insufficient mana, the Over selector, retained
+learned fields, release/expiry and a non-owner participant. Preserve unchanged
+RNG and visuals through the original frozen fixtures outside the three corrected
+contact fields. Exact-candidate combined gates and built, installed browser
+journeys are campaign-owned and pending. Static instructions establish this
+corrected contract; no clean-retail pixel, runtime numerical or audio match is
+claimed, and the old matching disposition is withdrawn.
+
+Website focused implementation: the canonical normal-particle permission is
+corrected. The independent constructor/clock matrix, real held-input target HP,
+owner/peer, empty/insufficient/full reserve, funded-to-weak transition, release,
+snapshot encode/decode, learned Coffin payload and existing shared terminal/
+modifier regressions pass (237 tests in the recorded focused invocation).
+Scoped TypeScript and changed-file lint pass. These source checks do not replace
+Rust's independent verification, the exact combined gate or installed browser
+acceptance. The joint membership rows above remain pending those checks.
+
+### Steam casting-rate and resolved-damage factor audit
+
+The same handler loads `0x00656580(7)` twice before the mana debit. This is the
+native casting-rate/class query already identified by ledger185; the two loads
+supply the cost and full-power contact multiplier. `0x00542D8D..0x00542DA4`
+multiplies cached per-tick mana `+0x2D0` by that rate before mana adjustment.
+`0x00543279..0x00543283` multiplies cached damage `+0x28C` by the retained rate,
+while weak replaces only the damage multiplier with .5 as recorded above.
+The field layout and extra instruction ranges are in the same evidence catalog.
+
+This does not remove equipment or offensive damage factors when weak. Setup
+`0x0054A633` first calls shared offensive resolver `0x0065FFF0` for Welding52,
+divides by the manager's 100-Hz timestep and stores `PlayerWizard+0x28C` at
+`0x0054A640`. That cached value already includes those damage factors. The port's
+resolved `profile.damageMinimum/100` is therefore the correct base. Full Steam
+particle damage multiplies it by the current casting rate; weak uses its half
+regardless of that rate. The mana debit always scales by the casting rate, and
+insufficient or exactly exhausted reserve selects weak from the scaled cost.
+
+The two clients already retain the matching casting-rate authority value for
+Staff/Wand and bare Constant actions. Their Steam per-tick cost and funded damage omitted
+it. This is a second confirmed Steam owner defect, including Faster Caster and
+class/equipment casting factors above or below one. Weak damage's existing half
+of the resolved profile is correct. Add a failure-first matrix with rates .5, 1, 2,
+funded and marginal/empty reserves, and an independently boosted resolved-damage
+profile. Correct Steam's admission and emission owners; do not infer a different
+contract for ordinary or other welded channel handlers from this Steam trace.
+The original frozen Steam step fixtures use rate1 and remain unchanged except
+for the previously identified contact fields. Combined and installed acceptance
+remain pending this additional owner correction.
+
+The Steam-only rate correction passes its failure-first six-failure red and
+14-test green matrix. The final 321-test focused invocation also covers the
+existing complete primary kernel and the prior contact/terminal/modifier checks.
+Scoped TypeScript and changed-file lint pass. The added rate-1 behavior remains
+covered by the original regression expectations. Rust verification, the combined
+candidate gate and installed journeys remain pending; no native-runtime numerical,
+x87, pixel/audio or performance equality is inferred from these source checks.
+
+The authority mapping is shared for Steam, including bare Constant. Player update
+`0x0054AB62..0x0054AB7F` calls channel dispatcher `0x00548A00` while held
+`PlayerWizard+0x270` is nonzero. Its item query chooses equipped Constant mode 5
+or no-item Constant mode 8 before dispatching build 1005 to `0x00542D20` at
+`0x00548AC5`. The retained factory table maps mode 8 to `0x0044F807`, which
+constructs HandConstant `0x0044C750`. That constructor/step writes pose 2 and
+calls the player action callback; it does not own Steam damage or its rate.
+No Staff/Wand/bare branch intervenes in the Steam handler's rate/debit lanes.
+The ports therefore pass the same resolved `castProgressFactor` through each
+of their Staff, Wand and null/bare authorities. Their weapon emitter/pose owners
+remain distinct. The separate native-rounded `handCastFactor` is for bare
+one-shot admission; it is not a second Steam multiplier.
+
+The independent matrix crosses all three authority variants with the .5, 1, 2
+rate examples, resolved damage boost, full/empty/marginal mana, and exact reserve
+exhaustion at both .5 and 2 rates. It supplies a deliberately different hand pose
+rate to protect the owner boundary. In particular rate 2/cost 20 needs .4 per tick:
+reserve .3 and reserve .4 both emit weak damage 2 from resolved damage 400, while
+full reserve emits 8. At rate .5 the scaled cost is .1, so reserve .15 is funded
+and reserve .1 is weak. These are source-contract checks, not a native-runtime
+floating-point equivalence assertion.
+
+
+All 27 authority/rate/reserve examples pass; the full focused Website invocation
+now passes 341 tests. Scoped TypeScript and changed-test lint also pass. Rust's
+matching matrix is prepared for its queued independent failure-first Cargo run.
+
+
+Both maintained source implementations are now corrected. Rust commit
+`98c2ba6e9906af7771f7c9201745f79022824ab5` preserves the frozen fixture bytes
+and explicitly supersedes only the weak contact permission/clock fields. Its
+unchanged-source run had seven behavioral failures across four targets, including
+real zero-mana enemy HP and the omitted funded rate multiplier. The same tests
+pass after exactly the three runtime owner changes: normal-particle contact,
+Steam debit, and Steam funded emission factor. All 26 focused Rust tests pass,
+including shared receiver/status/lifetime/presentation/audio coverage; focused
+Clippy with warnings denied and changed-file rustfmt also pass. The matching
+Website checks pass 341 tests plus scoped TypeScript/lint. The source portions of
+the pre-port membership rows above are complete; exact combined gates, built and
+installed journeys, and save/reload/live outcomes remain campaign acceptance.
+Original media still lacks authoritative target HP, so these recovered and
+reproduced current defects do not prove the clip's exact historical cause.
+
+## 2026-11-01 — Report131: EBoulder guidance and flight reopening
+
+The earlier four-rock-ceiling conclusion remains supported. The earlier assertion
+that released EBoulders are deliberately ballistic is false: it stopped at the
+shared Boulder tick and did not follow its concrete contact vslot or the release
+routine's acquisition calls and the lost-target call. This reopening owns the complete
+build1006 quantity, release, guidance, contact ordering and persistence contract
+in both maintained clients. Report81's separate performance claim is unresolved.
+
+### Direct retail evidence
+
+The freshly hashed retail0.72.5 PE is4,723,200bytes, SHA256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`, preferred
+base0x400000. LLVM23.1.3 disassembly and PE data reads are retained in the private
+campaign `report131/` evidence folder. No injected or clean-stock-runtime claim
+is made. Instruction/data facts below supersede earlier inferred field names.
+
+- Rebuild1006 case0x668FE1..0x66951C, selected by switch0x66B1B8, consumes the
+  complete component tuple8,40,10,43,9,42. More Missiles row10 supplies rounded
+  quantity, clamped1..4 at0x669495..0x6694C9. Smart row9 supplies1+mSpeed/100.
+  Existing extracted catalog contains all quantity rows1..14 and Smart speed
+  additions0,10,25,40,55,100,110,120,130,140,150. No extra quantity is implied
+  by the ordinary Magic Missile card's description.
+- Base constructor0x5FA270 sets heading+6C, +70=3.0, held state, shell/pool/list.
+  EBoulder constructor0x5FA670 installs vtable0x79E08C, target handle
+  +21C/+21E=-1, turn input+224=1, turn accumulator+228=f32(.01), reacquisition
+  +220=false and guidance countdown+230=250.
+- Player handler0x545360 multiplies the constructor turn input+224 by the Smart factor at birth (0x5454B8..0x5454C4), never translational
+  speed+70. While funded with Smart factor>1 it sets+220=true and+230 to the
+  truncation of1000*factor+250. Weak handling0x545B84..0x545BC1 sets
+  countdown150 (immediate0x96), disables+220 and restores+224=1. Subsequent
+  funded holding refreshes the Smart window/policy but does not rewrite+224. Weak quantity
+  collapses toone and retains the independently recovered debris/growth rules.
+- Release0x5FA6D0 first multiplies+70 by.75, so the original rock's native
+  flight speed is2.25. Existing claims calling this an angular-only field were
+  incomplete: shared contact0x620C10..0x620C5F computes heading unit-vector
+  times+70 and commits it to position. The complete templates are:
+
+  | Quantity | Along/across offsets, heading offset, speed and turn-input factors |
+  | --- | --- |
+  |1| (0,0,0), original speed2.25 and original Smart turn input |
+  |2| (0,+30,0), original; (0,-30,+10), speed2.25 and turn input1 |
+  |3| (+30,0,0), original; (0,+30,-10), speed2.25*f32(.95), turn inputf32(.95); (0,-30,+10), same factors |
+  |4| quantity3 plus(-15,0,0), speed2.25*f32(.9), turn inputf32(.9) |
+
+  Added children are constructed independently and copy the parent's current
+  turn accumulator, reacquisition policy and guidance countdown; their turn
+  input starts from constructor1 before the template multiplier. Each owns its
+  own target handle, damage pool, hit list, light, painter, pose and lifetime.
+- Release calls0x5F28A0 for every child at0x5FABB0, then the original at
+  0x5FABCA. This helper's only other direct caller is0x621569. It asks shared
+  nearest-root query0x641160 at the rock's current root with no excluded root,
+  stores that handle, then rejects it if the rock's hit list already contains
+  the selected root. It does not retry a farther target. No selection disables
+  reacquisition. Query uses mask2, strict squared distance<999999 and native
+  registration tie ordering; neither a100-unit forward probe nor visual
+  attachment offsets participate.
+- Shared tick0x609D30 has exactly two absolute vtable references, Earth
+  0x79E014+8 and EBoulder0x79E08C+8. Its released-contact call uses vslot+64:
+  Earth0x620B60, EBoulder0x621450. Thus EBoulder first performs the complete
+  shared move/contact/terrain transaction, then its own guidance tail.
+- Guidance0x621450 calls0x620B60, decrements+230, then returns when the result
+  is<=0 or the target handle is null. The countdown is a steering window,
+  **not an actor lifetime**. Otherwise a resolved target contributes its root
+  even when inactive for that last sample. Desired heading, native one-degree
+  sign-turn/deadband0x410D60, f32(sign*f32(.7)), turn input and accumulator
+  produce one final f32 heading write. Accumulator adds f32(.05) through1,
+  f32(.002) above1, and caps at10. Heading affects the following movement tick.
+  Inactive resolved targets clear after steering; a missing non-null target
+  reacquires only when+220 is true, without same-tick steering. Failed search
+  clears both handle and policy. Empty-at-release/null targets never poll.
+- The two vtable references plus direct-call sweep establish exact membership:
+  no Hail/Meteor or ordinary MagicMissile base tick is silently included.
+  Terrain/pool exhaustion, world bounds/scene cleanup and owner teardown still
+  end individual rocks; guidance expiry alone cannot remove one. Presentation,
+  audio, RNG, damage and painter ownership stay with their established owners.
+
+### Membership and implementation contract
+
+| Member | Source disposition | Verification / remaining acceptance |
+| --- | --- | --- |
+| All quantity rows1..14, Smart additions0..150, component tuple8/40/10/43/9/42 | verified-already-at-parity for vector rebuild | retail data, Pixi public-profile matrix and both runtime split matrices |
+| Normal/weak held original, quantity collapse and release1..4 | implemented; focused source checks passed | native speed/turn/countdown/template assertions |
+| All independently registered original and child rocks | implemented; focused source checks passed | each target choice, IDs, light roots, speeds, turn inputs and copied clocks |
+| No target, live target, resolved inactive, unresolved target, hit-list rejection, failed replacement | implemented; focused source checks passed | independent move-before-turn and no-poll/reacquire regressions |
+| Guidance-window boundary and continued clear flight | implemented; focused source checks passed | zero-window survival and frozen heading; collision still terminal |
+| Authority caller target collections and contact ordering | implemented; focused source checks passed | actual admitted primary cast and ordered contact path |
+| Object/compact/delta replication and current/native checkpoint/Website save | implemented; focused source checks passed | required fields, strict invalid-state rejection, exact continuation round trips |
+| Old in-flight save migration | implemented; focused source checks passed | preserve stored identity/pose/velocity/pool/RNG; derive heading from saved direction, default absent target to native null and accumulatorf32(.01); never invent a past acquired target |
+| Old held save migration | implemented; focused source checks passed | native constructor guidance defaults, current accepted held state retained before corrected release |
+| Ordinary Earth shared move/contact/termination | verified-already-at-parity, unchanged | existing Earth/contact tests |
+| MagicMissile, FireMissile, FrostMissile, BallLightning Smart tracking | out-of-system: distinct shared missile base0x5FD270 | existing sibling targeting tests remain required |
+| Hailstones and Meteor persistent members | out-of-system: distinct release/update lifecycles | unchanged existing persistent-member checks |
+| Hub/Boneyard owner, peers and observers; teardown | real-M2-acceptance-pending | root's final affected real M2 acceptance after combined gates |
+
+Old saves never retained the missing target or turn-accumulator history. Native
+null target is a supported state, so migration can safely resume the saved
+trajectory without fabricating prior acquisition. A fresh cast acquires normally.
+This unavoidable historical target-history limit must be disclosed; it does not
+justify a permanent alternate ballistic implementation. Required new wire fields
+use the coordinated protocol revision; current save output gets its own schema
+revision while earlier supported schemas are migrated at the save boundary.
+
+The canonical source port is implemented in both clients. Browser acceptance,
+publication and Report131 completion remain pending with the campaign owner. The shared original message1562279615068643348 still
+requires both Report81 and Report131 acceptance before a completion reaction.
+
+
+### Source port and bounded verification
+
+Pixi protocol155 and Rust gameplay protocol3 require seven authoritative fields:
+`flightSpeed`/`flight_speed`, `headingDegrees`/`heading_degrees`,
+`reacquiresTarget`/`reacquires_target`, `targetId`/`target_id`,
+`trackingTicksRemaining`/`tracking_ticks_remaining`,
+`turnAccumulator`/`turn_accumulator`, and `turnInput`/`turn_input`.
+Website save schema52 writes them; native server container schema2 keeps its
+outer format. Deployment protocol2 is unchanged. Native disk migration visits
+only `checkpoint.spells.transients[i].Weld.Persistent.EtherealBoulder`, preserving
+arbitrary same-name authored/mod objects. Mixed old/current native field sets
+and absent current fields are rejected, including a missing nullable target.
+
+Old held records also lack the weak/funded countdown history: their clock was a
+fake TTL. Migration derives held window/policy from retained turn input, using
+constructor250 for non-Smart state. The next held update applies the native
+funded/weak writer. Immediate key-up after unrecorded weak/refunded history cannot
+recover the exact prior150/250/Smart-reset window. This historical limit does not
+create an alternate runtime branch. Old in-flight actors preserve stored velocity
+and use native null-target defaults; fresh release uses the recovered owner.
+
+Release instructions alone do not establish whether the shared actor scheduler
+runs later in the same frame. Established accepted contact timing is retained.
+Steering follows actual movement and accepted contacts. Empty contact gathers run
+guidance without rewriting the untouched shell rebuild bucket.
+
+Original fixture bytes remain unchanged. Qualification is limited to build1006:
+
+- The eight1006 actor cases (bare/learned/frozen normal and weak, three/four splits)
+  retain held geometry, release roots, membership, IDs, registrations, age, pools,
+  growth, RNG and breakup. Only the old clock and released turn/motion inputs are
+  displaced; moved origin/orientation follow the corrected trajectory. All
+  compositor assertions still run at their recorded poses. Only bare-normal
+  tick1250's fake-TTL absence is superseded; its RNG remains asserted, and an
+  independent native case requires clear-flight survival past1300 ticks.
+- The three1006 held/empty/terrain journey cases retain mana, cast/queue/ownership
+  epochs, IDs, painters, RNG, pools and lifecycle. Only the old clock, released
+  trajectory and terrain children's inherited planar pose/vector are displaced.
+  Terrain child alpha/height/vertical motion and identity stay exact.
+- Contact fixture assertions remain intact; the adapter maps old state spellings.
+  No contact case is skipped. Historical Website-save replay retains old in-flight
+  trajectories; only missing guidance fields and newly released old held actors'
+  refuted trajectories are qualified. Current re-export expects schema52.
+  All other families and original fixture files are unchanged.
+
+Independent expectations come from retail rows/owners, not regenerated goldens:
+154 authored quantity/Smart combinations, all split members/factors, independent
+root acquisition, move-before-turn, missing/null/inactive targets, visited-nearest
+rejection, steering expiry without retirement, weak downgrade/refunding,
+deadband/cap, real funded/weak callers, shell preservation without contact, and
+current/old save plus owner/observer keyframe/delta round trips.
+
+M2 focused receipts: Pixi267/267 tests across six affected files, then the expanded
+authored-profile file5/5; TypeScript checking passed. Scoped Oxlint reports only
+the pre-existing save-contract control-regex warning. Rust19/19 focused simulation
+tests, native/Website save boundary2/2, historical Website-save suite9/9 and
+focused sim/assets Clippy with `-D warnings` passed. Logs name the exact131 worker
+source paths and nonzero tests despite the coordinated shared target. Root owns
+fresh combined gates and real affected browser/native acceptance. No worker GPU,
+browser or performance result is claimed.

@@ -18,6 +18,7 @@ import {
   createNativeWeldBlizzardChainEffects,
   createNativeWeldChannelActor,
   createNativeWeldPersistentActor,
+  finishNativeWeldEtherealBoulderGuidance,
   createNativeWeldMeteor,
   drawNativeWeldDamage,
   nativeWeldAudioPlan,
@@ -520,7 +521,7 @@ test('Ethereal Boulder grows in the native float lane and releases the four-piec
     { id: 92, origin: { x: 91, y: 188 } },
   ])
   assert.deepEqual(released.actors.map((actor) => (
-    actor.buildId === 1006 ? actor.speedFactor : null
+    actor.buildId === 1006 ? actor.turnInput : null
   )), [Math.fround(1.1), Math.fround(0.95), Math.fround(0.95), Math.fround(0.9)])
   const first = released.actors[0]
   assert.ok(first?.buildId === 1006)
@@ -718,7 +719,7 @@ test('weak retained welds suppress native payloads and obey their distinct relea
   assert.equal(weakEthereal.actor.damage, 6)
   assert.equal(weakEthereal.actor.remainingDamage, 4)
   assert.equal(weakEthereal.actor.quantity, 1)
-  assert.equal(weakEthereal.actor.speedFactor, 1)
+  assert.equal(weakEthereal.actor.turnInput, 1)
   assert.ok(weakEthereal.debris.length >= 8)
   assert.notDeepEqual(weakEthereal.rng, createNativeRng(1))
 
@@ -803,3 +804,140 @@ function target(id: string, x: number, y: number) {
     registrationOrder: 0,
   }
 }
+
+test('EBoulder release acquires at each rock root and moves before its native guidance tail', () => {
+  const target = {
+    active: true, actorFlags: 2, attachment: { x: 0, y: 0 }, bodyRadius: 10,
+    cellBindingOrder: 0, id: 'enemy:near', kind: 'enemy' as const,
+    nativePriority: 0, pendingRemove: false, position: { x: 100, y: -100 },
+    queryLane: 'grid' as const, registrationOrder: 0,
+  }
+  const held = createNativeWeldPersistentActor({ buildId: 1006,
+    direction: { x: 1, y: 0 }, id: 40, origin: { x: 0, y: 0 }, ownerId: 'p1',
+    tick: 0, vector: [12, 3, 4, 1.5, 2.5, 1], worldKey: 'boneyard:1' })
+  const released = releaseNativeWeldPersistentActor({ actor: held,
+    firstChildId: 90, rng: createNativeRng(1), tick: 1, targets: [target] })
+  const first = released.actors[0]
+  assert.ok(first?.buildId === 1006)
+  // Retail base speed3, EBoulder release*.75; Smart scales turn, not motion.
+  assert.equal(first.velocity.x, 2.25)
+  assert.equal(first.targetId, target.id)
+  assert.equal(first.turnAccumulator, Math.fround(.01))
+  assert.equal(first.turnInput, Math.fround(1.5))
+  assert.equal(first.trackingTicksRemaining, 1750)
+  const stepped = stepNativeWeldWorldActor(first, released.rng, () => true)
+  assert.ok(stepped.actor?.kind === 'weld-persistent' && stepped.actor.buildId === 1006)
+  assert.equal(stepped.actor.origin.x, Math.fround(first.origin.x + 2.25))
+  assert.ok(Math.abs(stepped.actor.origin.y - first.origin.y) < 1e-12)
+  const guided = finishNativeWeldEtherealBoulderGuidance(stepped.actor, [target])
+  assert.ok(guided.headingDegrees < first.headingDegrees)
+  assert.equal(guided.turnAccumulator, Math.fround(Math.fround(.01) + Math.fround(.05)))
+  assert.equal(guided.trackingTicksRemaining, 1749)
+})
+
+function boulderTarget(id: string, x: number, y: number, order = 0) {
+  return { active: true, actorFlags: 2, attachment: { x: 0, y: 0 }, bodyRadius: 10,
+    cellBindingOrder: order, id, kind: 'enemy' as const, nativePriority: 0,
+    pendingRemove: false, position: { x, y }, queryLane: 'grid' as const, registrationOrder: order }
+}
+
+function releasedBoulder(quantity = 1, smart = 1, targets = [boulderTarget('near', 100, -100)]) {
+  const actor = createNativeWeldPersistentActor({ buildId: 1006, direction: { x: 1, y: 0 },
+    id: 100, origin: { x: 0, y: 0 }, ownerId: 'p1', tick: 0,
+    vector: [12, 3, quantity, smart, 2.5, 1], worldKey: 'boneyard:1' })
+  const release = releaseNativeWeldPersistentActor({ actor, firstChildId: 101,
+    rng: createNativeRng(17), targets, tick: 1 })
+  const first = release.actors[0]
+  assert.ok(first?.buildId === 1006)
+  return { first, release }
+}
+
+test('all authored EBoulder quantity and Smart rows keep native child membership, motion, pools and RNG', () => {
+  // Retail rows10/9 and release0x5FA6D0, not an oracle generated from this kernel.
+  for (let quantity = 1; quantity <= 14; quantity += 1) {
+    for (const addition of [0, 10, 25, 40, 55, 100, 110, 120, 130, 140, 150]) {
+      const smart = Math.fround(1 + addition / 100)
+      const { release } = releasedBoulder(quantity, smart)
+      assert.equal(release.actors.length, Math.min(4, quantity))
+      assert.equal(new Set(release.actors.map(actor => actor.lightRegistration?.registrationOrdinal)).size, release.actors.length)
+      assert.equal(release.nextId, 100 + release.actors.length)
+      assert.deepEqual(release.rng, createNativeRng(17))
+      for (const [index, actor] of release.actors.entries()) {
+        assert.ok(actor.buildId === 1006)
+        const factor = index === 0 || quantity === 2 ? 1 : index === 3 ? Math.fround(.9) : Math.fround(.95)
+        assert.equal(actor.id, 100 + index)
+        assert.equal(actor.flightSpeed, Math.fround(2.25 * factor))
+        assert.equal(actor.turnInput, index === 0 ? smart : factor)
+        assert.equal(actor.trackingTicksRemaining, addition === 0 ? 250 : Math.trunc(smart * 1000 + 250))
+        assert.equal(actor.reacquiresTarget, addition > 0)
+        assert.equal(actor.targetId, 'near')
+        assert.ok(Math.abs(actor.remainingDamage - .3888) < 1e-6)
+        assert.deepEqual(actor.hitTargetIds, [])
+      }
+    }
+  }
+  const north = boulderTarget('north', 0, -31)
+  const south = boulderTarget('south', 0, 31, 1)
+  const { release } = releasedBoulder(2, 1, [north, south])
+  assert.deepEqual(release.actors.map(actor => actor.buildId === 1006 ? actor.targetId : null), ['north', 'south'])
+})
+
+test('EBoulder target loss, inactive final sample, hit-list rejection and exhausted steering windows follow retail', () => {
+  const replacement = boulderTarget('replacement', 150, 100)
+  let actor = { ...releasedBoulder(1, 1.5).first, targetId: 'removed' }
+  const moved = stepNativeWeldWorldActor(actor, createNativeRng(17))
+  assert.ok(moved.actor?.kind === 'weld-persistent' && moved.actor.buildId === 1006)
+  actor = finishNativeWeldEtherealBoulderGuidance(moved.actor, [replacement])
+  assert.equal(actor.targetId, 'replacement')
+  assert.equal(actor.headingDegrees, 90, 'replacement does not steer in its admission tick')
+  const inactive = { ...replacement, active: false }
+  actor = finishNativeWeldEtherealBoulderGuidance(actor, [inactive])
+  assert.equal(actor.targetId, null)
+  assert.ok(actor.headingDegrees > 90, 'resolved inactive target contributes one final turn')
+  const frozen = actor.headingDegrees
+  actor = finishNativeWeldEtherealBoulderGuidance(actor, [replacement])
+  assert.equal(actor.headingDegrees, frozen, 'null targets never poll')
+  const rejected = finishNativeWeldEtherealBoulderGuidance({ ...actor,
+    targetId: 'removed', reacquiresTarget: true, hitTargetIds: ['replacement'] },
+  [replacement, boulderTarget('farther', 200, 200, 1)])
+  assert.equal(rejected.targetId, null)
+  assert.equal(rejected.reacquiresTarget, false, 'already-hit nearest rejects without fallback')
+  const absent = releasedBoulder(1, 1.5, []).first
+  assert.equal(absent.reacquiresTarget, false)
+  assert.equal(finishNativeWeldEtherealBoulderGuidance({ ...absent, flightTicks: 1 }, [replacement]).targetId, null)
+  let state = { ...releasedBoulder().first, trackingTicksRemaining: 1 }
+  for (let tick = 0; tick < 1300; tick += 1) {
+    const result = stepNativeWeldWorldActor(state, createNativeRng(17))
+    assert.ok(result.actor?.kind === 'weld-persistent' && result.actor.buildId === 1006)
+    state = finishNativeWeldEtherealBoulderGuidance(result.actor, [replacement])
+  }
+  assert.equal(state.trackingTicksRemaining, 0)
+  assert.equal(state.headingDegrees, 90)
+  assert.ok(Math.abs(state.origin.x - 2925) < .001)
+  const blocked = stepNativeWeldWorldActor(state, createNativeRng(17), () => false)
+  assert.equal(blocked.actor, null)
+  assert.ok(blocked.terrainContact, 'terrain still terminates the individual advanced rock')
+})
+
+
+test('EBoulder weak downgrade survives refunded holding and native steering keeps its deadband and cap', () => {
+  const birth = createNativeWeldPersistentActor({ buildId: 1006, direction: { x: 1, y: 0 },
+    id: 1, origin: { x: 0, y: 0 }, ownerId: 'p1', tick: 0,
+    vector: [12, 3, 4, 2.5, 2.5, 1], worldKey: 'boneyard:1' })
+  const weak = updateNativeWeldPersistentActor(birth, { x: 0, y: 0 }, { x: 1, y: 0 }, createNativeRng(1), { underpowered: true })
+  assert.ok(weak.actor.buildId === 1006)
+  assert.equal(weak.actor.quantity, 1)
+  assert.equal(weak.actor.turnInput, 1)
+  assert.equal(weak.actor.trackingTicksRemaining, 150)
+  assert.equal(weak.actor.reacquiresTarget, false)
+  const refunded = updateNativeWeldPersistentActor(weak.actor, { x: 0, y: 0 }, { x: 1, y: 0 }, weak.rng)
+  assert.ok(refunded.actor.buildId === 1006)
+  assert.equal(refunded.actor.turnInput, 1, 'native turn-input write is confined to birth and weak downgrade')
+  assert.equal(refunded.actor.quantity, 1)
+  assert.equal(refunded.actor.trackingTicksRemaining, 2750)
+  assert.equal(refunded.actor.reacquiresTarget, true)
+  const rock = { ...releasedBoulder().first, flightTicks: 1, turnAccumulator: 9.999 }
+  const aligned = finishNativeWeldEtherealBoulderGuidance(rock, [boulderTarget('near', 100, 0)])
+  assert.equal(aligned.headingDegrees, 90, 'within one degree the native sign turn is zero')
+  assert.equal(aligned.turnAccumulator, 10)
+})

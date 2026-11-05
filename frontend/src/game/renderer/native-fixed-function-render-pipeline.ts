@@ -8,6 +8,7 @@ import {
   roundPixelsBitGl,
   textureBitGl,
   type GlMeshAdaptor,
+  type GlProgram,
   type Mesh,
   type MeshPipe,
   type Renderer,
@@ -66,6 +67,8 @@ const NATIVE_FIXED_FUNCTION_COLOR_BIT_GL = {
 }
 
 const installedRenderers = new WeakSet<object>()
+// Two immutable RGB programs are shared; per-view shaders own texture bindings.
+const texturedVertexMeshPrograms = new Map<number, GlProgram>()
 
 export function installNativeFixedFunctionRenderPipeline(
   renderer: Renderer,
@@ -88,7 +91,7 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
 
   const meshAdaptor = nativeRenderer.renderPipes.mesh?.['_adaptor'] as GlMeshAdaptor | undefined
   if (!meshAdaptor) return
-  const meshShaders = [0, 1, 2, 3, 4, 5, 6, 7].map(createNativeFixedFunctionMeshShader)
+  const meshShaders = [0, 1, 2, 3, 4, 5, 6, 7].map(mode => createNativeFixedFunctionMeshShader(mode))
   const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
   const originalMeshDestroy = meshAdaptor.destroy
@@ -108,7 +111,7 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
   }
 }
 
-function createNativeFixedFunctionMeshShader(mode: number): Shader {
+function createNativeFixedFunctionMeshShader(mode: number, textureColor = false): Shader {
   const nativeColorBit = {
     // Stryker disable next-line StringLiteral: Equivalent: shader bit names only delimit comments in generated GLSL.
     name: `native-fixed-function-${mode}`,
@@ -117,11 +120,12 @@ function createNativeFixedFunctionMeshShader(mode: number): Shader {
       end: NATIVE_FIXED_FUNCTION_FRAGMENT_SHADER_SOURCE.replace(
         /nativeTextureModeValue/g,
         `${mode % 4}.0`,
-      ),
+      ).replace('uIgnoreTextureColor > 0.5', textureColor ? 'false' : 'uIgnoreTextureColor > 0.5'),
     },
   }
-  return new Shader({
-    glProgram: compileHighShaderGlProgram({
+  let glProgram = textureColor ? texturedVertexMeshPrograms.get(mode) : undefined
+  if (glProgram === undefined) {
+    glProgram = compileHighShaderGlProgram({
       // Stryker disable next-line StringLiteral: Equivalent: SHADER_NAME is diagnostic and is never read by the shader.
       name: `native-fixed-function-mesh-${mode}`,
       bits: [
@@ -131,7 +135,11 @@ function createNativeFixedFunctionMeshShader(mode: number): Shader {
         mode < 4 ? NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL : NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
         nativeColorBit,
       ],
-    }),
+    })
+    if (textureColor) texturedVertexMeshPrograms.set(mode, glProgram)
+  }
+  return new Shader({
+    glProgram,
     resources: {
       nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       uTexture: Texture.EMPTY.source,
@@ -140,6 +148,16 @@ function createNativeFixedFunctionMeshShader(mode: number): Shader {
       },
     },
   })
+}
+
+/** Texture-RGB draw with owned bindings and a borrowed, shared compiled program. */
+export function createNativeTexturedVertexMeshShader(texture: Texture): Shader & { texture: Texture } {
+  const mode = texture.source.alphaMode === 'no-premultiply-alpha' ? 4 : 5
+  const shader = Object.assign(createNativeFixedFunctionMeshShader(mode, true), { texture })
+  shader.resources.uTexture = texture.source
+  shader.resources.uSampler = texture.source.style
+  shader.resources.textureUniforms.uniforms.uTextureMatrix = texture.textureMatrix.mapCoord
+  return shader
 }
 
 export function nativeStockTextureFromImage(

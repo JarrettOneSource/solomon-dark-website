@@ -102,6 +102,7 @@ interface SessionRecord {
   id: string
   kind: 'hub' | 'private'
   tickets: Map<string, HostTicket>
+  reconnectRequests: Map<string, { credential: string; expiresAt: number }>
 }
 
 interface HostTicket {
@@ -229,6 +230,7 @@ export async function startGameSessionSupervisor(
     id: 'shared-hub',
     kind: 'hub',
     tickets: hubTickets,
+    reconnectRequests: new Map(),
   }
 
   const websocketServer = new WebSocketServer({
@@ -261,6 +263,8 @@ export async function startGameSessionSupervisor(
         ),
         hubPlayers: hubHost.hubPlayerCount(),
         hubHumanPlayers: hubHost.humanPlayerCount(),
+        recoveringPlayers: hubHost.recoveringPlayerCount() + [...sessions.values()].reduce(
+          (total, session) => total + session.host.recoveringPlayerCount(), 0),
         bots: hubHost.botCount(),
         parties: hubHost.partyCount(),
         runs: hubHost.runCount(),
@@ -457,6 +461,44 @@ export async function startGameSessionSupervisor(
       }).catch(() => {
         sendJson(response, 400, { error: 'A valid game admission is required.' })
       })
+      return
+    }
+    if (request.method === 'POST' && path === '/admin/reconnect') {
+      void readJsonObject(request).then(body => {
+        if ((body.sessionId !== null && (typeof body.sessionId !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(body.sessionId)))
+          || typeof body.playerId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(body.playerId)
+          || typeof body.resumeToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(body.resumeToken)
+          || typeof body.requestId !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(body.requestId)
+          || (body.leaderboardUserId !== null && (!Number.isSafeInteger(body.leaderboardUserId)
+            || Number(body.leaderboardUserId) < 1 || Number(body.leaderboardUserId) > 0x7fffffff))) {
+          sendJson(response, 400, { error: 'A valid reconnect capability is required.' })
+          return
+        }
+        const session = body.sessionId === null ? hubSession : sessions.get(body.sessionId)
+        if (!session || session.closing || session.editorTest) {
+          sendJson(response, 404, { error: 'The original game authority is no longer available.' })
+          return
+        }
+        const key = `${body.playerId}:${body.requestId}`
+        const target = session.host.reserveReconnect(body.playerId, body.resumeToken,
+          body.leaderboardUserId as number | null, body.requestId)
+        if (!target) {
+          sendJson(response, 403, { error: 'That reconnect capability is no longer current.' })
+          return
+        }
+        let reservation = session.reconnectRequests.get(key)
+        if (!reservation) {
+          reservation = { credential: randomBytes(32).toString('base64url'), expiresAt: target.expiresAt }
+          session.reconnectRequests.set(key, reservation)
+          session.tickets.set(reservation.credential, { admission: target.admission, expiresAt: target.expiresAt })
+        }
+        sendJson(response, 201, {
+          credential: reservation.credential,
+          path: session.kind === 'hub' ? GAME_HUB_PATH : `${GAME_SESSION_PATH_PREFIX}${session.id}`,
+          protocol: GAME_PROTOCOL_NAME,
+          sessionKind: session.kind === 'hub' ? 'global-hub' : 'private-college',
+        })
+      }).catch(() => sendJson(response, 400, { error: 'A valid reconnect request is required.' }))
       return
     }
     if (request.method === 'POST' && path === '/admin/hub/tickets') {
@@ -1133,6 +1175,7 @@ export async function startGameSessionSupervisor(
       id,
       kind: 'private',
       tickets,
+      reconnectRequests: new Map(),
     }
     if (closed) {
       await sessionHost.close()
@@ -1318,6 +1361,7 @@ export async function startGameSessionSupervisor(
       || !session.claimed
       || session.activeProxies > 0
       || session.host.humanPlayerCount() > 0
+      || session.host.recoveringPlayerCount() > 0
     ) return
     closeSessionInBackground(session, 'empty-after-use')
   }
@@ -1327,6 +1371,9 @@ export async function startGameSessionSupervisor(
   }
 
   function pruneHostTickets(session: SessionRecord, now: number): void {
+    for (const [id, reservation] of session.reconnectRequests) {
+      if (reservation.expiresAt <= now) session.reconnectRequests.delete(id)
+    }
     for (const [credential, ticket] of session.tickets) {
       if (ticket.expiresAt > now) continue
       session.tickets.delete(credential)
@@ -1549,7 +1596,7 @@ function claimHostTicket(
 }
 
 function playerTicketCount(tickets: ReadonlyMap<string, HostTicket>): number {
-  return [...tickets.values()].filter(ticket => ticket.admission.observer === undefined).length
+  return [...tickets.values()].filter(ticket => ticket.admission.observer === undefined && ticket.admission.reconnect === undefined).length
 }
 
 function normalizePartyJoinCode(value: unknown): string {

@@ -443,6 +443,7 @@ export async function prepareModHost(options: Readonly<{
           source,
           playerId,
           nativeOfferSequence,
+          resolveBoast,
         )
         if (!selected) throw new Error('native skill offer is stale')
         options.state.write(selected)
@@ -1186,7 +1187,7 @@ function createHostIntentAdapter(options: Readonly<{
             continue
           }
           if (intent.kind === 'select_skill') {
-            candidate = selectModPlayerSkill(candidate, intent.fields, context)
+            candidate = selectModPlayerSkill(candidate, intent.fields, context, options.resolveBoast)
             continue
           }
           const result = applyIntent(

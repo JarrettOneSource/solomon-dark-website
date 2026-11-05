@@ -1,5 +1,57 @@
 # 2026-08-24 — Complete survival-Hub NPC dialogue and services
 
+## Queued random-choice Boasts
+
+Report 128's original last-level-only allegation is withdrawn. Its current
+October 20 text instead reports manual choices after a bulk developer XP grant.
+The November 1 source recheck confirms that correction; the separate level-50
+shortcut suggestion remains context. No new shortcut is part of this change.
+
+The recovered stock contract below assigns Boast 3 one authoritative
+`Integer(option_count)` choice per newly constructed offer. A bulk XP grant
+queues several offers; accepting one constructs the next before its random
+choice is drawn. The policy belongs to the accepted Boast, not the XP-grant
+call. Failed or nonrandom Boasts leave offers interactive. The existing
+100-tick picker acceptance, skill construction RNG, and stale-offer rejection
+remain unchanged.
+
+Current source evidence: Website `f87dd326` assigns automatic choices at XP,
+bonus-choice, and rejoin admission, but `selectGameSimulationPlayerSkill`
+omits that operation after constructing the next queued offer. Detached
+selection stages through the same operation. The live host and Lua controller
+also need to retain the admitted Boast resolver on that continuation. Rust
+`6aad9630` already contains the accepted native-choice correction from
+`4481fc8e`; its `replace_skill_with_mod` continuation, like Website's admitted
+mod-skill replacement, still omits the policy. Mod skill choices are a Website
+extension and keep their existing manual selection contract.
+
+System boundary: authoritative construction and continuation of a queued native
+offer under an accepted stock or admitted authored Boast. This does not reopen
+Boast failure notices, the Skills/Boasts view, or the authored skill catalog.
+
+| Member | Contract and source | Disposition |
+| --- | --- | --- |
+| Stock Boast 3 | Existing stock selection/picker recovery; one host RNG choice per constructed offer | recovered-pending-port for Pixi continuation; Rust native continuation verified unchanged |
+| Stock Boasts 0, 1, 2, 4, no selection, failed Boast 3 | Existing `boastUsesRandomSkillChoices` / `uses_random_skill_choices_with_rules` policy keeps manual offers | verified-already-at-parity; negative continuation regressions required |
+| Admitted authored random Boast | Existing namespaced resolver contract; use the current world's definition for every queued offer | recovered-pending-port for Pixi continuation; Rust native continuation verified unchanged |
+| Direct, detached/rejoin, host, Lua, and bot native selections | Every accepted choice constructs first, assigns policy second, then updates the shared barrier; rejected choices consume no RNG | recovered-pending-port for Pixi; existing Rust native callers retain extensions |
+| Admitted mod-skill replacement | Preserve manual mod acceptance, then apply the same Boast policy to the next native offer | recovered-pending-port in both clients |
+| XP, read-book/bonus choice, loot bonus, rejoin admission | Existing first-offer policy owner remains canonical | verified-already-at-parity; no algorithm change |
+| Picker reveal, 100-tick automatic acceptance, sounds, manual Sorceror controls | Existing presentation owner; automatic offers disable manual native controls | verified-already-at-parity; actual combined browser journey still required |
+| New instant-level wizard command and unrelated feedback/progress UI | Separate feature request or report owner | out-of-system |
+
+The continuation now reuses the existing automatic-choice helper after accepted
+queue consumption and threads the current resolver through its real callers.
+Rust's admitted skill service uses the equivalent session operation with its
+prepared runtime. Public regressions cover stock and authored bulk queues,
+independent RNG ordering, rejected stale choices, nonrandom/failed cases,
+detached continuation, actual Lua selection, and admitted mod replacement.
+The provisional dispositions above retain the combined acceptance requirement.
+The coordinator owns the exact combined M2 gate and real browser journey:
+select Boast 3, bulk-grant XP, observe every offer automatically resolve, then
+verify the barrier clears and ordinary saved Leave/Continue retains progression.
+Focused tests alone are not that browser acceptance.
+
 ## Reported smell and parity question
 
 - Reported web behavior: named NPCs open a flat intro followed by Done.

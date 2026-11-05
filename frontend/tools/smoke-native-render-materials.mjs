@@ -231,7 +231,10 @@ try {
     console.log(JSON.stringify({ staff }))
     assert.equal(staff.frames.length, 6)
     assert.ok(staff.frames.every(row => row.changedChannels === 0 && row.visiblePixels > 50))
-    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive && row.positionBufferUpdates === 0))
+    // The capture shader requires a standalone aura, so each changed frame must
+    // upload its geometry once. Rendering must not upload it again.
+    assert.ok(staff.frames.every(row => row.updatePositionUpdates === 1 && row.renderPositionUpdates === 0))
+    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive && row.positionBufferUpdates === 3))
     for (const options of [
       { finishPremultiplied: false, installTextureAlphaShaders: false },
       { finishPremultiplied: true, installTextureAlphaShaders: false },
@@ -360,6 +363,14 @@ try {
 }
 
 function expectedPixel(sample) {
+  if (sample.role === 'textured-capture') {
+    // This explicit pre-material draw preserves texture RGB even while the
+    // surrounding body capture selects diffuse-only color.
+    const texture = sample.rgba.slice(0, 3).map(channel => channel / (sample.premultiplied ? sample.rgba[3] : 255))
+    const vertex = [128 / 255, 192 / 255, 1]
+    const alpha = sample.rgba[3] / 255 * 128 / 255
+    return [...texture.map((channel, index) => channel * vertex[index] * alpha * 255), alpha * alpha * 255]
+  }
   if (sample.role === 'drawable-color-mode') {
     const texture = sample.diffuse ? [1, 1, 1] : sample.rgba.slice(0, 3).map(channel => (
       channel / (sample.premultiplied ? sample.rgba[3] : 255)

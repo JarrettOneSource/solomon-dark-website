@@ -158,7 +158,10 @@ export function InventoryActions({
         onNotice(HUB_ROBE_REMOVAL_MSGBOX)
         return
       }
-      if (source.equipmentSlot !== null) onAction({ type: 'unequip', slot: source.equipmentSlot })
+      if (source.equipmentSlot !== null) onAction({
+        type: 'unequip', slot: source.equipmentSlot,
+        destinationSackId: parentSackId, destinationSlot: null,
+      })
       return
     }
     const item = findInventoryItem(economy.backpack, source.itemId)

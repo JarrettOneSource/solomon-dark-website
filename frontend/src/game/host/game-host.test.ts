@@ -1156,6 +1156,86 @@ test('private College projects one party, supports Party-ID reservation, and che
   assert.equal(host.capacityParticipantCount(), 3)
 })
 
+for (const sharedHub of [false, true]) for (const startBeforeAdmission of [false, true]) {
+  test(`Report103 ${sharedHub ? 'shared' : 'private'} ordinary party admission ${startBeforeAdmission ? 'rejects a stale ticket' : 'accepts a prepared Hub ticket'} and preserves saves`, async context => {
+    let partyId: string | null = null
+    const logs: GameServerLogEntry[] = []
+    const reservationId = 'report103-reservation'
+    const host = await startGameHost({
+      authentication: {
+        kind: 'tickets',
+        claim: credential => credential === 'leader-ticket'
+          ? { content: EMPTY_SHARED_CONTENT, leaderboardUserId: null }
+          : credential === 'guest-ticket' && partyId
+            ? {
+                content: EMPTY_SHARED_CONTENT,
+                leaderboardUserId: null,
+                partyId,
+                reservationId,
+              }
+            : null,
+      },
+      log: entry => { logs.push(entry) },
+      sharedHub,
+      sessionKind: sharedHub ? 'global-hub' : 'private-college',
+      snapshotRate: 100,
+    })
+    context.after(() => host.close())
+    const leader = await join(host.address.url, 'leader-ticket', FIRST_CHARACTER)
+    context.after(() => closeSocket(leader.socket))
+    const listing = host.publicParties()[0]
+    assert.ok(listing)
+    const target = host.partyTargetByListingId(listing.id)
+    assert.ok(target)
+    partyId = target.id
+    assert.equal(host.reservePartyJoin(partyId, reservationId, performance.now() + 10_000), null)
+    if (startBeforeAdmission) {
+      const ready = completeInitialGameplayReadiness([leader.socket])
+      const loaded = nextMessage(leader.socket, message => message.type === 'server-boneyard-loaded')
+      leader.socket.send(encodeGameMessage({ type: 'client-start-match', boneyardId: 'default-random' }))
+      await loaded
+      await ready
+    }
+    const guest = await openSocket(host.address.url)
+    context.after(() => closeSocket(guest))
+    const admission = nextMessage(guest, message => (
+      message.type === 'server-welcome' || message.type === 'server-disconnect'
+    ))
+    guest.send(encodeGameMessage({
+      type: 'client-hello',
+      enhancedEffects: true,
+      onlinePreferences: ONLINE_PREFERENCES,
+      profile: EMPTY_PLAYER_PROFILE,
+      cheatsEnabled: false,
+      protocolVersion: GAME_PROTOCOL_VERSION,
+      credential: 'guest-ticket',
+      character: SECOND_CHARACTER,
+    }))
+    const result = await admission
+    const owners = [{ socket: leader.socket, id: leader.welcome.playerId }]
+    if (startBeforeAdmission) {
+      assert.equal(result.type, 'server-disconnect', 'an ordinary party ticket cannot join combat')
+      assert.equal(result.reason, 'That party admission has expired.')
+      assert.equal(host.capacityParticipantCount(), 1)
+    } else {
+      assert.equal(result.type, 'server-welcome')
+      context.after(installSnapshotAcknowledgements(guest))
+      owners.push({ socket: guest, id: result.playerId })
+      assert.equal(host.capacityParticipantCount(), 2)
+    }
+    for (const [index, owner] of owners.entries()) {
+      const receipt = leaveSaveMessages(owner.socket, index + 1)
+      owner.socket.send(encodeGameMessage({ type: 'client-save-before-leave', requestId: index + 1 }))
+      const { checkpoint } = await receipt
+      const restored = restoreGameSaveDocument(checkpoint.save)
+      assert.equal(restored.playerId, owner.id)
+      assert.ok(restored.state.playerEntities.identities.some(identity => identity.playerId === owner.id))
+      assert.equal(restored.state.world.kind, startBeforeAdmission ? 'boneyard' : 'hub')
+    }
+    assert.deepEqual(logs.filter(entry => entry.level === 'error'), [])
+  })
+}
+
 test('reserved party transfer imports one durable profile into an existing private College', async (context) => {
   let partyId: string | null = null
   const reservationId = 'reserved-profile-transfer'
@@ -4357,8 +4437,7 @@ test('private College retires a restored Tutorial when its final actor disconnec
   )
 
   await closeSocket(socket)
-  await waitFor(() => host.humanPlayerCount() === 0)
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await waitFor(() => host.humanPlayerCount() === 0 && host.capacityParticipantCount() === 0)
 
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.runCount(), 0)
@@ -4509,8 +4588,7 @@ test('private College retires an ordinary Boneyard instead of ticking it without
   )
 
   await closeSocket(socket)
-  await waitFor(() => host.humanPlayerCount() === 0)
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await waitFor(() => host.humanPlayerCount() === 0 && host.capacityParticipantCount() === 0)
 
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.runCount(), 0)
@@ -4541,8 +4619,7 @@ test('shared Hub retires the stock Tutorial when its final actor disconnects', a
   assert.equal(loadedMessage.boneyard.choice.id, 'stock-tutorial')
 
   await closeSocket(client.socket)
-  await waitFor(() => host.humanPlayerCount() === 0)
-  await new Promise(resolve => setTimeout(resolve, 50))
+  await waitFor(() => host.humanPlayerCount() === 0 && host.capacityParticipantCount() === 0)
 
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.runCount(), 0)
@@ -5292,7 +5369,8 @@ test('saved party member catches up detached while the live party run continues'
   await waitFor(() => host.humanPlayerCount() === 1)
   assert.equal(host.runCount(), 1)
   await closeSocket(returningSocket)
-  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0)
+  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0
+    && host.capacityParticipantCount() === 0)
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.partyCount(), 0)
   assert.equal(host.partyRejoinTarget(token), null)
@@ -5352,7 +5430,9 @@ test('staged catch-up loses its capability when the final live peer disconnects'
     code: 1000,
     reason: 'active party run ended',
   })
-  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0)
+  // The client close event can precede the host's transport-release callback.
+  await waitFor(() => host.humanPlayerCount() === 0 && host.runCount() === 0
+    && host.capacityParticipantCount() === 0)
   assert.equal(host.capacityParticipantCount(), 0)
   assert.equal(host.partyCount(), 0)
   assert.equal(host.partyRejoinTarget(token), null)

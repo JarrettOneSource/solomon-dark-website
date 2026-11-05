@@ -467,7 +467,7 @@ test('selected primary -1 owns the pre-Create fallback and Robe prop branch', ()
       primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId },
       velocity: { x: 0, y: 0 },
       walkCyclePrimary: 0,
-    })
+    }, 1, null, null, 0, null)
     assert.equal(selected.unselectedPrimaryAttachment, false, `${selectedPrimaryId}`)
     assert.equal(selected.bareAttachmentPose, 0, `${selectedPrimaryId}`)
     assert.equal(playerCharacterRobeFixedPose(
@@ -487,13 +487,54 @@ test('ordinary no-weapon art never reuses a Staff action pose as a Hand-bank ind
     velocity: { x: 0, y: 0 },
     walkCyclePrimary: 0,
   }
-  assert.equal(createPlayerCharacterDrawPlan(state).bareAttachmentPose, 0)
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, null, 0, null).bareAttachmentPose, 0)
   assert.equal(createPlayerCharacterDrawPlan({
     ...state,
     primaryCast: { ...state.primaryCast, actionTick: 19 },
-  }).bareAttachmentPose, null)
-  assert.equal(createPlayerCharacterDrawPlan(state, 1, 4).bareAttachmentPose, null)
-  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, { weaponKind: 'staff', progress: 1 }).bareAttachmentPose, null)
+  }, 1, null, null, 0, null).bareAttachmentPose, 0)
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, 4, null, 0, null).bareAttachmentPose, 0)
+})
+
+test('bare Constant draws accepted hand pose 2 and Wand admission keeps the native X/X query', () => {
+  const state = {
+    config: FIRE_CONFIG, gaitDegrees: 0, headingIndex: 0,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId: 16,
+      actionTick: 1, channelActive: true },
+    velocity: { x: 0, y: 0 }, walkCyclePrimary: 0,
+  }
+  assert.equal(createPlayerCharacterDrawPlan(state, 1, null, null, 0, null).bareAttachmentPose, 2)
+  const wand = createPlayerCharacterDrawPlan(state, 1, null, null, 0, 'wand')
+  assert.deepEqual(wand.orbOffset, { x: 14.5, y: -50.5 })
+  assert.deepEqual(wand.orbPasses, { frontBase: true, frontOverlay: false })
+})
+
+test('bare drawing consumes admitted action poses through opening, terminal, secondary and Spin states', () => {
+  const state = {
+    config: FIRE_CONFIG, gaitDegrees: 0, headingIndex: 6,
+    primaryCast: { ...createIdlePlayerPrimaryCast(), selectedPrimaryId: 16 },
+    velocity: { x: 0, y: 0 }, walkCyclePrimary: 0,
+  }
+  for (const pose of [0, 1, 2, 3] as const) {
+    const plan = createPlayerCharacterDrawPlan({ ...state, primaryCast: {
+      ...state.primaryCast, handCast1: { firstPose: 3, progress: 0, rate: .095, pose, done: pose === 2 },
+    } }, 1, null, null, .45, null, 45)
+    assert.equal(plan.bareAttachmentPose, pose)
+    assert.equal(plan.attachmentPose, pose)
+    assert.equal(plan.orbSpecialFront, pose !== 2)
+  }
+  const secondary = createPlayerCharacterDrawPlan(state, 1, null, {
+    weaponKind: null, progress: 0, handPose: 3, handDone: true,
+  }, 0, null)
+  assert.equal(secondary.bareAttachmentPose, 3, 'the accepted terminal pose wins over progress')
+  assert.equal(secondary.attachmentPose, 3)
+  const spin = createPlayerCharacterDrawPlan(state, 1, null, 'spin', 0, null)
+  assert.equal(spin.bareAttachmentPose, 3)
+  assert.equal(spin.attachmentPose, 3)
+  const channel = { ...state, primaryCast: { ...state.primaryCast, channelActive: true, actionTick: 0 } }
+  assert.equal(createPlayerCharacterDrawPlan(channel, 1, null, null, 0, null).bareAttachmentPose, 0)
+  assert.equal(createPlayerCharacterDrawPlan({ ...channel, primaryCast: {
+    ...channel.primaryCast, actionTick: 1,
+  } }, 1, null, null, 0, null).bareAttachmentPose, 2)
 })
 
 test('equipped effects use socket direction and native pose/pulse gates', () => {

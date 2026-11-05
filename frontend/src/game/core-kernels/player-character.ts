@@ -1,5 +1,6 @@
 import { actorHeadingFromVector, actorHeadingIndex } from './actor-heading.ts'
 import type { Vector2 } from './vector.ts'
+import type { NativePlayerHandCast1 } from './native-player-hand-action.ts'
 
 export const WIZARD_ELEMENTS = ['air', 'earth', 'ether', 'fire', 'water'] as const
 export const WIZARD_DISCIPLINE_CHOICES = ['arcane', 'body', 'mind'] as const
@@ -36,6 +37,7 @@ export interface PlayerPrimaryCastState {
   etherBlastCharge: number
   etherBlastChargeCueSequence: number
   fizzleSequence: number
+  handCast1: NativePlayerHandCast1 | null
   held: boolean
   lastWeldPlaybackRate: number | null
   lastWeldSoundVariant: number | null
@@ -132,6 +134,7 @@ export function createIdlePlayerPrimaryCast(): PlayerPrimaryCastState {
     etherBlastCharge: 0,
     etherBlastChargeCueSequence: 0,
     fizzleSequence: 0,
+    handCast1: null,
     held: false,
     lastWeldPlaybackRate: null,
     lastWeldSoundVariant: null,

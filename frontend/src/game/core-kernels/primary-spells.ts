@@ -1,4 +1,5 @@
 import { drawNativeFlameCameraDisplacement } from './native-weld-flame-camera.ts'
+import { createNativePlayerHandCast1, stepNativePlayerHandCast1 } from './native-player-hand-action.ts'
 import type { WriteNativeScreenFlash } from './native-screen-flash.ts'
 import { nativeAirContactLifetimeTicks } from './native-air-presentation.ts'
 import {
@@ -532,10 +533,13 @@ export interface PrimarySpellSimulationState {
 }
 
 export interface PrimarySpellCastAuthority {
+  /** Independent Puppet time/slow scale; Faster Caster belongs to the born rate. */
+  actionTimeFactor?: number
   weaponKind: NativePlayerWeaponKind
   alive?: boolean
   availableMana: number
   castProgressFactor: number
+  handCastFactor?: number
   eligible: boolean
   planeActive?: boolean
   primarySkill: NativePrimarySkillProfile
@@ -1235,8 +1239,11 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       ? null
       : authority?.primarySkill.kind ?? null
     const castClockElement = primaryElement ?? 'fire'
+    // Steam 0x00542D20 scales its debit and funded contact by the class cast rate.
+    const steamCastFactor = authority?.primarySkill.kind === 'weld'
+      && authority.primarySkill.buildId === 1005 ? authority.castProgressFactor : 1
     const manaCost = authority
-      ? primarySpellManaCost(castClockElement, authority.primarySkill)
+      ? primarySpellManaCost(castClockElement, authority.primarySkill) * steamCastFactor
       : 0
     let availableMana = authority?.availableMana ?? 0
     manaSpent[playerId] = 0
@@ -1270,7 +1277,9 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       ? authority.primarySkill.castKind === 'one-shot'
       : primaryElement === 'ether' || primaryElement === 'fire'
     const castProgressFactor = authority?.castProgressFactor ?? 1
-    const actionAvailable = previous.primaryCast.actionTick < 0 || (
+    const actionAvailable = previous.primaryCast.handCast1 !== null
+      ? previous.primaryCast.handCast1.done
+      : previous.primaryCast.actionTick < 0 || (
       oneShotPrimary
       && !previous.primaryCast.channelActive
       && previous.primaryCast.actionTick > primaryCastCompletionProgress(castClockElement)
@@ -1292,11 +1301,38 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
       castClockElement,
       castProgressFactor,
     )
-    if (!oneShotPrimary && primaryCast.oneShotAttackPoseHeld) {
-      primaryCast = { ...primaryCast, oneShotAttackPoseHeld: false }
+    const handStep = stepNativePlayerHandCast1(
+      previous.primaryCast.handCast1,
+      authority?.actionTimeFactor ?? 1,
+    )
+    primaryCast = { ...primaryCast, handCast1: handStep.action }
+    if (previous.primaryCast.handCast1 !== null) {
+      primaryCast = {
+        ...primaryCast,
+        actionTick: acceptedCast ? 0 : handStep.action === null
+          ? -1 : previous.primaryCast.actionTick + 1,
+      }
+    }
+    if (authority?.weaponKind === null && previous.primaryCast.channelActive) {
+      // HandConstant writes K2 on its first update even when time/cast speed is zero.
+      primaryCast = { ...primaryCast, actionTick: 1 }
+    }
+    if (acceptedCast && oneShotPrimary && authority.weaponKind === null) {
+      const birth = createNativePlayerHandCast1(
+        authority.primarySkill,
+        authority.handCastFactor ?? castProgressFactor,
+        previous.primaryCast.handCast1?.pose ?? 0,
+        rng,
+      )
+      rng = birth.rng
+      primaryCast = { ...primaryCast, handCast1: birth.action }
     }
     primaryCast = {
       ...primaryCast,
+      // The admitted HandCast1 can finish before or after the Staff clock.
+      // Update the latch only after the action owner has resolved its lifetime.
+      oneShotAttackPoseHeld: oneShotPrimary && primaryCast.oneShotAttackPoseHeld
+        && (primaryCast.held || primaryCast.actionTick >= 0),
       selectedPrimaryAgeTicks: nativeSelectedPrimaryAge + 1,
       selectedPrimaryId,
       weaponPulse: Math.fround(
@@ -1366,6 +1402,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ...nextPlayer.primaryCast,
           actionTick: -1,
           channelActive: false,
+          handCast1: null,
           oneShotAttackPoseHeld: false,
           underpowered: false,
         },
@@ -1492,8 +1529,10 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
 
     const emissionProgress = primaryCastEmissionProgress(castClockElement)
     if (
-      nextPlayer.primaryCast.actionTick >= emissionProgress
-      && previous.primaryCast.actionTick < emissionProgress
+      (previous.primaryCast.handCast1 !== null || nextPlayer.primaryCast.handCast1 !== null
+        ? handStep.emitted
+        : nextPlayer.primaryCast.actionTick >= emissionProgress
+          && previous.primaryCast.actionTick < emissionProgress)
       && oneShotPrimary
     ) {
       if (
@@ -1777,7 +1816,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
             const channelDamage = primarySpellChannelDamage(
               authority.primarySkill,
               underpowered,
-            )
+            ) * (underpowered ? 1 : steamCastFactor)
             channelEmissions.push({
               ...(buildId === 1003 ? { flameLashPresentation: {
                 cameraDisplacement: flameCamera!.displacement,
@@ -2001,6 +2040,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                 firstChildId: nextId,
                 registerWorldPainter,
                 rng,
+                targets: context.spellTargets(playerId),
                 tick: context.tick,
               })
               rng = releasedActor.rng
@@ -2013,6 +2053,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
                   ...nextPlayer.primaryCast,
                   actionTick: -1,
                   channelActive: false,
+                  handCast1: null,
                   targetId: null,
                 },
               }
@@ -2355,6 +2396,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           ...nextPlayer.primaryCast,
           actionTick: -1,
           channelActive: false,
+          handCast1: null,
           targetId: null,
           underpowered: false,
         },
@@ -2367,6 +2409,7 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
           registerWorldPainter,
           rng,
           context.tick,
+          context.spellTargets(playerId),
         )
         transients = releasedWeld.transients
         nextId = releasedWeld.nextId
@@ -2414,6 +2457,7 @@ function releaseOwnedNativeWeldPersistentActors(
   registerWorldPainter: RegisterNativeWorldPainter,
   sourceRng: NativeRngState,
   tick: number,
+  targets: readonly PrimarySpellTarget[],
 ): {
   readonly nextId: number
   readonly rng: NativeRngState
@@ -2450,6 +2494,7 @@ function releaseOwnedNativeWeldPersistentActors(
     }
     const released = releaseNativeWeldPersistentActor({
       actor: effect,
+      targets,
       firstChildId: nextId,
       registerWorldPainter,
       rng,
@@ -2690,14 +2735,11 @@ function advancePrimaryCast(
     }
   }
   if (acceptedCast) actionTick = 0
-  const oneShotAttackPoseHeld = previous.oneShotAttackPoseHeld
-    && (held || actionTick >= 0)
   return {
     ...previous,
     actionTick,
     castSequence: acceptedCast ? previous.castSequence + 1 : previous.castSequence,
     held,
-    oneShotAttackPoseHeld,
     underpowered: acceptedCast ? false : previous.underpowered,
   }
 }

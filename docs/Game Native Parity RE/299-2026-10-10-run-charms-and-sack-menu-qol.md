@@ -1,5 +1,44 @@
 # 2026-10-10 — Active-run charms and Sack menu quality of life
 
+## Charm-loss notification
+
+Report 101 authorizes a brief `CHARM EFFECT LOST!` notice in the existing
+fixed-tick world notification lane. This is a deliberate presentation addition;
+the recovered native loss branch below still supplies only its sound. The
+accepted `player-charm-lost` event names its owner but does not identify which
+until-hurt charm ended, so the notice does not guess Reverie or Serendipity from
+current flags or imply that an owned charm was removed.
+
+Reverie alone, Serendipity alone and both together use the same one-event notice.
+The client session seeds retained events and deduplicates fresh events before
+presentation; other owners and unrelated event kinds produce no charm notice.
+Zero, absorbed and repeated damage retain their existing authority behavior.
+Reactivation produces no notice until another accepted loss. The notification
+uses the existing rise, fade, visibility and teardown rules alongside Cheat Death
+and loot. Current charm/status visibility and loss audio are preserved, including
+the absent persistent HUD row described below. No gameplay, save or wire contract
+changes. The report's tentative Boast question is separate from this addition.
+
+### Ether Drain's accepted loss is a semantic event
+
+The field's `0x10A` flags suppress ordinary hit presentation. They do not cancel
+an accepted until-hurt loss. Retail `0x0052FCEA–0x0052FDEB` checks the active
+flags and positive summed post-defense damage, plays the loss stream and clears
+both flags before calling common Actor reaction at `0x0052FDF1`. That reaction's
+separate `flags & 0x08` test is at `0x00627FA4`; it clears the redraw latch.
+The loss branch has no corresponding suppression test. Fresh read-only M2
+disassembly of the same SHA-256 executable listed below confirms this boundary.
+
+Both maintained receivers already create `PlayerCharmLost` from the accepted
+runtime transition independently of hit-response suppression. Ether Drain must
+retain exactly that semantic loss and `PlayerCheatDeath` from the receiver's
+outbox, preserving suppression of ordinary Ouch/status feedback. The earlier
+rescue-only Rust filter excluded an already-accepted charm transition; forwarding
+the entire outbox would instead reintroduce the previously detected Ouch leak.
+Caster and peer field regressions cover each until-hurt charm, both together,
+and loss followed by Cheat Death, including event order and no repeated loss.
+This changes event retention, not damage, charm lifetime or field mechanics.
+
 ## 2026-10-13 — Charm status row removed
 
 At the user's request, the persistent charm status row and its tooltip controls
@@ -167,11 +206,22 @@ database or roll back browser IndexedDB saves.
 | Menu/Escape in Inventory or service companion | out-of-system native input QoL | Close whole optional surface; preserve service cleanup |
 | Optional Skills | out-of-system native input QoL | Dismiss whole optional book and resume the current scene |
 | Mandatory level-up choice | out-of-system for dismissal change | Cannot dismiss a required choice |
+| Inventory notice and Unforge confirmation | out-of-system native input QoL | Inventory, Skills, Menu and Escape dismiss only the child; Unforge uses Cancel without an authority request or parent Sack traversal |
 | Dye child confirmation | verified-already-at-parity | Child cancel takes priority; no accidental dye commit |
 | Rename text field and rebound letter keys | out-of-system native naming QoL | Editing does not leak navigation; Escape cancels edit |
 | Parent-cell pointer, keyboard activation, and held input | verified-already-at-parity | Existing one-step and release-consumption rules remain |
 | Sack page animation | verified-already-at-parity | Existing 37×10 ms clock and traversal remain unchanged |
 | New storage navigation and unrelated optional menus | out-of-system | Preserve existing scope unless explicitly authorized |
+
+The active notice owns book shortcuts before the parent Inventory or College
+service. Its safe dismissal is the ordinary notice acknowledgment or Unforge's
+Cancel, never the destructive Unforge action. Repeated held keys cannot traverse
+the parent after dismissal. Scene-level Skills shortcuts defer to the active
+Inventory or service owner, which also preserves ordinary Skills replacement
+and service cleanup after child dismissal. The shared Sack browser journey
+exercises both child families with configured/rebound bindings in College
+Inventory, Luthacus and paused Boneyard, preserving the accepted path, equipment,
+backpack, gold and belt.
 
 ## Validation contract
 

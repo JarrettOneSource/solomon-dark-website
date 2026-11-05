@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 import { chromium } from 'playwright-core'
 
-import { startStaticClientServer } from '../desktop/static-client-server.mjs'
+import { startStaticClientServer } from './static-client-server.mjs'
 import { createGameSimulation, enterBoneyardWorld } from '../src/game/core-server/game-simulation.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../src/game/core-kernels/game-run.ts'
 import { NATIVE_HUB_NPC_CATALOG } from '../src/game/core-kernels/native-hub-npc.ts'

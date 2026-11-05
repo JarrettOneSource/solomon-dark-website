@@ -75,8 +75,10 @@ installation clears it or a different source/artifact is selected.
    save namespace. Retain runtime/configuration/database recovery files.
 
 For a source change both game servers are drained. A Rust artifact-only update
-at unchanged Website source leaves the unchanged root services running. A
-Caddy-only reconciliation preserves both games and reloads only Caddy. Root
+at unchanged Website source leaves the unchanged root services running when
+the Caddy site is identical. Changed Caddy content also requires both save
+barriers; same-revision drift is rejected for the restored PixiJS protocol.
+The [NFO guide](../nfo/README.md) owns that reload boundary and its limits. Root
 legacy revision polling remains at root; the Rust companion polls its scoped
 API. The first parallel cutover announces the new Website/PixiJS revision to
 old Rust clients at `/game` so their acknowledged saves precede that reload.

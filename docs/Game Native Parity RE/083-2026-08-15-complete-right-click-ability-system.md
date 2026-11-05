@@ -2173,8 +2173,10 @@ are `0x007DE820` (1), `0x007DE808` (.5), `0x007DE8F0` (.25). The submitted
 scale is stored as float32. Resting logical diameter is approximately 174.15
 world units, versus the incorrect 121.5; camera scaling applies afterward.
 
-`0x0054BA80` gates its shell on `0x00819E5D == 0`; material passes suppress that
-inner draw and `0x005468C0` emits the shell once afterward. A body tint must not
+`0x0054BA80` gates its shell on `0x00819E5D == 0`; Stoneskin and Planewalker suppress that
+inner draw and `0x005468C0` emits the shell once afterward. Harden and Webbed
+retain the ordinary shell in their captured body; see the report 130 reopening
+below. A body tint must not
 become the shell tint. Explosive Shield's one expanding ring uses this same
 Clothes-2 image, while its other independently owned children retain their
 existing exact assets and lifetimes.
@@ -2829,6 +2831,103 @@ multiplier domain with no platform exception. Publication/live receipts are
 separate from this built acceptance.
 
 
+## 2026-11-01 — Report 129: living contact and capture-pulse ownership
+
+The October 20 shared Cheat Death/Ether Drain message reports that the field
+expands over a centered living wizard. Its proposed restriction to mobs, items
+and Gold is a hypothesis. Report 66's accepted field recovery establishes the
+contact system, but does not establish the cause of this later recorded moment.
+Report 65 separately owns the accepted rescue event and notification.
+
+The original MP4 remains 5,521,746 bytes, SHA-256
+`e9e8cce67c48ccceb3c4f81a93cb08a0f0ba471effb558404f914f8c740d786e`.
+Its eleven retained chronological samples show the wizard overlapping the
+purple field, moving enemies and debris, and substantial white effects. These
+pixels do not identify a parent-pulse writer, the accepted target set, a
+consumed object, or a contemporaneous save. They cannot prove that the living
+player causes an expansion. The original private media is retained in the
+report archive, rather than copied into this repository.
+
+Fresh read-only LLVM disassembly on M2 revalidates retail 0.72.5 at preferred
+base `0x00400000`, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+The complete contact function is `0x005F8620..0x005F88AE`; its only call to
+`0x005EE840` is `0x005F8803`, after the `0x400` loose-object test and strict
+squared distance below 100. Player flags `0x801` therefore take pressure and
+magic damage without that callback. This includes the caster and party peers.
+
+The callback writes parent `+0x19C=2` at `0x005EE98A..0x005EE990` regardless
+of its parameter; only parameters at least one create the separate BadGuys36
+flare and request `phase`. A whole-text direct-call census finds exactly four
+calls: `0x00455681` (private debris, parameter .5), `0x0045AB27` (captured
+image, 1.5), `0x00533AA5` (eligible dying corpse, 2), and `0x005F8803`
+(loose-object retirement, 1). The independent world-animation consumer writes
+`+0x19C=2` directly at `0x0061DB94`. Neither route tests overlap with a living
+wizard. Parent tick decays the pulse before its private manager advances at
+`0x0061DBC5..0x0061DC02`; private-animation retirement can therefore pulse
+after that decay, including during scale-out.
+
+Parent draw `0x005EE62B..0x005EE70D` reads this positive pulse as the opacity
+and scale multiplier for BadGuys38. The ordinary four BadGuys75 galaxies and
+small shimmer are separate draws. Their appearance is not an expanding hitbox;
+contact still uses the fixed native distance thresholds. This is instruction
+evidence, not a fresh clean-stock visual or timing receipt.
+
+The reopened boundary is every producer and consumer of this capture pulse,
+including the distinction between a living wizard, its later corpse, and
+independent animations that may share the same center. The previously
+extracted field rank/config/art rows remain unchanged.
+
+| Member / branch | Current source disposition | Evidence and check |
+| --- | --- | --- |
+| Living caster and party peer | verified-already-at-parity | Flags `0x801`; both clients route force/damage without capture; public center-contact checks also inspect the presentation plan. |
+| Gold and every Sack payload, including positive activation delay | verified-already-at-parity | Flag `0x400`, native delay gate, strict radius 10 and callback 1; existing public payload/delay controls. |
+| Eligible dying player corpse | verified-already-at-parity | Maintenance timer 130 and strict radius 10 call callback 2 once; existing corpse/current-save/terminal controls. A spent Cheat Death rescue remains alive and is not this branch. |
+| Supported Skeleton/Archer/Mage, Zombie and Demon capture images | Rust exact-ported; PixiJS verified-already-at-parity | Existing private capture bank, replacement and retirement program; image retirement calls 1.5. Rust now draws all 180 retained records in the canonical plan. |
+| Unsupported captured enemy images | verified-already-at-parity | Clear the existing private manager; no new capture image or crunch cue. Retiring a previous private child keeps its own callback. |
+| Free and Tree SuckDebris | Rust exact-ported; PixiJS verified-already-at-parity | Callback .5 still pulses the parent while creating no phase flare; existing private-child/RNG/retirement tests. Rust now draws all three retained variants at their independent world position and rotation. This disproves the proposed mobs/items/Gold-only restriction. |
+| Grounded Bouncers, Hail, secondary chips, Golem fragments and dropped weapons | verified-already-at-parity | Separate world-animation list; strict radius 10 retirement writes pulse 2 without a phase flare. Existing owner/save/retirement tests remain unchanged. |
+| SuckCloud, floating Orb/Bonus and ordinary collection | verified-already-at-parity | Cloud expiry has no callback; Orb/Bonus are outside the field query. Normal pickup/Telekinesis ownership remains separate. |
+| Parent galaxy, shimmer and capture pulse | verified-already-at-parity | Both plans retain the independent draws and native pulse input; existing parent controls. No player-visibility or brightness override. |
+| Private draw opacity, captured-image descent, rims and clipping | Rust exact-ported; PixiJS verified-already-at-parity | Parent modulation and Anim_Sucked `0x00455370`; the Rust plan now owns image, Demon selection, ordered rims and field-local clipping. |
+| Scale-in, active, scale-out, reset and continuation | verified-already-at-parity | Existing phase/private-owner/current-save tests; the new living-contact check includes save restoration. No new pulse on restore. |
+
+PixiJS retains these owners in `native-ether-drain.ts`,
+`native-secondary-abilities.ts`, `native-ether-drain-world.ts`,
+`boneyard-world-placement.ts`, `game-simulation.ts` and
+`native-secondary-presentation.ts`. The maintained Rust client has equivalent
+simulation/session ownership and an existing public
+`a_living_player_at_the_center_does_not_expand_the_capture_pulse` regression.
+Its port retained private animation state but did not consume it in
+`secondary/presentation/plan.rs::ether_drain_draws`; the downstream web view
+has no separate private-child path. Auditing only the living contact and parent
+pulse missed this sibling consumer. The cutover adds every retained
+private debris/image draw to the canonical Rust plan, shares the existing Demon
+atlas, and carries the recovered field-local clip through sprite submission.
+No gameplay, random stream, authored row, brightness or frozen fixture change
+is justified. The PixiJS regression closes a missing explicit check of the
+living-contact versus capture distinction.
+
+Focused M2 validation executes four new PixiJS living caster/peer x quality
+cases and their saved owner continuation; all 50 selected simulation/kernel/
+presentation tests, test TypeScript and focused lint pass. Rust's three new
+public planner tests first execute and fail for missing private draws, then pass
+alongside 12 unchanged Ether Drain/contact/presentation tests. The crop geometry
+test also passes for rotated and mirrored quads. Native and WASM Clippy pass.
+The exact-source native SecondaryView comparison runs 346 cases on Apple M2
+against independent stock-record cropping, with maximum channel difference one
+8-bit level and no failures. All 344 nonempty private cases change pixels from
+the parent-only baseline; the two retired controls do not. Nine original
+actual/reference image pairs are retained and individually reviewed. No frozen
+input was regenerated.
+
+These are source dispositions. Focused checks and final combined game
+acceptance are recorded separately. The exact historical visual cause remains
+unproven; real integrated M2 game acceptance, publication and installation are
+still required before a current completion decision. Shared source message
+`1562279237753241613` also requires Report 65's independent acceptance.
+
+
 ## 2026-10-06 — Report 86: level-up admission versus toggle lifetime
 
 Original `1555285473692221533` is freshly reread, unedited and unchecked; the
@@ -2923,3 +3022,168 @@ The web-only cycle preference belongs to saved game settings and its shared Coll
 20 focused settings, belt-availability and hotbar-layout tests pass, as do the frontend typecheck and focused lint (two unchanged Fast Refresh export warnings). A local production frontend build passes. Mac Chrome verifies the visible disabled Ether icon, 14 bank transitions across College, Inventory, Skills and Boneyard, literal left-arrow behavior, and the saved toggle after reload, with no page or console errors. The before/after icon comparison reuses the same scene with the prior CSS rule temporarily applied. Two early check attempts stopped on book-navigation timing/selector mistakes; neither identified a product failure.
 
 Final disposition: College HUD and mobile-preview dimming are intentional web presentation changes, outside exact native-pixel parity; shared unavailable/cooldown alpha and cast admission remain verified-already-at-parity. Optional-book rendering and Boneyard icon rendering remain unchanged. Reverse cycling is a tested web extension. No lost starter assignment or original historical input mismatch is claimed. Full native, packaged and live-production acceptance are outside this focused check.
+
+## Report 130 — Stoneskin capture and outer shield ownership, 2026-11-01
+
+The retained October 20 clip reports a square inside simultaneous Stoneskin and
+Magic Shield. Its original message and 16 neighboring messages were reread on
+M2; text, edit time and attachment identity are unchanged. The private original
+MP4 remains 1,973,393 bytes, SHA-256
+`458cbfb22695416a5d6ddd1b878a2e0d0a470ea6c0d00028b57e2e2836e09a87`.
+The clip predates the Rust release. Earlier bounded Rust round-shell captures
+neither explain its historical occurrence nor prove this shared owner correct.
+
+### Recovered ownership and earlier closure failure
+
+Exact retail PE bytes were reread on M2 with Capstone, without an injected process
+or a new Ghidra project. The executable remains 0.72.5, 4,723,200 bytes,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred image base `0x00400000`. The complete instruction ranges are
+`0x005468C0..0x0054814A`, `0x0054BA80..0x0054CC4F`, and
+`0x0053B1D0..0x0053B67F`; retained private receipts live in
+`~/codex-runs/solomon-discord-reports-20261101/report130/`.
+
+The ordinary body painter tests actor `+0x138` bit 1 at `0x0054BBDF` and sets
+`0x00819E5D` at `0x0054BBE8`. Its shell gate at `0x0054C8D5` therefore omits
+the shell from a Stoneskin capture. The bit-1 DrawSpecial branch captures that
+body at `0x00546B2A`, multiplies Clothes 3, and submits its two retained-grid or
+quad passes before `0x00546E49` jumps to the outer shell at `0x00547FC6`.
+Clothes 2 is selected through `0x00819980 + 0x1C0` at `0x005480CB`, with the
+outer sprite submitted at `0x00548116`. The helper `0x0053B1D0` called before
+that jump is a separate equipment-effect consumer; it is not the shield draw.
+Its guard at `0x0053B1E5` uses the same suppression flag and omits selected
+element and Damage X4 effects from Stoneskin's body capture. The special
+branch calls that helper once at `0x00546E44`, after its two composites and
+before the outer shield. Before this repair, Pixi also captured its ordinary
+front-base and front-overlay element/Damage X4 containers; those belong to the
+same guarded ownership correction.
+
+Planewalker explicitly suppresses its inner body at `0x005474E9..0x00547512`.
+Harden (bit 8) and Webbed (bit 0x20) do not set that flag around their ordinary
+body captures: `0x00546FD0/0x005471C7` and
+`0x00547A5A/0x00547C38`, respectively. Their captured shell is retained.
+All material branches ultimately reach the same outer shell tail.
+
+The earlier shield reopening verified its art, tint, opacity and scalar plan,
+but did not test actual diffuse-target membership or the final painter order.
+The preimage `PlayerWorldView` included `magicShield` in the source passed to
+Stoneskin, so its diffuse mask acquired shield alpha and the grid distorted it.
+The shell also shared z-index 8 with material containers added later, placing
+it before those composites. These are confirmed owner mismatches; their exact
+relationship to every frame of the historical square remains a separate claim.
+
+### Boundary and membership
+
+The boundary is the shared articulated-player material capture and its ordinary
+and outer selected-element/shield layers. Existing Clothes 1/2/3 art and the
+accepted Stoneskin birth grid remain the material sources. The additional bare
+program is extracted authored point/depth data; it introduces no invented art.
+
+| Member | Recovered rule | Disposition and local proof |
+| --- | --- | --- |
+| Stoneskin, enhanced effects On and Off | Body capture, two material passes, one admitted outer helper, one outer shell | exact-ported composition; 3,696 real WebGL cases, exact captured membership |
+| All five pure selected programs, ten Weld rows, equipped Staff and Wand | Shared guarded helper and existing raster programs | exact-ported routing; actual program and Damage X4 toggle controls |
+| Bare body and helper, poses 0..3 and all 24 headings | Authored first-bank point 1, maximum two-hand depth, deterministic tick bob, .8 float scale | exact-ported presentation; all 96 rows, admitted primary/secondary/Constant/Spin fixtures |
+| Every local/remote participant and bot; College/private room, Boneyard and reflection owners | One shared PlayerWorldView; camera follows composition | same canonical owner; both arena refresh paths and three zooms locally composed; actual scene journey remains parent acceptance |
+| Idle, fresh/late pulse, absent/depleted shield and Stone retirement | Existing shell state and art; no capture dependence on shell opacity | pulse 0/20/40, absent and retirement controls |
+| Harden and partial/full Webbed | Retain ordinary captured helper and shell; add one outer helper with raw front=true | exact-ported branch membership; 312 sibling controls compare exactly |
+| Severe Webbed cocoon and its red hit overlay | Follow Webbed's outer helper and precede the shared shield tail | separate owned foreground, same lifetime and tilt; full cocoon controls |
+| Learned Enchant Staff, all six selectors | Capture diffuse shaft, omit the extra additive shaft, draw textured gradient, resume diffuse hands | scoped attachment mode; 1,440 retained GPU compositions and failure restoration checks compare exactly |
+| Ordinary/enhanced hit and material precedence | Stone excludes ordinary hit; separate hit capture keeps its membership | existing focused coverage retained; no generic diffuse-capture policy change |
+| Planewalker | Explicit inner suppression; existing override and outer shell | existing ownership retained; no new material target |
+| Enemy shields, absorption/damage, break explosion, HUD, activation flash and audio | Separate owners | out-of-system; existing contracts retained |
+
+### Canonical implementation
+
+`PlayerWorldView` suppresses all ordinary selected-element and Damage X4 lanes
+while Stone is active, excludes shield/hit from its diffuse target, and uses
+one post-material helper at the native socket. Its front argument still
+applies bare-hand depth and K=2 channel admission. Harden and Webbed retain
+their captured ordinary output and add their own single outer helper. The
+severe Webbed cocoon is a separately owned foreground after that helper. The
+shared shield follows all these layers. Rust's corresponding material/grid
+port and native GPU checks belong to report 125 and ledger 130.
+
+The complete helper inventory is main calls `0x0054BDE4`, `0x0054C09E`,
+`0x0054C7FE`, `0x0054C842`, `0x0054C8AE`, and mutually exclusive special
+calls `0x00546E44`, `0x0054734E`, `0x00547DE0`. The five ordinary gates and
+transforms are recovered in ledger 010. The early translated effect follows
+the back attachment and precedes the body. Late translated output follows
+the head/hit and untranslated base. Its distinct late layer index prevents
+Pixi's stable sort from retaining a prior early overlay ahead of the base
+when phase changes. This defect was exposed by independent composed pixels.
+
+Staff scale is `f32(1 + 10*phase)`, Wand scale is
+`f32(0.6000000238418579*(1 + 10*phase))`, and bare scale is
+`f32(0.800000011920929*(1 + 10*phase))`. Bare point/depth data is exported
+from exact Clothes.bundle SHA-256
+`69595c233b6dd61d2273bf60d13e0e2bf7f2dde5db8036ee8fd86e9aae30624b` by
+`tools/export-player-bare-hand-program.py`. The complete independently retained 120-row source (including sentinel K4)
+has SHA-256 `b4981a960794b496e141beaf0435eaf62ac02bc04074f358b0f9fa65248efcf9`.
+The first bank is
+`484+24*K+heading`, the second is `676+24*K+heading`; their maximum point-0
+Y is compared with Clothes316 point0.y+15 = 15.5. Raw front=true admits
+maximum<=15.5, false admits maximum>=15.5. The effect socket always comes
+from the first bank's point1. Its independent Y bob is float32 sin(2*tick
+in native degrees), with no draw-time RNG. K=2 without an active channel
+selector returns before the dispatcher. Negative selection and death keep
+the existing helper guards. Unselected K=4 remains the separate fallback.
+
+Report 135 owns authoritative HandCast1 birth/progress/rate/pose, the shared
+Integer(4) opening draw, secondary handPose/handDone, Constant constructor/
+first-step state, strict wire replication and disk compatibility. Rendering
+consumes those accepted fields directly, including terminal poses, and never
+rolls or infers them from presentation phase. Fixed-state image coverage is
+separate from its actual admitted-action tests.
+
+Enchant is an articulated attachment member, not guarded helper output.
+`0x00578D5A` selects diffuse shaft RGB. The learned ordinary branch draws an
+extra additive shaft at `0x0057909D`; the diffuse branch takes `0x005790A4`,
+skips it and restores texture RGB for the gradient at `0x00579123`.
+`0x0057948D` resumes diffuse hands. The attachment owns its texture-bound
+capture shader bindings, borrows the atlas textures and two shared immutable
+compiled programs, and restores its ordinary shader/visibility in a finally block. The aura stays a standalone
+mesh so Pixi cannot retain an earlier batched route when the scoped shader
+and shaft visibility change together. Each accepted draw-plan update uploads
+its changed position buffer. Owned shader bindings and geometry are released
+on destruction; borrowed textures/programs remain valid for other views.
+The program cache is bounded to the two texture alpha formats, and renderer
+destruction releases its compiled GPU resources. A cross-view destruction
+check proves that destroying one attachment preserves the other attachment.
+
+### Focused M2 validation and remaining acceptance
+
+`frontend/tools/check-player-material-capture-browser.mjs` uses the real WebGL
+pipeline and the complete canonical Boneyard texture loader. Its controlled
+fixtures cover both quality states, both player refresh paths, all five pure
+and ten Weld selections, Staff/Wand/bare owners, all 24 headings of each
+bare action bank, phase 0/.45, zoom .75/1/1.25, a nonwhite world tint, and
+shield pulse 0/20/40. The accepted Stone grid has seed331 and all positions
+retained in the receipt. No stock geometry, tint, pulse or grid was tuned.
+
+The full owner receipt is private
+`report130/browser-complete-final/receipt.json`: 3,696 Stone compositions,
+1,232 ordinary compositions, 312 Harden/Webbed/cocoon controls and 144
+initial Enchant selector/heading cases. The final retained Enchant check
+`report130/enchant-retained-green/receipt.json` reuses one attachment across
+all six selectors, ten poses and 24 headings (1,440 cases), changing tick
+and gradient width. All page/console/network errors are empty.
+Captured targets compare exactly, and ordinary, sibling and Enchant pixels
+all have exactly zero changed channels. The retained upload preimage fails
+478 cases; its one-line buffer upload makes all 1,440 exact, with exact ordinary
+restoration after success and failure. Stone's independent parent/render-
+group final frame allows one 8-bit channel LSB, with all raw pixel counts and
+maxima retained. That is a local raster-route bound, not an exact retail
+pixel claim. The expanded ownership preimage red retains all raw differences in
+`browser-expanded-red-exact`; its five runtime files were restored byte
+exactly. The final retained Enchant harness also runs against the original
+runtime source, with final hashes/restoration in `final-preimage-restoration.json`.
+The updated retained weapon smoke passes 1,728 Wand frames, 1,440 Staff
+frames and 360 program cases. Forty-six focused tests, app TypeScript and
+touched-source checks are recorded separately. Earlier failed fixture attempts
+remain failed evidence.
+
+Parent-owned combined gates and actual College/Boneyard/native journeys remain
+required before report acceptance, release/install or a completion reaction.
+This repair establishes native composition ownership; it does not reconstruct
+the historical reporter's full state or assert one cause for every clip frame.

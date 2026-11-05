@@ -141,6 +141,170 @@ test('editor test supervisor keeps socket sessions private, reaps them on return
   await waitFor(() => supervisor.sessionCount() === 0)
 })
 
+test('unexpected proxy close retains the private actor and admits only its account-bound fresh reconnect ticket', async context => {
+  const supervisor = await startGameSessionSupervisor({
+    adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN], snapshotRate: 100,
+  })
+  context.after(() => supervisor.close())
+  const endpoint = await provision(supervisor.address.url)
+  const first = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  first.socket.send(encodeGameMessage({ type: 'client-enhanced-effects', enabled: false }))
+  await first.next(message => message.type === 'server-save-checkpoint'
+    && !restoreGameSaveDocument(message.save).state.enhancedEffects)
+  const closed = socketClosed(first.socket)
+  first.socket.close(1001, 'proxy reload')
+  await closed
+  const body = { sessionId: endpoint.path.split('/').at(-1), playerId: first.welcome.playerId,
+    resumeToken: first.welcome.resumeToken, requestId: 'r'.repeat(32), leaderboardUserId: 42 }
+  const reserve = (value: object) => fetch(`${supervisor.address.url}/admin/reconnect`, {
+    method: 'POST', headers: { authorization: `Bearer ${ADMIN_SECRET}`, 'content-type': 'application/json' },
+    body: JSON.stringify(value),
+  })
+  assert.equal(supervisor.sessionCount(), 1, 'the still-live private authority must not retire')
+  assert.equal((await reserve({ ...body, leaderboardUserId: 52 })).status, 403)
+  assert.equal((await reserve({ ...body, resumeToken: 'x'.repeat(43) })).status, 403)
+  const response = await reserve(body)
+  assert.equal(response.status, 201, await response.clone().text())
+  const reconnect = await response.json() as ProvisionedEndpoint
+  assert.equal(reconnect.path, endpoint.path)
+  assert.notEqual(reconnect.credential, endpoint.credential)
+  assert.deepEqual(await (await reserve(body)).json(), reconnect, 'an uncertain HTTP response reuses its reservation')
+  const next = await join(supervisor.address.url, reconnect, BROWSER_ORIGIN, true,
+    { resumeToken: first.welcome.resumeToken })
+  context.after(() => closeSocket(next.socket))
+  assert.equal(next.welcome.playerId, first.welcome.playerId)
+  assert.equal(next.welcome.snapshot.enhancedEffects, false, 'do not import the original browser state')
+  assert.equal(Object.keys(next.welcome.snapshot.players).length, 1)
+  const replay = await openSocket(websocketUrl(supervisor.address.url, reconnect.path), BROWSER_ORIGIN)
+  const denied = messageQueue(replay)
+  replay.send(encodeGameMessage({ type: 'client-hello', enhancedEffects: true,
+    onlinePreferences: { activityMessages: true, globalChat: true, submitRuns: true },
+    profile: { accountUsername: null, highestWave: null, totalPlaytimeMs: null },
+    cheatsEnabled: false, protocolVersion: GAME_PROTOCOL_VERSION, credential: reconnect.credential,
+    character: CHARACTER, resumeToken: first.welcome.resumeToken }))
+  const rejection = await denied(message => message.type === 'server-disconnect')
+  assert.equal(rejection.type, 'server-disconnect')
+  assert.equal(next.socket.readyState, WebSocket.OPEN)
+})
+
+test('reconnect reservation before old Close rejects stale commands and preserves one current generation', async context => {
+  const supervisor = await startGameSessionSupervisor({ adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN] })
+  context.after(() => supervisor.close())
+  const endpoint = await provision(supervisor.address.url)
+  const first = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  const response = await reconnectReservation(supervisor.address.url, endpoint, first.welcome, 'b'.repeat(32))
+  assert.equal(response.status, 201)
+  const replacement = await response.json() as ProvisionedEndpoint
+  first.socket.send(encodeGameMessage({ type: 'client-enhanced-effects', enabled: false }))
+  const next = await join(supervisor.address.url, replacement, BROWSER_ORIGIN, true,
+    { resumeToken: first.welcome.resumeToken })
+  context.after(() => closeSocket(next.socket))
+  assert.equal(next.welcome.playerId, first.welcome.playerId)
+  assert.equal(next.welcome.snapshot.enhancedEffects, true, 'old-generation commands were neutralized at reservation')
+  next.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 74 }))
+  const pong = await next.next(message => message.type === 'server-pong' && message.nonce === 74)
+  assert.equal(pong.type, 'server-pong')
+  const health = await readHealth(supervisor.address.url)
+  assert.equal(health.privateSessions, 1)
+  assert.equal(health.privatePlayers + health.recoveringPlayers, 1)
+})
+
+test('deployment takes a live replacement through its save barrier before renderer readiness', async context => {
+  const supervisor = await startGameSessionSupervisor({ adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN] })
+  context.after(() => supervisor.close())
+  const endpoint = await provision(supervisor.address.url)
+  const first = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  const closedFirst = socketClosed(first.socket)
+  first.socket.close(1001, 'proxy reload')
+  await closedFirst
+  const reservation = await reconnectReservation(supervisor.address.url, endpoint, first.welcome, 'f'.repeat(32))
+  assert.equal(reservation.status, 201)
+  const replacement = await join(supervisor.address.url, await reservation.json() as ProvisionedEndpoint,
+    BROWSER_ORIGIN, true, { resumeToken: first.welcome.resumeToken })
+  context.after(() => closeSocket(replacement.socket))
+  assert.equal((await readHealth(supervisor.address.url)).recoveringPlayers, 1)
+  const closed = socketClosed(replacement.socket)
+  const targetRevision = 'a'.repeat(40)
+  let responded = false
+  const restarting = fetch(`${supervisor.address.url}/admin/deployments/restart`, {
+    method: 'POST', headers: { authorization: `Bearer ${ADMIN_SECRET}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ targetRevision }),
+  }).then(response => { responded = true; return response })
+  const announcement = await replacement.next(message => message.type === 'server-deployment-restart')
+  assert.equal(announcement.type, 'server-deployment-restart')
+  const checkpoint = await replacement.next(message => message.type === 'server-save-checkpoint'
+    && message.sequence === announcement.checkpointSequence)
+  assert.equal(checkpoint.type, 'server-save-checkpoint')
+  assert.equal(responded, false, 'a live replacement still owes its durable storage ACK')
+  replacement.socket.send(encodeGameMessage({ type: 'client-deployment-ready',
+    checkpointSequence: announcement.checkpointSequence, targetRevision }))
+  const response = await restarting
+  assert.equal(response.status, 200)
+  const result = await response.json() as { savedPlayers: number; unacknowledgedPlayers: number }
+  assert.equal(result.savedPlayers, 1)
+  assert.equal(result.unacknowledgedPlayers, 0)
+  assert.deepEqual(await closed, { code: 1012, reason: 'game updating' })
+})
+
+test('reconnect large valid Welcome retains the actual world and completes real readiness inside the lease', async context => {
+  const fixture = createNativeFacultyDeathSaveFixture()
+  const save = createGameSaveDocument(fixture)
+  const supervisor = await startGameSessionSupervisor({ adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN] })
+  context.after(() => supervisor.close())
+  const endpoint = await provision(supervisor.address.url)
+  const first = await joinSaved(supervisor.address.url, endpoint, BROWSER_ORIGIN, save,
+    { discipline: 'arcane', displayName: 'Faculty save regression', element: 'fire' })
+  const started = performance.now()
+  const closed = socketClosed(first.socket)
+  first.socket.close(1001, 'proxy reload')
+  await closed
+  const response = await reconnectReservation(supervisor.address.url, endpoint, first.welcome, 'c'.repeat(32))
+  assert.equal(response.status, 201, await response.clone().text())
+  const next = await join(supervisor.address.url, await response.json() as ProvisionedEndpoint, BROWSER_ORIGIN, true,
+    { resumeToken: first.welcome.resumeToken })
+  context.after(() => closeSocket(next.socket))
+  const welcomeBytes = Buffer.byteLength(JSON.stringify(next.welcome))
+  assert.ok(welcomeBytes > 1024 * 1024, 'exercise the real chunked Welcome')
+  assert.deepEqual(next.welcome.snapshot.world, first.welcome.snapshot.world)
+  assert.equal(next.welcome.snapshot.tick, first.welcome.snapshot.tick)
+  assert.deepEqual(next.welcome.snapshot.players, first.welcome.snapshot.players)
+  const runId = fixture.loadedBoneyard!.runId
+  next.socket.send(encodeGameMessage({ type: 'client-ping', nonce: 75 }))
+  next.socket.send(encodeGameMessage({ type: 'client-ready-boneyard', runId }))
+  const grace = next.welcome.gameplayResumeGrace
+  assert.ok(grace)
+  next.socket.send(encodeGameMessage({ type: 'client-resume-grace-ready', sequence: grace.sequence }))
+  const advancing = await next.next(message => message.type === 'server-snapshot'
+    && message.frame.tick > next.welcome.snapshot.tick)
+  assert.equal(advancing.type, 'server-snapshot')
+  const elapsedMs = performance.now() - started
+  context.diagnostic(`large valid Welcome: ${welcomeBytes} bytes; readiness: ${Math.round(elapsedMs)} ms`)
+  assert.ok(elapsedMs < 30_000)
+})
+
+test('reconnect lease expires once at its original deadline despite repeated HTTP delivery', async context => {
+  const supervisor = await startGameSessionSupervisor({ adminSecret: ADMIN_SECRET, allowedOrigins: [BROWSER_ORIGIN] })
+  context.after(() => supervisor.close())
+  const endpoint = await provision(supervisor.address.url)
+  const first = await join(supervisor.address.url, endpoint, BROWSER_ORIGIN)
+  const closed = socketClosed(first.socket)
+  const started = performance.now()
+  const response = await reconnectReservation(supervisor.address.url, endpoint, first.welcome, 'd'.repeat(32))
+  assert.equal(response.status, 201)
+  const reservation = await response.json()
+  await new Promise(resolve => setTimeout(resolve, 1_000))
+  const repeated = await reconnectReservation(supervisor.address.url, endpoint, first.welcome, 'd'.repeat(32))
+  assert.equal(repeated.status, 201)
+  assert.deepEqual(await repeated.json(), reservation)
+  const health = await readHealth(supervisor.address.url)
+  assert.equal(health.privatePlayers + health.recoveringPlayers, 1)
+  await closed
+  const elapsedMs = performance.now() - started
+  assert.ok(elapsedMs >= 29_500 && elapsedMs < 35_000, `absolute expiry took ${elapsedMs} ms`)
+  await waitFor(() => supervisor.sessionCount() === 0)
+  assert.equal((await reconnectReservation(supervisor.address.url, endpoint, first.welcome, 'e'.repeat(32))).status, 404)
+})
+
 test('runtime event publisher retries and posts bounded activity to the loopback outbox', async (context) => {
   const requests: Array<{ authorization: string; body: Record<string, unknown> }> = []
   let attempts = 0
@@ -1805,6 +1969,8 @@ interface ProvisionedEndpoint {
 }
 
 interface SupervisorHealth {
+  privatePlayers: number
+  recoveringPlayers: number
   draining: boolean
   hubPlayers: number
   parties: number
@@ -2018,6 +2184,14 @@ async function readHealth(supervisorUrl: string): Promise<SupervisorHealth> {
   return await response.json() as SupervisorHealth
 }
 
+function reconnectReservation(supervisorUrl: string, endpoint: ProvisionedEndpoint,
+  welcome: Extract<ServerGameMessage, { type: 'server-welcome' }>, requestId: string): Promise<Response> {
+  return fetch(`${supervisorUrl}/admin/reconnect`, { method: 'POST',
+    headers: { authorization: `Bearer ${ADMIN_SECRET}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId: endpoint.path === '/game-hub' ? null : endpoint.path.split('/').at(-1),
+      playerId: welcome.playerId, resumeToken: welcome.resumeToken, requestId, leaderboardUserId: 42 }) })
+}
+
 async function join(
   supervisorUrl: string,
   endpoint: ProvisionedEndpoint,
@@ -2026,6 +2200,7 @@ async function join(
   options: Readonly<{
     character?: PlayerCharacterConfig
     cheatsEnabled?: boolean
+    resumeToken?: string
     onlinePreferences?: {
       activityMessages: boolean
       globalChat: boolean
@@ -2045,6 +2220,7 @@ async function join(
     protocolVersion: GAME_PROTOCOL_VERSION,
     credential: endpoint.credential,
     character: options.character ?? CHARACTER,
+    ...(options.resumeToken ? { resumeToken: options.resumeToken } : {}),
   }))
   const welcome = await next((message) => message.type === 'server-welcome')
   assert.equal(welcome.type, 'server-welcome')

@@ -705,6 +705,7 @@ test('Mindblast Shockwave contacts every target once, Dazzles, pushes, and publi
 })
 
 test('Flash materializes twelve independent children, area Dazzle, feedback, and audio', () => {
+  const painters = createNativeWorldManagerOrder()
   const response = Object.freeze({
     cameraDisplacement: Object.freeze({ x: 1.8, y: -2.4 }),
     durationTicks: 400,
@@ -721,9 +722,14 @@ test('Flash materializes twelve independent children, area Dazzle, feedback, and
       tick: 1,
       worldKey: 'boneyard:test',
     },
+    painters.register,
   )
   assert.equal(state.actors.filter(({ kind }) => kind === 'flash-response-grow').length, 8)
   assert.equal(state.actors.filter(({ kind }) => kind === 'flash-response-fade').length, 4)
+  assert.deepEqual(state.actors.map(actor => actor.painterRegistrations), Array.from(
+    { length: 12 }, (_, registrationOrdinal) => [{ managerLane: 'transient', registrationOrdinal }],
+  ))
+  assert.equal(painters.state().nextRegistrationOrdinal.transient, 12)
   assert.deepEqual(state.actors.slice(0, 8).map(({ scale }) => scale), response.growScales)
   assert.ok(state.actors.slice(0, 8).every(({ position }) => (
     position.x === 30 && position.y === 50
@@ -926,23 +932,26 @@ test('all 23 category-2 rows admit their edge while one-shot or sustained primar
 })
 
 test('every Cast 2 owner writes one player phase pulse and actionless siblings write none', () => {
-  for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
-    const accepted = cast(skillId)
-    const ownsCastTwo = accepted.state.players.player?.castAction !== null
-    const firstActionUpdate = stepNativeSecondaryAbilities(
-      accepted.state,
-      context(skillId, 2, null),
-    )
-    assert.deepEqual(
-      firstActionUpdate.staffCastPulsePlayerIds,
-      ownsCastTwo ? ['player'] : [],
-      `skill ${skillId}`,
-    )
-    const laterUpdate = stepNativeSecondaryAbilities(
-      firstActionUpdate.state,
-      context(skillId, 3, null),
-    )
-    assert.deepEqual(laterUpdate.staffCastPulsePlayerIds, [], `skill ${skillId}: repeat`)
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    for (const skillId of NATIVE_SECONDARY_ABILITY_IDS) {
+      const base = context(skillId, 1, 0)
+      const authority = { ...base.players.player!, weaponKind }
+      const accepted = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+        ...base, players: { player: authority },
+      })
+      const ownsCastTwo = accepted.state.players.player?.castAction !== null
+      let state = accepted.state
+      for (let age = 1; age <= 12; age++) {
+        const result = stepNativeSecondaryAbilities(state, {
+          ...context(skillId, age + 1, null),
+          players: { player: { ...authority, input: input(null) } },
+        })
+        state = result.state
+        assert.deepEqual(result.staffCastPulsePlayerIds,
+          ownsCastTwo && age === (weaponKind === 'staff' ? 1 : 11) ? ['player'] : [],
+          `skill ${skillId}, weapon ${weaponKind}, update ${age}`)
+      }
+    }
   }
 })
 
@@ -1481,7 +1490,9 @@ test('Dampen appends weapon-selected Cast2 alongside CastSpin and emits its open
     const accepted = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
       ...base, players: { player: authority },
     })
-    assert.deepEqual(accepted.state.players.player?.castAction, { weaponKind, progress: 0 })
+    assert.deepEqual(accepted.state.players.player?.castAction, {
+      weaponKind, progress: 0, ...(weaponKind === null ? { handPose: 0, handDone: false } : {}),
+    })
     assert.equal(accepted.state.players.player?.castSpinTicksRemaining, 73)
     let state = accepted.state
     for (let age = 1; age <= 73; age += 1) {
@@ -1489,10 +1500,31 @@ test('Dampen appends weapon-selected Cast2 alongside CastSpin and emits its open
         ...base, players: { player: { ...authority, input: input(null) } }, tick: age + 1,
       })
       state = next.state
-      assert.deepEqual(next.staffCastPulsePlayerIds, age === 1 ? ['player'] : [])
-      assert.equal(state.players.player!.castAction !== null, age < (weaponKind === 'staff' ? 51 : 64))
+      assert.deepEqual(next.staffCastPulsePlayerIds,
+        age === (weaponKind === 'staff' ? 1 : 11) ? ['player'] : [])
+      assert.equal(state.players.player!.castAction !== null,
+        age < (weaponKind === 'staff' ? 51 : weaponKind === 'wand' ? 64 : 65))
       assert.equal(state.players.player!.castSpinTicksRemaining, 73 - age)
       assert.equal(state.players.player!.castSequence, 1)
+    }
+  }
+})
+
+test('interrupted Cast2 marker delivery never refreshes after the action has crossed it', () => {
+  for (const weaponKind of ['staff', 'wand', null] as const) {
+    const base = context(11, 1, 0)
+    const authority = { ...base.players.player!, weaponKind }
+    let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), {
+      ...base, players: { player: authority },
+    }).state
+    const markerUpdate = weaponKind === 'staff' ? 1 : 11
+    for (let age = 1; age <= markerUpdate + 1; age++) {
+      const result = stepNativeSecondaryAbilities(state, {
+        ...base, tick: age + 1, players: { player: { ...authority,
+          eligible: age !== markerUpdate, input: input(null) } },
+      })
+      assert.deepEqual(result.staffCastPulsePlayerIds, [])
+      state = result.state
     }
   }
 })
@@ -4609,22 +4641,23 @@ test('Stoneskin requests apply, refresh, and exactly one natural-removal callbac
 })
 
 test('Stoneskin and Magic Shield intercept damage at the authoritative player boundary', () => {
+  const register = createNativeWorldManagerOrder().register
   const stoneskin = cast(46).state
   const blocked = applyNativeSecondaryPlayerDamage(
-    stoneskin, 'player', 500, 2, { x: 0, y: 0 }, 'boneyard:test',
+    stoneskin, 'player', 500, 2, { x: 0, y: 0 }, 'boneyard:test', register,
   )
   assert.equal(blocked.healthDamage, 0)
   assert.equal(blocked.absorbedDamage, 500)
 
   const shield = cast(54).state
   const hit = applyNativeSecondaryPlayerDamage(
-    shield, 'player', 10, 2, { x: 0, y: 0 }, 'boneyard:test',
+    shield, 'player', 10, 2, { x: 0, y: 0 }, 'boneyard:test', register,
   )
   assert.equal(hit.healthDamage, 0)
   assert.equal(hit.state.players.player?.magicShieldAbsorb, 15)
   assert.equal(hit.state.players.player?.magicShieldPulseTicks, 40)
   const broken = applyNativeSecondaryPlayerDamage(
-    hit.state, 'player', 20, 3, { x: 0, y: 0 }, 'boneyard:test',
+    hit.state, 'player', 20, 3, { x: 0, y: 0 }, 'boneyard:test', register,
   )
   assert.equal(broken.state.players.player?.magicShieldAbsorb, 0)
   assert.equal(broken.state.actors.filter(({ kind }) => kind === 'shield-break').length, 20)
@@ -4644,7 +4677,7 @@ test('Stoneskin and Magic Shield intercept damage at the authoritative player bo
     },
   ).state
   const explosiveBreak = applyNativeSecondaryPlayerDamage(
-    explosiveShield, 'player', 30, 2, { x: 4, y: 5 }, 'boneyard:test',
+    explosiveShield, 'player', 30, 2, { x: 4, y: 5 }, 'boneyard:test', register,
   ).state
   const breakActors = explosiveBreak.actors.filter(({ kind }) => kind === 'shield-break')
   assert.equal(breakActors.length, 20)
@@ -4735,8 +4768,14 @@ test('Stoneskin and Magic Shield intercept damage at the authoritative player bo
 
 test('Stoneskin physical hit fragments keep native life two and born shadow through live setting changes', () => {
   const source = cast(46).state
-  const hit = (physical: boolean, enhancedEffects: boolean) => applyNativeSecondaryPlayerDamage(
-    source, 'player', 12, 2, { x: 50, y: 80 }, 'boneyard:test', { physical, enhancedEffects })
+  const hit = (physical: boolean, enhancedEffects: boolean) => {
+    const order = createNativeWorldManagerOrder()
+    const before = order.state().nextRegistrationOrdinal.transient
+    const received = applyNativeSecondaryPlayerDamage(
+      source, 'player', 12, 2, { x: 50, y: 80 }, 'boneyard:test',
+      order.register, { physical, enhancedEffects })
+    return { ...received, before, after: order.state().nextRegistrationOrdinal.transient }
+  }
   assert.strictEqual(hit(false, true).state, source)
   const on = hit(true, true)
   const off = hit(true, false)
@@ -4745,6 +4784,9 @@ test('Stoneskin physical hit fragments keep native life two and born shadow thro
   assert.deepEqual(on.state.rng, off.state.rng)
   const born = on.state.actors.find(actor => actor.kind === 'stoneskin-chip' && actor.variant === 0)!
   const coarse = off.state.actors.find(actor => actor.kind === 'stoneskin-chip' && actor.variant === 0)!
+  assert.deepEqual(born.painterRegistrations, [{ managerLane: 'transient', registrationOrdinal: on.before }])
+  assert.equal(on.after, on.before + 1)
+  assert.equal(off.after, off.before + 1)
   assert.equal(born.alpha, 2)
   assert.equal(coarse.alpha, 2)
   assert.deepEqual({ ...coarse, enhanced: true }, born)

@@ -46,7 +46,7 @@ export function applyPlayerContacts(
   playerDamage: readonly BoneyardEnemyPlayerDamage[],
   tick: number,
   extensions: GameSimulationExtensions | undefined,
-  registerWorldPainter?: RegisterNativeWorldPainter,
+  registerWorldPainter: RegisterNativeWorldPainter,
   writeScreenFlash?: WriteNativeScreenFlash,
 ): PlayerContactStep {
   const initialWorld = source.world
@@ -187,6 +187,7 @@ export function applyPlayerContacts(
       tick,
       character.position,
       gameWorldKey(world, damage.playerId),
+      registerWorldPainter,
       { writeScreenFlash, physical: damage.physicalDamage > 0 && damage.magicDamage <= 0, enhancedEffects: source.enhancedEffects ?? true },
     )
     secondaryAbilities = intercepted.state
@@ -422,6 +423,7 @@ export function applyPlayerContacts(
               tick,
               worldKey,
             },
+            registerWorldPainter,
             writeScreenFlash,
           )
         }

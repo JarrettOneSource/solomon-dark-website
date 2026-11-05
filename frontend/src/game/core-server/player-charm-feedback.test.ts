@@ -15,6 +15,7 @@ import {
   getPlayerProgression, stepGameSimulationTick, type GameSimulationState,
 } from './game-simulation.ts'
 import { applyPlayerContacts } from './player-contact-system.ts'
+import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
 import {
   applyPlayerEntityHagathaPurchaseEffects, playerCharacterRecords, playerEconomyAt,
   poisonPlayerEntity, replacePlayerEconomy,
@@ -88,10 +89,12 @@ test('fully absorbed contact stays active; admitted damage uses the same loss ev
   } } }
   const damage = { actorId: 1, eventId: 1, magicDamage: 0, physicalDamage: 1, playerId: 'owner',
     coldSlowTicks: 0, dazzleTicks: 0, poisonDamage: 0, poisonDuration: 0 }
-  const absorbed = applyPlayerContacts(shielded, playerCharacterRecords(shielded.playerEntities), [damage], 1, undefined)
+  const absorbed = applyPlayerContacts(shielded, playerCharacterRecords(shielded.playerEntities), [damage], 1, undefined,
+    createNativeWorldManagerOrder(shielded.worldManagerOrder).register)
   assert.equal(absorbed.playerEntities.progressions[0]!.hagathaRuntime.reverieActive, true)
   assert.equal(absorbed.playerDamageSoundEvents.some(event => event.type === 'player-charm-lost'), false)
-  const hurt = applyPlayerContacts(state, playerCharacterRecords(state.playerEntities), [damage], 1, undefined)
+  const hurt = applyPlayerContacts(state, playerCharacterRecords(state.playerEntities), [damage], 1, undefined,
+    createNativeWorldManagerOrder(state.worldManagerOrder).register)
   assert.equal(hurt.playerDamageSoundEvents.filter(event => event.type === 'player-charm-lost').length, 1)
   assert.equal(hurt.playerEntities.progressions[0]!.hagathaRuntime.reverieActive, false)
 })
