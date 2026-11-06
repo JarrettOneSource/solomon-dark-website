@@ -435,8 +435,13 @@ live_game_checksum="$(remote_game_artifact_checksum)"
     fail "production game unit does not match origin/main after deploying $target_sha"
 curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
     --retry-delay 1 "$public_url/game" >/dev/null
+# The Rust companion's public mount comes from the validated revision, so moving it
+# changes only frontend/tools/companion-game.json and the Caddy site, not this worker.
+companion_mount="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["mount"])' \
+    "$source_checkout/frontend/tools/companion-game.json")"
+[[ "$companion_mount" =~ ^/[a-z0-9-]+(/[a-z0-9-]+)*$ ]] || fail "invalid companion game mount $companion_mount"
 public_deployment="$(curl --ipv4 --fail --silent --show-error --retry 10 --retry-all-errors \
-    --retry-delay 1 "$public_url/game-rust/api/game/deployment")"
+    --retry-delay 1 "$public_url$companion_mount/api/game/deployment")"
 python3 - "$public_deployment" "$target_sha" "$target_game_revision" <<'PY'
 import json
 import sys
