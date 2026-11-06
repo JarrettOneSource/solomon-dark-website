@@ -213,9 +213,12 @@ export async function remountGameArtifact(artifact, destination, mount,
     await writeFile(join(target, 'client/guest-save-migration.mjs'), migration.outputFiles[0].text)
     // The original artifact remains immutable. Changed mount/bootstrap members
     // belong to this Website-derived manifest, with explicit source provenance.
+    // The release's deployment reads `companion` to decide whether to adopt PixiJS's
+    // cloud saves, so the decision travels with the exact bytes it applies to.
     const manifest = { ...artifact.manifest,
       remountedFrom: { manifestSha256: createHash('sha256').update(sourceManifest).digest('hex'),
         gameMount: artifact.mount, websiteMount: oldWebsiteMount },
+      companion: { mount, storageNamespace, adoptPixiJsSaves: guestSaveMigration === 'adopt' },
       files: {} }
     for (const name of [...Object.keys(artifact.manifest.files), 'client/guest-save-migration.mjs'].sort())
       manifest.files[name] = await sha256(join(target, name))

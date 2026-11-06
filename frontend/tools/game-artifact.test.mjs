@@ -171,6 +171,10 @@ test('the swap injects the PixiJS adoption instead of the parallel-launch fork',
   const step = async artifact => readFile(join(artifact.client, 'guest-save-migration.mjs'), 'utf8')
   assert.match(await step(forked), /migration:primary-to-rust/)
   assert.match(await step(adopting), /migration:pixijs-adoption/)
+  assert.deepEqual(forked.manifest.companion,
+    { mount: '/game-rust', storageNamespace: '/game-rust', adoptPixiJsSaves: false })
+  assert.deepEqual(adopting.manifest.companion,
+    { mount: '/game', storageNamespace: '/game-rust', adoptPixiJsSaves: true })
   const boot = async artifact => readFile(join(artifact.client, 'boot.mjs'), 'utf8')
   assert.match(await boot(forked), /migration\.migrateParallelGuestSave\(\)/)
   assert.match(await boot(adopting), /migration\.adoptPixiJsGuestData\(\)/)

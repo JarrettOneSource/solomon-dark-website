@@ -91,8 +91,8 @@ for the port, service, state and credential boundaries.
 ## Complete worker version installation
 
 A complete version contains `deploy-main.sh`, `run-worker.py`, `install.py`,
-`deployment-publication.py`, `deploy-runtime.sh`, `parallel-game-saves.py`,
-`adopt-pixijs-cloud-saves.py` and `check-linux-artifact.py`. `install.py` defines and hashes this complete set.
+`deployment-publication.py`, `deploy-runtime.sh`, `parallel-game-saves.py` and
+`check-linux-artifact.py`. `install.py` defines and hashes this complete set.
 Versions are installed atomically behind `current`, retaining current and one
 prior version. The stable launchd entry resolves `current/run-worker.py` each
 invocation. Automatic self-update does not stop its own scheduler, preserves
@@ -100,8 +100,12 @@ failed-target state, discards an artifact built by older worker code, and defers
 the actual cutover to the next invocation. Completed owned worktrees, build
 outputs, artifacts and success logs are removed; bounded diagnostics remain.
 
-The installed four-component worker cannot package the expanded seven-component
-version for itself. Initial parallel deployment therefore needs one explicit
+An installed worker publishes the next version from its own fixed component list
+and then runs that version's `install.py`, so a version cannot add a component:
+the first publication lacks it and admission fails. Carry new behaviour in an
+existing component; `test_the_worker_component_set_is_what_installed_workers_publish`
+pins the set. The installed four-component worker likewise could not package the
+expanded seven-component version for itself. Initial parallel deployment therefore needs one explicit
 idle admission using the accepted published source, after its complete gate has
 passed with the production Rust artifact. Hold the shared compute lease while
 admitting this worker and any input configuration changes; release it only when
