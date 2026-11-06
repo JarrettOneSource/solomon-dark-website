@@ -30,6 +30,10 @@ client/save-tools/solomon_save_tools_bg.wasm
 client/editor-test/index.html
 ```
 
+Newer archives also list `bin/solomon-save-check` and `bin/solomon-save-rows.py`,
+the Rust repository's cloud-save checker. Admission accepts them but does not
+install them; an operator runs them from the unpacked archive.
+
 The original schema-1 manifest records the complete member SHA-256 map, full
 Rust revision and native target. `frontend/tools/game-artifact.mjs` validates
 all members, membership, document metadata and actual module/WASM references.

@@ -573,6 +573,30 @@ class ArtifactAdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'unchanged'):
                 artifact.check_release(root)
 
+    def test_operator_tools_in_the_rust_archive_are_admitted_without_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.release(root)
+            for name in ('game-artifact.json', 'game-source-artifact.json'):
+                manifest = json.loads((root / name).read_text())
+                manifest['files']['bin/solomon-save-check'] = 'c' * 64
+                manifest['files']['bin/solomon-save-rows.py'] = 'd' * 64
+                (root / name).write_text(json.dumps(manifest))
+            self.add_source_provenance_from(root)
+            artifact.check_release(root)
+            self.assertFalse((root / 'GameHost/solomon-save-check').exists())
+            manifest = json.loads((root / 'game-artifact.json').read_text())
+            manifest['files']['bin/unknown-tool'] = 'e' * 64
+            (root / 'game-artifact.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'unsupported release member|membership'):
+                artifact.check_release(root)
+
+    def add_source_provenance_from(self, root):
+        source = json.loads((root / 'game-source-artifact.json').read_text())
+        source.pop('remountedFrom', None)
+        (root / 'game-artifact.json').write_text(json.dumps(source))
+        self.add_source_provenance(root)
+
     def test_installer_rejects_a_root_that_escapes_the_external_volume(self):
         root = installer.VOLUME / '..' / 'unowned-ci-root'
         with self.assertRaisesRegex(RuntimeError, 'must live on its external volume'):
