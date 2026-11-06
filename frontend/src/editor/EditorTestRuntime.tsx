@@ -1,10 +1,9 @@
 import { lazy, Suspense } from 'react'
-import { gameRuntime } from '../lib/game-runtime.ts'
 import type { EditorDoc } from './model.ts'
 
-const TestRuntime = gameRuntime === 'rust'
-  ? lazy(() => import('./RustEditorTestRuntime.tsx'))
-  : lazy(() => import('./PixiEditorTestRuntime.tsx'))
+// Test-play runs the Rust game on every Website build. PixiEditorTestRuntime.tsx
+// stays with the rest of the PixiJS client until that client is removed.
+const TestRuntime = lazy(() => import('./RustEditorTestRuntime.tsx'))
 
 export default function EditorTestRuntime(props: {
   accountUsername: string | null
