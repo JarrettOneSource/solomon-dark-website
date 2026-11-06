@@ -1,10 +1,10 @@
 # Solomon Darker Website
 
 The Website owns accounts, cloud saves, mod distribution, leaderboards and
-Boneyard authoring. The latest retained PixiJS game runs at `/game`; the
-qualified Rust release runs alongside it at `/game-rust/`. Each has its own
-authority and continuing saves, while accounts and content are shared. See the [artifact and validation
-boundary](docs/RUST-GAME-CUTOVER.md).
+Boneyard authoring. The qualified Rust release runs at `/game/`; `/game-rust/`
+links redirect there. The PixiJS client is no longer served; its source stays in
+this repository until it is removed. Players' PixiJS saves were adopted when
+Rust took `/game`. See the [artifact and validation boundary](docs/RUST-GAME-CUTOVER.md).
 
 ## Validation and development
 

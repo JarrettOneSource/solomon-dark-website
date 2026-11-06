@@ -18,12 +18,13 @@ const artifact = await readGameArtifact({
   dist: process.env.SDR_GAME_DIST, nativeHost: process.env.SDR_GAME_NATIVE_HOST,
 })
 run('node_modules/typescript/bin/tsc', ['-b'])
+// The root site plays the Rust game; PixiJS is no longer served. Its Node host is
+// still built because the release layout requires it until PixiJS is removed.
 run('node_modules/vite/bin/vite.js', ['build'], {
-  VITE_GAME_RUNTIME: 'pixi', VITE_WEBSITE_BASE: '', VITE_GAME_ARTIFACT_BASE: companion.mount,
+  VITE_GAME_RUNTIME: 'rust', VITE_WEBSITE_BASE: '', VITE_GAME_ARTIFACT_BASE: companion.mount,
   SDR_WEBSITE_ASSET_BASE: '/', SDR_WEBSITE_OUT_DIR: '../backend/wwwroot',
 })
 run('tools/build-game-host.mjs')
-run('tools/check-game-bundle-budget.mjs')
 run('node_modules/vite/bin/vite.js', ['build'], {
   VITE_GAME_RUNTIME: 'rust', VITE_WEBSITE_BASE: companion.mount, VITE_GAME_ARTIFACT_BASE: companion.mount,
   SDR_WEBSITE_ASSET_BASE: `${companion.mount}/site/`, SDR_WEBSITE_OUT_DIR: 'dist-rust-site',
@@ -41,4 +42,4 @@ await mkdir(join(frontend, 'reports'), { recursive: true })
 for (const name of ['game-artifact.json', 'game-source-artifact.json'])
   await copyFile(join(generated, name), join(frontend, 'reports', name))
 await rm(generated, { recursive: true, force: true })
-console.log(`Built PixiJS at /game and Rust ${artifact.manifest.revision} at ${companion.mount}.`)
+console.log(`Built the site and Rust ${artifact.manifest.revision} at ${companion.mount}.`)
