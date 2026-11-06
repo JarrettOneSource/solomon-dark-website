@@ -153,9 +153,14 @@ export async function stageGameArtifact(artifact, destination) {
   }
 }
 
-export async function remountGameArtifact(artifact, destination, mount) {
-  if (!/^\/[a-z0-9/-]+$/.test(mount) || mount.endsWith('/') || mount.includes('//'))
-    throw new Error('Invalid companion game mount')
+const validPath = path => /^\/[a-z0-9/-]+$/.test(path) && !path.endsWith('/') && !path.includes('//')
+
+/** Serve the game below `mount`. `storageNamespace` names where the game keeps its
+ * players' browser data; it stays fixed when the mount changes, so moving the game
+ * to another path neither orphans its saves nor reads another client's. */
+export async function remountGameArtifact(artifact, destination, mount, { storageNamespace } = {}) {
+  if (!validPath(mount)) throw new Error('Invalid companion game mount')
+  if (!validPath(storageNamespace ?? '')) throw new Error('Invalid companion storage namespace')
   const target = await stagingDestination(artifact, destination)
   const document = await readFile(join(artifact.client, 'index.html'), 'utf8')
   const oldWebsiteMount = metadata(document, 'solomon-website-mount')
@@ -183,6 +188,8 @@ export async function remountGameArtifact(artifact, destination, mount) {
             `name="solomon-game-mount" content="${mount}"`)
             .replace(`name="solomon-website-mount" content="${oldWebsiteMount}"`,
               `name="solomon-website-mount" content="${mount}"`)
+            .replace(/<meta name="solomon-storage-namespace" content="[^"]*">\n?/, '')
+            .replace('</head>', `<meta name="solomon-storage-namespace" content="${storageNamespace}">\n</head>`)
         }
         if (name === entry) {
           text = text.replace(loaderReady, `${loaderReady}\n  currentResource = 'Saved progress';\n`

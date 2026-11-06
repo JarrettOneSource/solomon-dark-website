@@ -36,8 +36,16 @@ all members, membership, document metadata and actual module/WASM references.
 `build-parallel-apps.mjs` builds the root PixiJS site, its bundled host, and the
 mounted Rust companion site from the same Website source.
 
+`frontend/tools/companion-game.json` defines the companion: its public `mount`
+and its `storageNamespace`, the scope of its players' browser data. Both are
+`/game-rust` today. The namespace stays `/game-rust` when the mount moves, so
+the Rust game keeps its saves and never reads PixiJS's unsuffixed storage. The
+deployment worker reads the same file for its public health check, so moving
+the mount changes only this file and the Caddy site.
+
 The companion transformation changes mount references in HTML and bootstrap
-modules and adds the one-time guest-save migration module. It preserves the
+modules, writes the `solomon-storage-namespace` metadata, and adds the one-time
+guest-save migration module. It preserves the
 released WASM, native executable, save-tools JS and all asset bytes. A fresh
 `game-artifact.json` describes the actual mounted bytes. Its `remountedFrom`
 records the original manifest digest and mounts; `game-source-artifact.json`

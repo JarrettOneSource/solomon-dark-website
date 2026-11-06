@@ -69,7 +69,8 @@ test('remounting preserves native and WASM bytes and gives changed browser membe
   const source = await readGameArtifact(inputs)
   const originalManifest = await readFile(join(root, 'game-artifact.json'))
   const originalBoot = await readFile(join(root, 'client/boot.mjs'))
-  const mounted = await remountGameArtifact(source, join(root, '../mounted'), '/game-rust')
+  const mounted = await remountGameArtifact(source, join(root, '../mounted'), '/game-rust',
+    { storageNamespace: '/game-rust' })
   assert.equal(mounted.mount, '/game-rust')
   assert.equal(mounted.manifest.revision, source.manifest.revision)
   assert.equal(mounted.manifest.remountedFrom.manifestSha256,
@@ -81,6 +82,7 @@ test('remounting preserves native and WASM bytes and gives changed browser membe
   const html = await readFile(join(mounted.client, 'index.html'), 'utf8')
   const editor = await readFile(join(mounted.client, 'editor-test/index.html'), 'utf8')
   assert.match(html, /name="solomon-website-mount" content="\/game-rust"/)
+  assert.match(html, /name="solomon-storage-namespace" content="\/game-rust"/)
   assert.ok(!html.includes('/game-stg'))
   assert.ok(!editor.includes('/game-stg'))
   assert.ok(Object.hasOwn(mounted.manifest.files, 'client/parallel-save-migration.mjs'))
@@ -136,4 +138,25 @@ test('staging cannot delete its own artifact input', async context => {
   const { inputs } = await fixture(context)
   const artifact = await readGameArtifact(inputs)
   await assert.rejects(stageGameArtifact(artifact, inputs.dist), /overlap/)
+})
+
+test('the companion keeps its storage namespace when it moves to another mount', async context => {
+  const { inputs, root } = await fixture(context)
+  const source = await readGameArtifact(inputs)
+  const moved = await remountGameArtifact(source, join(root, '../moved'), '/game',
+    { storageNamespace: '/game-rust' })
+  const html = await readFile(join(moved.client, 'index.html'), 'utf8')
+  assert.match(html, /name="solomon-website-mount" content="\/game"/)
+  assert.match(html, /name="solomon-storage-namespace" content="\/game-rust"/)
+  assert.equal(html.match(/solomon-storage-namespace/g).length, 1)
+  for (const invalid of [undefined, '', '/', '/game-rust/'])
+    await assert.rejects(remountGameArtifact(source, join(root, `../bad-${String(invalid).length}`), '/game',
+      { storageNamespace: invalid }), /storage namespace/)
+})
+
+test('the companion definition and the guest-save fork agree on the storage namespace', async () => {
+  const companion = JSON.parse(await readFile(new URL('./companion-game.json', import.meta.url), 'utf8'))
+  const migration = await readFile(new URL('../src/lib/parallel-save-migration.ts', import.meta.url), 'utf8')
+  assert.ok(migration.includes(`\${sourceName}:${companion.storageNamespace}\``),
+    'parallel-save-migration.ts writes the namespace the companion reads')
 })
