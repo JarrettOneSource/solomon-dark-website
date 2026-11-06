@@ -91,8 +91,8 @@ for the port, service, state and credential boundaries.
 ## Complete worker version installation
 
 A complete version contains `deploy-main.sh`, `run-worker.py`, `install.py`,
-`deployment-publication.py`, `deploy-runtime.sh`, `parallel-game-saves.py` and
-`check-linux-artifact.py`. `install.py` defines and hashes this complete set.
+`deployment-publication.py`, `deploy-runtime.sh`, `parallel-game-saves.py`,
+`adopt-pixijs-cloud-saves.py` and `check-linux-artifact.py`. `install.py` defines and hashes this complete set.
 Versions are installed atomically behind `current`, retaining current and one
 prior version. The stable launchd entry resolves `current/run-worker.py` each
 invocation. Automatic self-update does not stop its own scheduler, preserves

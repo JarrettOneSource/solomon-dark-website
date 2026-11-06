@@ -85,7 +85,7 @@ test('remounting preserves native and WASM bytes and gives changed browser membe
   assert.match(html, /name="solomon-storage-namespace" content="\/game-rust"/)
   assert.ok(!html.includes('/game-stg'))
   assert.ok(!editor.includes('/game-stg'))
-  assert.ok(Object.hasOwn(mounted.manifest.files, 'client/parallel-save-migration.mjs'))
+  assert.ok(Object.hasOwn(mounted.manifest.files, 'client/guest-save-migration.mjs'))
   const rechecked = await readGameArtifact({ dist: mounted.client, nativeHost: mounted.native })
   assert.equal(rechecked.mount, '/game-rust')
 })
@@ -159,4 +159,21 @@ test('the companion definition and the guest-save fork agree on the storage name
   const migration = await readFile(new URL('../src/lib/parallel-save-migration.ts', import.meta.url), 'utf8')
   assert.ok(migration.includes(`\${sourceName}:${companion.storageNamespace}\``),
     'parallel-save-migration.ts writes the namespace the companion reads')
+})
+
+test('the swap injects the PixiJS adoption instead of the parallel-launch fork', async context => {
+  const { inputs, root } = await fixture(context)
+  const source = await readGameArtifact(inputs)
+  const forked = await remountGameArtifact(source, join(root, '../forked'), '/game-rust',
+    { storageNamespace: '/game-rust' })
+  const adopting = await remountGameArtifact(source, join(root, '../adopting'), '/game',
+    { storageNamespace: '/game-rust', guestSaveMigration: 'adopt' })
+  const step = async artifact => readFile(join(artifact.client, 'guest-save-migration.mjs'), 'utf8')
+  assert.match(await step(forked), /migration:primary-to-rust/)
+  assert.match(await step(adopting), /migration:pixijs-adoption/)
+  const boot = async artifact => readFile(join(artifact.client, 'boot.mjs'), 'utf8')
+  assert.match(await boot(forked), /migration\.migrateParallelGuestSave\(\)/)
+  assert.match(await boot(adopting), /migration\.adoptPixiJsGuestData\(\)/)
+  await assert.rejects(remountGameArtifact(source, join(root, '../bad-step'), '/game',
+    { storageNamespace: '/game-rust', guestSaveMigration: 'copy' }), /guest-save migration/)
 })

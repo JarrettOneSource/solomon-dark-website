@@ -155,23 +155,34 @@ export async function stageGameArtifact(artifact, destination) {
 
 const validPath = path => /^\/[a-z0-9/-]+$/.test(path) && !path.endsWith('/') && !path.includes('//')
 
+// The guest-save step that runs before the game loads: `fork` copies the PixiJS save
+// into the companion once at the parallel launch; `adopt` makes PixiJS's save and
+// preferences the game's when it replaces PixiJS.
+const guestSaveMigrations = {
+  fork: { source: '../src/lib/parallel-save-migration.ts', call: 'migrateParallelGuestSave' },
+  adopt: { source: '../src/lib/pixijs-save-adoption.ts', call: 'adoptPixiJsGuestData' },
+}
+
 /** Serve the game below `mount`. `storageNamespace` names where the game keeps its
  * players' browser data; it stays fixed when the mount changes, so moving the game
  * to another path neither orphans its saves nor reads another client's. */
-export async function remountGameArtifact(artifact, destination, mount, { storageNamespace } = {}) {
+export async function remountGameArtifact(artifact, destination, mount,
+  { storageNamespace, guestSaveMigration = 'fork' } = {}) {
   if (!validPath(mount)) throw new Error('Invalid companion game mount')
   if (!validPath(storageNamespace ?? '')) throw new Error('Invalid companion storage namespace')
+  const step = guestSaveMigrations[guestSaveMigration]
+  if (!Object.hasOwn(guestSaveMigrations, guestSaveMigration)) throw new Error('Invalid guest-save migration')
   const target = await stagingDestination(artifact, destination)
   const document = await readFile(join(artifact.client, 'index.html'), 'utf8')
   const oldWebsiteMount = metadata(document, 'solomon-website-mount')
   const entry = documentModule(document, artifact.mount, artifact.manifest.files)
   const bootstrap = await readFile(join(artifact.root, entry), 'utf8')
   const loaderReady = 'await loader.boot_loader();'
-  if (bootstrap.split(loaderReady).length !== 2 || bootstrap.includes('parallel-save-migration'))
+  if (bootstrap.split(loaderReady).length !== 2 || /(parallel|guest)-save-migration/.test(bootstrap))
     throw new Error('Companion mounting requires the original GPU-loader bootstrap')
   const { build } = await import('esbuild')
   const migration = await build({
-    entryPoints: [fileURLToPath(new URL('../src/lib/parallel-save-migration.ts', import.meta.url))],
+    entryPoints: [fileURLToPath(new URL(step.source, import.meta.url))],
     bundle: true, platform: 'browser', format: 'esm', target: 'es2022', write: false,
   })
   const sourceManifest = await readFile(join(artifact.root, 'game-artifact.json'))
@@ -193,20 +204,20 @@ export async function remountGameArtifact(artifact, destination, mount, { storag
         }
         if (name === entry) {
           text = text.replace(loaderReady, `${loaderReady}\n  currentResource = 'Saved progress';\n`
-            + `  const migration = await import(new URL('parallel-save-migration.mjs', import.meta.url));\n`
-            + '  await migration.migrateParallelGuestSave();')
+            + `  const migration = await import(new URL('guest-save-migration.mjs', import.meta.url));\n`
+            + `  await migration.${step.call}();`)
         }
         await writeFile(path, text)
       }
     }
-    await writeFile(join(target, 'client/parallel-save-migration.mjs'), migration.outputFiles[0].text)
+    await writeFile(join(target, 'client/guest-save-migration.mjs'), migration.outputFiles[0].text)
     // The original artifact remains immutable. Changed mount/bootstrap members
     // belong to this Website-derived manifest, with explicit source provenance.
     const manifest = { ...artifact.manifest,
       remountedFrom: { manifestSha256: createHash('sha256').update(sourceManifest).digest('hex'),
         gameMount: artifact.mount, websiteMount: oldWebsiteMount },
       files: {} }
-    for (const name of [...Object.keys(artifact.manifest.files), 'client/parallel-save-migration.mjs'].sort())
+    for (const name of [...Object.keys(artifact.manifest.files), 'client/guest-save-migration.mjs'].sort())
       manifest.files[name] = await sha256(join(target, name))
     await writeFile(join(target, 'game-artifact.json'), JSON.stringify(manifest, null, 2) + '\n')
     await writeFile(join(target, 'game-source-artifact.json'), sourceManifest)

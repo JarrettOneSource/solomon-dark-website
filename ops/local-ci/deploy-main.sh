@@ -164,7 +164,7 @@ install_file() {
 install_validated_worker() {
     worker_temp="$(mktemp -d "$state_root/worker.XXXXXXXX")"
     tar -xzf "$artifact" -C "$worker_temp" ./Deploy/M5Worker || fail "validated worker extraction failed"
-    for name in deploy-main.sh run-worker.py install.py deployment-publication.py deploy-runtime.sh parallel-game-saves.py check-linux-artifact.py; do
+    for name in deploy-main.sh run-worker.py install.py deployment-publication.py deploy-runtime.sh parallel-game-saves.py adopt-pixijs-cloud-saves.py check-linux-artifact.py; do
         [[ -f "$worker_temp/Deploy/M5Worker/$name" ]] || fail "validated worker lacks $name"
     done
     # The admitted installer owns its new version's definition, not the older running code.
@@ -324,10 +324,11 @@ if [[ -z "$artifact_checksum" ]]; then
     install_file 0644 \
         "$source_checkout/$caddy_source_path" \
         "$publish_dir/Deploy/solomon-dark-revived.caddy"
+    install_file 0644 "$source_checkout/frontend/tools/companion-game.json" "$publish_dir/Deploy/companion-game.json"
     for name in "${game_unit_names[@]}"; do
         install_file 0644 "$source_checkout/ops/nfo/$name" "$publish_dir/Deploy/$name"
     done
-    for name in deploy-main.sh run-worker.py install.py deployment-publication.py deploy-runtime.sh parallel-game-saves.py check-linux-artifact.py; do
+    for name in deploy-main.sh run-worker.py install.py deployment-publication.py deploy-runtime.sh parallel-game-saves.py adopt-pixijs-cloud-saves.py check-linux-artifact.py; do
         install_file 0700 "$source_checkout/ops/local-ci/$name" "$publish_dir/Deploy/M5Worker/$name"
     done
     python3 "$source_checkout/ops/local-ci/check-linux-artifact.py" "$publish_dir"
@@ -337,6 +338,8 @@ if [[ -z "$artifact_checksum" ]]; then
         Deploy/M5Worker/run-worker.py \
         Deploy/M5Worker/install.py \
         Deploy/M5Worker/deployment-publication.py \
+        Deploy/M5Worker/adopt-pixijs-cloud-saves.py \
+        Deploy/companion-game.json \
         Deploy/solomon-dark-game.service \
         Deploy/solomon-dark-revived.caddy \
         Server.dll \
