@@ -32,8 +32,10 @@ run('node_modules/vite/bin/vite.js', ['build'], {
 const generated = join(frontend, '.cache/companion-game')
 await rm(generated, { recursive: true, force: true })
 await mkdir(join(frontend, '.cache'), { recursive: true })
-const mounted = await remountGameArtifact(artifact, generated, companion.mount,
-  { storageNamespace: companion.storageNamespace })
+const mounted = await remountGameArtifact(artifact, generated, companion.mount, {
+  storageNamespace: companion.storageNamespace,
+  guestSaveMigration: companion.adoptPixiJsSaves ? 'adopt' : 'fork',
+})
 await stageGameArtifact(mounted, join(frontend, '../backend/wwwroot/game-rust'))
 await mkdir(join(frontend, 'reports'), { recursive: true })
 for (const name of ['game-artifact.json', 'game-source-artifact.json'])

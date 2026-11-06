@@ -87,6 +87,28 @@ The destination copy and migration marker commit atomically. Simultaneous tabs,
 retries and intentional deletion cannot cause later root progress to be copied
 again. Host-specific rejoin credentials are not copied.
 
+### Adoption when Rust replaces PixiJS
+
+PixiJS retires when Rust moves to `/game`; players keep playing with nothing to
+import or choose. `adoptPixiJsSaves` in `frontend/tools/companion-game.json`
+switches on two one-time steps that share one rule. Both copies of a save come
+from the fork above and count revisions from it, so the copy written more often
+since then is the one the player kept playing, and a tie keeps PixiJS's. The other
+copy is kept as a backup.
+
+- **Cloud saves.** On each deployment, after the fork, `adopt-pixijs-cloud-saves.py`
+  checks the flag. Once it is on, the script settles every account's slot zero
+  against slot one in one transaction under the `pixijs-adoption` marker. The
+  losing copy goes to `GameSaveAdoptionBackups`; slot zero is not changed.
+- **Guest saves.** The remount injects `pixijs-save-adoption.ts` instead of the
+  fork. Before the game loads, it settles the root slot against
+  `solomon-dark-game-saves:/game-rust` under the `migration:pixijs-adoption`
+  marker. The losing copy goes to `backup:pixijs-adoption`. Only the tab that
+  writes the marker carries preferences across:
+  - settings, layout and the legacy Hall of Fame are copied where Rust has none;
+  - current Hall of Fame runs combine, Rust's row winning a run both hold;
+  - playtime adds up.
+
 A shared envelope is not a guarantee that every historical simulation payload
 is accepted by both implementations. Keep originals and verify actual restores;
 track format defects in their owning runtime. Save isolation prevents the two

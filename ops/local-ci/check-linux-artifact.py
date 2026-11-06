@@ -45,7 +45,7 @@ def check_release(root):
             or not isinstance(original.get('files'), dict)):
         raise ValueError('The remounted game does not identify its original artifact')
     added = set(game['files']) - set(original['files'])
-    if added - {'client/parallel-save-migration.mjs'} or set(original['files']) - set(game['files']):
+    if added - {'client/guest-save-migration.mjs'} or set(original['files']) - set(game['files']):
         raise ValueError('The remounted game changed original artifact membership')
     for name, digest in original['files'].items():
         if not name.endswith(('.html', '.mjs')) and game['files'].get(name) != digest:

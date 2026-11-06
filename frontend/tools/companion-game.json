@@ -1,4 +1,5 @@
 {
   "mount": "/game-rust",
-  "storageNamespace": "/game-rust"
+  "storageNamespace": "/game-rust",
+  "adoptPixiJsSaves": false
 }

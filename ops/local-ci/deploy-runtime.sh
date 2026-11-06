@@ -256,6 +256,8 @@ fi
 sqlite3 "$database" ".backup '$backup_dir/sdr.db'"
 [[ "$(sqlite3 "$backup_dir/sdr.db" 'PRAGMA integrity_check;')" == ok ]]
 python3 "$stage/Deploy/M5Worker/parallel-game-saves.py" "$database"
+# Does nothing until the companion definition adopts PixiJS's saves at the swap.
+python3 "$stage/Deploy/M5Worker/adopt-pixijs-cloud-saves.py" "$database" "$stage/Deploy/companion-game.json"
 # Each authority keeps its own memorial and diagnostic archives. Copy only the
 # existing memorial on the first split; reconnect credentials are never shared.
 if (( current_parallel == 0 )); then
