@@ -5,7 +5,7 @@
 The owner's November 7 instruction requires fixes in both public clients while
 PixiJS stays at `/game` and Rust at `/game-rust`. Rust commit `a0d9219f` already
 corrects late entry after the arena begins to lock. The Website's
-`spawnPlayerCharacterInBoneyard` still creates the actor at the original spawn,
+`spawnPlayerCharacterInBoneyard` previously created the actor at the original spawn,
 inside the entrance strip that the combat bounds exclude. Both ordinary
 `addPlayerCharacter` and retained-run `rejoinGameSimulationPlayer` use this owner.
 
@@ -19,7 +19,25 @@ there is no retained retail evidence defining late-join placement.
 Membership: new joins, retained-player rejoins and catch-up materialization all
 use the same spawn owner; north and south entrances each have open, locking and
 sealed phases. Scenes without an arena transition preserve ordinary spawn.
-These members are implementation/validation pending. Existing active players,
+These members use the corrected spawn owner. The public simulation regression
+failed on the original placement and passes for new joins and retained rejoins,
+both entrances and all three phases. It also verifies facing, zero velocity,
+unchanged active players, progression, economy and RNG. The 326 simulation/world
+tests, test type checks and focused lint pass.
+
+A Mac Chrome journey on the candidate generated a real arena, detached the
+browser and sealed the arena through the isolated fixture. Two protocol peers
+and progression grants supplied the surrounding party/catch-up state. The
+browser returned through `LAST GAME`, completed eight ordered personal choices,
+and materialized at `(565.6231, 400)` inside combat bounds
+`(0, 375, 2538.5200, 2861.4800)`. The held tick advanced from 1124 to 1125 and
+local save revision from 2 to 6. All five composed frames were reviewed; page,
+console, HTTP, request and host error arrays were empty and the owned browser
+exited normally. This establishes fixture-assisted entry/catch-up behavior,
+not natural retail or historical performance acceptance. Full Website gate and
+installed acceptance remain separate release requirements.
+
+Existing active players,
 transport reattachment to an existing actor, authored facing, progression,
 inventory, RNG and the arena's own geometry/timing are outside this correction.
 
