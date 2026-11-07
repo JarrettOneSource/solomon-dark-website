@@ -1,5 +1,31 @@
 # 2026-08-27 — Coffin/Maggot retirement, Zombie composition, and skill-acquisition reseed reopening
 
+## Report 9 — current snapshot transport cost
+
+The November 7 follow-up restores the unmodified October 8 coffin-rush browser
+save through both maintained clients' public importers. No Coffin, Maggot,
+terminal effect, target modifier, clock, painter, RNG or save rule is changed.
+Rust's generic snapshot delta owner is `crates/protocol/src/snapshot.rs`; PixiJS
+uses its separate entity descriptors in `protocol/entity-replication.ts`.
+
+The Rust native profile identifies repeated field lookup during object diffs:
+each stable record searches both maps for its field names on every publication.
+Matching field sets can instead walk their values together. Different field
+sets retain the existing insertion/removal path; arrays, scalar replacement,
+full snapshots, reconnects, size bounds and exact numeric handling retain their
+existing contracts. This covers every nested snapshot object rather than
+special-casing Coffins or reducing actor/effect populations.
+
+The Mac M2 codec diagnostic uses Rust 1.98.1, optimization level 3, LTO off
+and 16 codegen units. Three alternating baseline/candidate pairs, each with
+40 five-tick publications of the original save, reduce mean encoding from
+10.34/10.46/10.41 ms to 7.08/7.22/7.43 ms. All six arms remain Active at health
+386 and tick 1669745; every decoded checkpoint matches direct canonical typed
+decoding and each arm sends 6,613,110 bytes. These are native transport
+measurements, not browser FPS or proof of the historical occurrence's cause.
+Raw measurements remain in the private task's `performance/report9-pairs.json`.
+PixiJS does not contain this object-diff path and needs no corresponding change.
+
 ## Reported smell and parity question
 
 - Player reports: defeated Coffins appeared not to disappear; one Fire/Body
