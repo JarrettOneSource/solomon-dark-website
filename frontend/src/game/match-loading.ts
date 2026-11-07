@@ -1,6 +1,7 @@
 export const MATCH_LOADING_PRESENTATION_DELAY_MS = 150
 
 export const MATCH_LOADING_STAGE_DEFINITIONS = [
+  { stage: 'preparing_create', label: 'Preparing your wizard...', progress: 0 },
   {
     stage: 'connecting_transport',
     label: 'Waking the multiplayer transport...',
@@ -62,7 +63,7 @@ export const MATCH_LOADING_STAGE_DEFINITIONS = [
 ] as const
 
 export type MatchLoadingStage = typeof MATCH_LOADING_STAGE_DEFINITIONS[number]['stage']
-export type MatchLoadingFlow = 'boneyard' | 'hub'
+export type MatchLoadingFlow = 'boneyard' | 'create' | 'hub'
 
 export interface MatchLoadingState {
   flow: MatchLoadingFlow

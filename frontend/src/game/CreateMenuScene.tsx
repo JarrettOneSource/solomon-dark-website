@@ -30,6 +30,8 @@ import {
 } from './game-audio-native.ts'
 import { startGamePresentationLoop } from './game-presentation-frame-loop.ts'
 import { nativeApplicationTick } from './native-application-tick.ts'
+import MatchLoadingScreen from './MatchLoadingScreen.tsx'
+import { beginMatchLoading } from './match-loading.ts'
 import {
   CREATE_DISCIPLINES,
   CREATE_RANDOMIZE_BOUNDS,
@@ -114,6 +116,8 @@ export default function CreateMenuScene({
   const [inputReady, setInputReady] = useState(false)
   const [nameValidationMessage, setNameValidationMessage] = useState<string | null>(null)
   const [rendererError, setRendererError] = useState<string | null>(null)
+  const [rendererReady, setRendererReady] = useState(false)
+  const [loading] = useState(() => beginMatchLoading('create', 'preparing_create'))
   onStartRef.current = onStart
   const nameLocked = pendingCommit !== null
     || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
@@ -133,8 +137,10 @@ export default function CreateMenuScene({
     let stopPresentationLoop: (() => void) | null = null
     let previousSemanticPhase: 'discipline' | 'element' | null = null
     let previousSemanticTick = -1
+    let presented = false
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     setRendererError(null)
+    setRendererReady(false)
 
     void createCreateMenuRenderer({
       viewport: viewportRef.current,
@@ -211,6 +217,10 @@ export default function CreateMenuScene({
           sceneElapsedMs: now - sceneStartedAt,
           selectedElement: selected,
         })
+        if (!presented) {
+          presented = true
+          setRendererReady(true)
+        }
       })
     }).catch((error: unknown) => {
       if (!cancelled) {
@@ -382,146 +392,158 @@ export default function CreateMenuScene({
       aria-label={retainedLoadout ? 'Confirm retained wizard loadout' : 'New wizard loadout selection'}
     >
       <div ref={hostRef} className="create-menu-renderer" aria-hidden />
+      {!rendererReady && !rendererError && <MatchLoadingScreen loading={loading} />}
       {rendererError && (
         <div className="main-menu-renderer-error" role="alert">{rendererError}</div>
       )}
-
-      <div className="create-menu-native-stage create-menu-native-back-stage" style={nativeBackStageStyle}>
+      {!rendererReady && (
         <button
           type="button"
-          className="create-menu-back"
-          aria-label="Back"
+          className="create-menu-loading-back"
           data-game-back="true"
-          disabled={backDisabled || pendingCommit !== null || Boolean(retainedLoadout)}
-          onBlur={() => highlight(null)}
-          onClick={() => { if (!pendingCommitRef.current) onBack() }}
-          onFocus={() => highlight('back')}
-          onPointerDown={(event) => {
-            if (event.button === 0) playBackPress()
-          }}
-          onPointerEnter={() => highlight('back')}
-          onPointerLeave={() => highlight(null)}
-          onKeyDown={playBackPress}
-        />
-      </div>
+          disabled={backDisabled || Boolean(retainedLoadout)}
+          onClick={() => { audio.playSound('click'); onBack() }}
+        >Back</button>
+      )}
 
-      <div className="create-menu-native-stage create-menu-native-dice-stage" style={nativeDiceStageStyle}>
-        <button
-          type="button"
-          aria-label="Randomize wizard loadout"
-          title="Randomize choices and keep your name"
-          className="create-menu-randomize"
-          data-game-create-randomize="true"
-          disabled={!inputReady || nameLocked || !nameValidation.ok || Boolean(rendererError)}
-          onClick={randomizeLoadout}
-          style={{
-            left: CREATE_RANDOMIZE_BOUNDS.left,
-            top: CREATE_RANDOMIZE_BOUNDS.top,
-            width: CREATE_RANDOMIZE_BOUNDS.width,
-            height: CREATE_RANDOMIZE_BOUNDS.height,
-          }}
-        />
-      </div>
-
-      <div className="create-menu-native-stage create-menu-native-name-stage" style={nativeNameStageStyle}>
-        <input
-          aria-describedby="create-menu-name-validation"
-          aria-invalid={!nameValidation.ok || undefined}
-          aria-label="Wizard name"
-          autoCapitalize="characters"
-          autoComplete="off"
-          className="create-menu-name-input"
-          maxLength={CREATE_WIZARD_NAME_MAX_LENGTH}
-          onChange={(event) => updateDisplayName(event.target.value)}
-          ref={nameInputRef}
-          readOnly={nameLocked}
-          spellCheck={false}
-          type="text"
-          value={activeDisplayName}
-        />
-        <button
-          type="button"
-          aria-label="Clear wizard name"
-          className="create-menu-name-clear"
-          data-game-name-clear="true"
-          disabled={nameLocked}
-          onClick={clearWizardName}
-          title="Clear wizard name"
-        />
-        <button
-          type="button"
-          aria-label="Randomize wizard name"
-          className="create-menu-name-randomize"
-          data-game-name-randomize="true"
-          disabled={nameLocked}
-          onClick={randomizeWizardName}
-          title="Randomize wizard name"
-        />
-        <div id="create-menu-name-validation" className="create-menu-name-validation" role="status">
-          {nameValidationMessage ?? (!nameValidation.ok ? nameValidation.reason : '')}
-        </div>
-      </div>
-
-      <div className="create-menu-native-stage create-menu-native-action-stage" style={nativeActionStageStyle}>
-        <div
-          className="create-menu-elements"
-          data-visible={elementsVisible}
-          aria-label="Choose your element"
-        >
-          {CREATE_ELEMENTS.map((element) => (
-            <button
-              key={element}
-              ref={(node) => {
-                if (node) elementButtonsRef.current[element] = node
-                else delete elementButtonsRef.current[element]
-              }}
-              type="button"
-              className={`create-menu-element create-menu-element-${element}`}
-              aria-label={element}
-              data-game-default-focus={(retainedLoadout
-                ? element === retainedLoadout.element
-                : element === 'earth') || undefined}
-              disabled={!elementsVisible || selectedElement !== null || nameLocked}
-              onBlur={() => highlight(null)}
-              onClick={() => selectElement(element)}
-              onFocus={() => highlight(element)}
-              onPointerEnter={() => highlight(element)}
-              onPointerLeave={() => highlight(null)}
-            />
-          ))}
+      <div className="create-menu-controls" hidden={!rendererReady} inert={!rendererReady}>
+        <div className="create-menu-native-stage create-menu-native-back-stage" style={nativeBackStageStyle}>
+          <button
+            type="button"
+            className="create-menu-back"
+            aria-label="Back"
+            data-game-back="true"
+            disabled={backDisabled || pendingCommit !== null || Boolean(retainedLoadout)}
+            onBlur={() => highlight(null)}
+            onClick={() => { if (!pendingCommitRef.current) onBack() }}
+            onFocus={() => highlight('back')}
+            onPointerDown={(event) => {
+              if (event.button === 0) playBackPress()
+            }}
+            onPointerEnter={() => highlight('back')}
+            onPointerLeave={() => highlight(null)}
+            onKeyDown={playBackPress}
+          />
         </div>
 
-        <div
-          className="create-menu-disciplines"
-          data-visible={disciplinesVisible}
-          aria-label="Choose your discipline"
-        >
-          {CREATE_DISCIPLINES.map((discipline) => (
-            <button
-              key={discipline}
-              ref={(node) => {
-                if (node) disciplineButtonsRef.current[discipline] = node
-                else delete disciplineButtonsRef.current[discipline]
-              }}
-              type="button"
-              className={`create-menu-discipline create-menu-discipline-${discipline}`}
-              aria-label={discipline}
-              data-game-default-focus={(retainedLoadout
-                ? discipline === retainedLoadout.discipline
-                : discipline === 'arcane') || undefined}
-              disabled={
-                !disciplinesVisible
-                || pendingCommit !== null
-                || !nameValidation.ok
-                || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
-              }
-              onBlur={() => highlight(null)}
-              onClick={() => selectDiscipline(discipline)}
-              onFocus={() => highlight(discipline)}
-              onPointerEnter={() => highlight(discipline)}
-              onPointerLeave={() => highlight(null)}
-            />
-          ))}
+        <div className="create-menu-native-stage create-menu-native-dice-stage" style={nativeDiceStageStyle}>
+          <button
+            type="button"
+            aria-label="Randomize wizard loadout"
+            title="Randomize choices and keep your name"
+            className="create-menu-randomize"
+            data-game-create-randomize="true"
+            disabled={!inputReady || nameLocked || !nameValidation.ok || Boolean(rendererError)}
+            onClick={randomizeLoadout}
+            style={{
+              left: CREATE_RANDOMIZE_BOUNDS.left,
+              top: CREATE_RANDOMIZE_BOUNDS.top,
+              width: CREATE_RANDOMIZE_BOUNDS.width,
+              height: CREATE_RANDOMIZE_BOUNDS.height,
+            }}
+          />
+        </div>
+
+        <div className="create-menu-native-stage create-menu-native-name-stage" style={nativeNameStageStyle}>
+          <input
+            aria-describedby="create-menu-name-validation"
+            aria-invalid={!nameValidation.ok || undefined}
+            aria-label="Wizard name"
+            autoCapitalize="characters"
+            autoComplete="off"
+            className="create-menu-name-input"
+            maxLength={CREATE_WIZARD_NAME_MAX_LENGTH}
+            onChange={(event) => updateDisplayName(event.target.value)}
+            ref={nameInputRef}
+            readOnly={nameLocked}
+            spellCheck={false}
+            type="text"
+            value={activeDisplayName}
+          />
+          <button
+            type="button"
+            aria-label="Clear wizard name"
+            className="create-menu-name-clear"
+            data-game-name-clear="true"
+            disabled={nameLocked}
+            onClick={clearWizardName}
+            title="Clear wizard name"
+          />
+          <button
+            type="button"
+            aria-label="Randomize wizard name"
+            className="create-menu-name-randomize"
+            data-game-name-randomize="true"
+            disabled={nameLocked}
+            onClick={randomizeWizardName}
+            title="Randomize wizard name"
+          />
+          <div id="create-menu-name-validation" className="create-menu-name-validation" role="status">
+            {nameValidationMessage ?? (!nameValidation.ok ? nameValidation.reason : '')}
+          </div>
+        </div>
+
+        <div className="create-menu-native-stage create-menu-native-action-stage" style={nativeActionStageStyle}>
+          <div
+            className="create-menu-elements"
+            data-visible={elementsVisible}
+            aria-label="Choose your element"
+          >
+            {CREATE_ELEMENTS.map((element) => (
+              <button
+                key={element}
+                ref={(node) => {
+                  if (node) elementButtonsRef.current[element] = node
+                  else delete elementButtonsRef.current[element]
+                }}
+                type="button"
+                className={`create-menu-element create-menu-element-${element}`}
+                aria-label={element}
+                data-game-default-focus={(retainedLoadout
+                  ? element === retainedLoadout.element
+                  : element === 'earth') || undefined}
+                disabled={!elementsVisible || selectedElement !== null || nameLocked}
+                onBlur={() => highlight(null)}
+                onClick={() => selectElement(element)}
+                onFocus={() => highlight(element)}
+                onPointerEnter={() => highlight(element)}
+                onPointerLeave={() => highlight(null)}
+              />
+            ))}
+          </div>
+
+          <div
+            className="create-menu-disciplines"
+            data-visible={disciplinesVisible}
+            aria-label="Choose your discipline"
+          >
+            {CREATE_DISCIPLINES.map((discipline) => (
+              <button
+                key={discipline}
+                ref={(node) => {
+                  if (node) disciplineButtonsRef.current[discipline] = node
+                  else delete disciplineButtonsRef.current[discipline]
+                }}
+                type="button"
+                className={`create-menu-discipline create-menu-discipline-${discipline}`}
+                aria-label={discipline}
+                data-game-default-focus={(retainedLoadout
+                  ? discipline === retainedLoadout.discipline
+                  : discipline === 'arcane') || undefined}
+                disabled={
+                  !disciplinesVisible
+                  || pendingCommit !== null
+                  || !nameValidation.ok
+                  || Boolean(retainedLoadout && !retainedLoadoutCanConfirm)
+                }
+                onBlur={() => highlight(null)}
+                onClick={() => selectDiscipline(discipline)}
+                onFocus={() => highlight(discipline)}
+                onPointerEnter={() => highlight(discipline)}
+                onPointerLeave={() => highlight(null)}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>

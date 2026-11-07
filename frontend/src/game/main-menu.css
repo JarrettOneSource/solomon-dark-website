@@ -168,6 +168,19 @@
   background: #000;
 }
 
+.create-menu-loading-back {
+  position: absolute;
+  z-index: 200001;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.4em 1em;
+  color: #ead8aa;
+  font-family: var(--font-display);
+  background: #07060ee0;
+  border: 1px solid #d3b16599;
+  cursor: pointer;
+}
+
 .create-menu-back {
   position: absolute;
   z-index: 30;

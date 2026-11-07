@@ -71,3 +71,54 @@ scene. `Game.tsx` still owns readiness and does not mount the title until the
 resident asset promise succeeds. The loader therefore remains a real work
 gate; only its browser painter changed. `NativeLoader.tsx` retains the live
 semantic percentage as a DOM status surface and paints no artwork.
+
+## Create resource admission (Report134)
+
+The November 7 source check reopens the readiness boundary: the earlier loader
+closure did not include the subsequently lazy-loaded Create scene. Original
+message `1562280064174002266` and its retained clip show a black Create transition
+with the name dice alone before the complete scene. A live recheck found no edit
+or withdrawal. This establishes incomplete presentation; the historical delay's
+machine, network and GPU cause remain unknown.
+
+The owning system is scene resource admission, from asynchronous acquisition
+through first complete render, failure or cancellation. Native `MyLoader`
+`0x005BCA40` dispatches the menu only after readiness; Create's existing asset,
+clock and input contracts remain in entries005/007/032/108. No authored sprite
+table or native timing changes here.
+
+| Member | Current evidence | Disposition |
+| --- | --- | --- |
+| Startup Loader → Title | `Game.tsx` awaits resident tasks | verified-already-at-parity |
+| Pixi fresh and retained Create | `CreateMenuScene.tsx` mounts the HTML name dice before `createCreateMenuRenderer` resolves | exact-ported |
+| Create first render | renderer constructor renders with an empty draft; scene callback supplies the actual name and native phase | exact-ported |
+| Create cancellation and failure | unmount destroys late renderers; rejection displays an alert; pending scene needs visible Back without native canvas art | exact-ported |
+| Hub/Boneyard admission | existing loader barrier in entry053 | out-of-system: no conflicting evidence |
+| Rust fresh and retained Create | `MenuUi::attach` awaits `CreateView::new` before exposing Title; `show_create` has no asynchronous asset gap | verified-already-at-parity |
+
+Preserve lazy Create assets. During acquisition use the existing resident match
+cover with an explicit Create preparation label and no claimed completed work.
+Hide and make inert every native Create control until the scene has rendered
+the real name and phase. The native entry clock starts after acquisition, as
+before. A visible Back control remains available when the caller permits Back;
+failure replaces the cover with the existing explicit error. Leaving before
+resolution must destroy a late renderer without exposing it.
+
+Validation: repeatable actual Mac Chrome held Create
+asset, release, manual selection, cancellation and failed-asset journeys with
+composed screenshot review. Rust's earlier actual guest first/settled screenshots show the complete name,
+background and hands together. The admitted Rust menu owners are byte-identical
+between 58521585 and this task's cdb4a1c8, and no Rust change is required. These
+prior images are bounded controls, not a new current artifact run.
+
+Mac candidate acceptance: 21 existing motion/name/finalization/loading tests,
+frontend TypeScript build and Vite production build pass. Chrome156's production
+build journey holds the Create atlas through consent: the cover and visible Back
+remain, while every native control is hidden/inert and no canvas exists. Release
+shows complete Create, accepts edited name/Water/Mind, reaches College and saves
+on ordinary Leave. Separate contexts cancel before resolution without a late
+canvas and reject the held image with an explicit alert plus working Back.
+Success/cancel have empty page, console, failed-response and request-failure
+arrays; failure has only the deliberately aborted Create image. Composed images
+were directly reviewed. The original delay's cause, full gate and installed
+acceptance remain separate; the coordinator owns the latter gates.

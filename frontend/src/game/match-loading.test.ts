@@ -18,6 +18,7 @@ test('retains every applicable loader stage after the browser lobby cutover', ()
       progress,
     ]),
     [
+      ['preparing_create', 'Preparing your wizard...', 0],
       ['connecting_transport', 'Waking the multiplayer transport...', 0.44],
       ['authenticating_session', 'Proving your sigil to the host...', 0.52],
       ['establishing_route', 'Opening the route...', 0.56],
