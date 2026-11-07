@@ -96,10 +96,12 @@ from the fork above and count revisions from it, so the copy written more often
 since then is the one the player kept playing, and a tie keeps PixiJS's. The other
 copy is kept as a backup.
 
-- **Cloud saves.** On each deployment, after the fork, `adopt-pixijs-cloud-saves.py`
-  checks the flag. Once it is on, the script settles every account's slot zero
-  against slot one in one transaction under the `pixijs-adoption` marker. The
-  losing copy goes to `GameSaveAdoptionBackups`; slot zero is not changed.
+- **Cloud saves.** The remount records the companion definition, flag included, in
+  the release's `game-artifact.json`. On each deployment `parallel-game-saves.py`
+  runs the fork, and then, if that manifest says to adopt, settles every account's
+  slot zero against slot one in one transaction under the `pixijs-adoption`
+  marker. The losing copy goes to `GameSaveAdoptionBackups`; slot zero is not
+  changed.
 - **Guest saves.** The remount injects `pixijs-save-adoption.ts` instead of the
   fork. Before the game loads, it settles the root slot against
   `solomon-dark-game-saves:/game-rust` under the `migration:pixijs-adoption`

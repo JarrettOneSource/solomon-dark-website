@@ -255,9 +255,9 @@ fi
 # The backup includes final saves acknowledged by both clients.
 sqlite3 "$database" ".backup '$backup_dir/sdr.db'"
 [[ "$(sqlite3 "$backup_dir/sdr.db" 'PRAGMA integrity_check;')" == ok ]]
-python3 "$stage/Deploy/M5Worker/parallel-game-saves.py" "$database"
-# Does nothing until the companion definition adopts PixiJS's saves at the swap.
-python3 "$stage/Deploy/M5Worker/adopt-pixijs-cloud-saves.py" "$database" "$stage/Deploy/companion-game.json"
+# Forks once at the parallel launch; adopts PixiJS's saves once when the release's
+# companion definition (in its game manifest) says Rust replaced PixiJS.
+python3 "$stage/Deploy/M5Worker/parallel-game-saves.py" "$database" "$stage/game-artifact.json"
 # Each authority keeps its own memorial and diagnostic archives. Copy only the
 # existing memorial on the first split; reconnect credentials are never shared.
 if (( current_parallel == 0 )); then

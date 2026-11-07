@@ -662,6 +662,21 @@ class ArtifactAdmissionTests(unittest.TestCase):
                                 for path in (publish / 'wwwroot').glob('*.gz')),
                             'the game exclusion must retain normal Website compression')
 
+    def test_the_worker_component_set_is_what_installed_workers_publish(self):
+        # An installed worker publishes the next version from its own fixed list, then
+        # runs that version's install.py. A new component is therefore missing from the
+        # first publication and admission fails, so carry new behaviour in an existing
+        # component. Growing the set needs the explicit admission in ops/local-ci/README.md.
+        components = {'deploy-main.sh', 'run-worker.py', 'install.py', 'deployment-publication.py',
+                      'deploy-runtime.sh', 'parallel-game-saves.py', 'check-linux-artifact.py'}
+        self.assertEqual(set(installer.FILES), components)
+        script = (OPS / 'deploy-main.sh').read_text()
+        lists = [line.split('for name in ', 1)[1].split(';', 1)[0].split()
+                 for line in script.splitlines() if 'for name in deploy-main.sh' in line]
+        self.assertEqual(len(lists), 2)
+        for names in lists:
+            self.assertEqual(set(names), components)
+
     def test_each_required_installed_component_changes_version_admission(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory)
