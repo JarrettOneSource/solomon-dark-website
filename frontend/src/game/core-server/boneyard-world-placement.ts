@@ -11,7 +11,7 @@ import type { NativeSecondarySimulationState } from '../core-kernels/native-seco
 import type { NativeEtherDrainContact } from '../core-kernels/native-ether-drain.ts'
 import type { Vector2 } from '../core-kernels/vector.ts'
 import type { PlayerCharacterConfig, PlayerCharacterState } from '../core-kernels/player-character.ts'
-import { PLAYER_CHARACTER_PHYSICS, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
+import { PLAYER_CHARACTER_PHYSICS, PLAYER_CHARACTER_RADIUS, createPlayerCharacter, playerCharacterFacing } from '../core-kernels/player-character.ts'
 import type { BoneyardCollisionWorld } from './boneyard-collision.ts'
 import { boneyardBodyCollisionSourceIds, canPlaceBoneyardBody, firstBoneyardLineObstruction, firstBoneyardPathBlockProgress, resolveBoneyardMovement, withBoneyardGateCollision } from './boneyard-collision.ts'
 import { findBoneyardEnemyRoute } from './boneyard-enemy-navigation.ts'
@@ -23,8 +23,19 @@ export function spawnPlayerCharacterInBoneyard(
   config: PlayerCharacterConfig,
   world: BoneyardWorldState,
 ): PlayerCharacterState {
+  let position = { x: world.spawn.x, y: world.spawn.y }
+  if (world.arenaTransition !== null && world.arenaTransition.phase !== 'open') {
+    // Late joiners must enter on the combat side of the retired entrance strip.
+    const bounds = world.arenaTransition.combatBounds
+    position = {
+      x: Math.fround(Math.max(bounds.x + PLAYER_CHARACTER_RADIUS,
+        Math.min(position.x, bounds.x + bounds.w - PLAYER_CHARACTER_RADIUS))),
+      y: Math.fround(Math.max(bounds.y + PLAYER_CHARACTER_RADIUS,
+        Math.min(position.y, bounds.y + bounds.h - PLAYER_CHARACTER_RADIUS))),
+    }
+  }
   return {
-    ...createPlayerCharacter(config, { x: world.spawn.x, y: world.spawn.y }),
+    ...createPlayerCharacter(config, position),
     ...playerCharacterFacing(world.spawn.facingDeg),
   }
 }

@@ -2701,6 +2701,38 @@ test('shared picker cohort excludes late joiners and releases disconnected waite
   assert.equal(state.levelUpBarrier, null)
 })
 
+test('late joins and retained rejoins enter inside the locked arena from either entrance', () => {
+  const config = { discipline: 'arcane', displayName: 'Returner', element: 'fire' } as const
+  for (const [spawnY, insideY] of [[100, 400], [1500, 1175]] as const) {
+    const loaded = combatBoneyard(`arena-entry-${spawnY}`)
+    loaded.scene.bounds = { x: 0, y: 0, w: 2000, h: 1600 }
+    loaded.scene.spawn = { x: 1000, y: spawnY, facingDeg: 22.25 }
+    const original = enterBoneyardWorld(createGameSimulation({ owner: config, peer: config }), loaded)
+    if (original.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    const detached = detachGameSimulationPlayer(original, 'peer')
+    const live = removePlayerCharacter(original, 'peer')
+    if (live.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    for (const phase of ['open', 'locking', 'sealed'] as const) {
+      const target: GameSimulationState = { ...live, world: { ...live.world,
+        arenaTransition: { ...createBoneyardArenaTransition(loaded.scene.bounds, loaded.scene.spawn), phase },
+      } }
+      const expected = { x: 1000, y: phase === 'open' ? spawnY : insideY }
+      const added = addPlayerCharacter(target, 'late', config)
+      const rejoined = rejoinGameSimulationPlayer(target, detached, 'peer', null)
+      for (const [state, id] of [[added, 'late'], [rejoined, 'peer']] as const) {
+        const player = getPlayerCharacter(state, id)
+        assert.deepEqual(player.position, expected, `${spawnY}/${phase}/${id}`)
+        assert.equal(player.headingDegrees, 22.25)
+        assert.deepEqual(player.velocity, { x: 0, y: 0 })
+        assert.deepEqual(getPlayerCharacter(state, 'owner'), getPlayerCharacter(target, 'owner'))
+      }
+      assert.deepEqual(getPlayerSkillBook(rejoined, 'peer'), getPlayerSkillBook(original, 'peer'))
+      assert.deepEqual(getPlayerEconomy(rejoined, 'peer'), getPlayerEconomy(original, 'peer'))
+      assert.deepEqual(rejoined.gameRng, target.gameRng)
+    }
+  }
+})
+
 test('active-run rejoin imports one durable actor and queues every missed personal choice', () => {
   const first = {
     discipline: 'arcane',

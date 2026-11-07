@@ -1,5 +1,28 @@
 # 2026-08-24 — Active-party Boneyard rejoin and synchronized catch-up choices
 
+## Arena entry policy for both maintained clients
+
+The owner's November 7 instruction requires fixes in both public clients while
+PixiJS stays at `/game` and Rust at `/game-rust`. Rust commit `a0d9219f` already
+corrects late entry after the arena begins to lock. The Website's
+`spawnPlayerCharacterInBoneyard` still creates the actor at the original spawn,
+inside the entrance strip that the combat bounds exclude. Both ordinary
+`addPlayerCharacter` and retained-run `rejoinGameSimulationPlayer` use this owner.
+
+The shared product policy is to keep the spawn column and facing, moving the
+new body just inside the combat bounds with its full player radius when the
+arena is locking or sealed. Open arenas and scenes without an arena transition
+retain their authored spawn. The actor's velocity starts at zero. This is an
+owner-approved multiplayer placement rule, not newly recovered retail behavior;
+there is no retained retail evidence defining late-join placement.
+
+Membership: new joins, retained-player rejoins and catch-up materialization all
+use the same spawn owner; north and south entrances each have open, locking and
+sealed phases. Scenes without an arena transition preserve ordinary spawn.
+These members are implementation/validation pending. Existing active players,
+transport reattachment to an existing actor, authored facing, progression,
+inventory, RNG and the arena's own geometry/timing are outside this correction.
+
 ## Reported smell and parity question
 
 - Reported web behavior: leaving an in-progress party run deletes the wizard

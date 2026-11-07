@@ -1,5 +1,11 @@
 # Parallel browser games and the Rust artifact boundary
 
+The owner's current instruction keeps both clients at their existing mounts and
+requires fixes in both. PixiJS is maintained at `/game`; Rust is maintained at
+`/game-rust`. The swap draft remains unmerged and save adoption stays disabled.
+For each defect, check both implementations and correct each affected owner;
+an implementation that already satisfies the contract needs no duplicate patch.
+
 Website supplies the latest retained PixiJS game at `/game` and mounts the
 qualified Rust release at `/game-rust/`. PixiJS source and its Node authority
 are restored from Website `093aee9938e0cae2fabfafc5403b01aed961397e`, whose gameplay
@@ -9,7 +15,7 @@ content, authoring and operational fixes remain current.
 Each runtime has its own authority, admission API and continuation saves.
 Accounts, JWT configuration, published content, uploads and leaderboards remain
 in the canonical Website storage. The C# source is shared by both API processes;
-root authoring Test uses PixiJS, and mounted authoring Test uses the Rust iframe.
+root and mounted authoring Test use the Rust iframe.
 Desktop packaging and updates remain owned by the separate Rust repository.
 
 ## Build and artifact identity
