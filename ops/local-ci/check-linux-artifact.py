@@ -17,6 +17,12 @@ def require_linux_x64(path):
         raise ValueError(f'{path.name} is not an x86-64 runtime asset')
 
 
+# Operator tools a Rust archive ships beside its host, such as the cloud-save
+# checker. The release does not install them; an operator runs them from the
+# unpacked Rust archive.
+OPERATOR_TOOLS = {'bin/solomon-save-check', 'bin/solomon-save-rows.py'}
+
+
 def check_release(root):
     required = [root / 'libe_sqlite3.so', root / 'GameHost/solomon-darker']
     for path in required:
@@ -55,6 +61,8 @@ def check_release(root):
         parts = PurePosixPath(name).parts
         if not parts or name != '/'.join(parts) or '..' in parts or '\\' in name:
             raise ValueError('The Rust game manifest contains an unsafe path')
+        if name in OPERATOR_TOOLS:
+            continue
         if name == 'bin/solomon-darker':
             path = root / 'GameHost/solomon-darker'
         elif name.startswith('client/'):

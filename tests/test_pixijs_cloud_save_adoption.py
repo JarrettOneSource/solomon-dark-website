@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = spec_from_file_location('pixijs_adoption', ROOT / 'ops/local-ci/adopt-pixijs-cloud-saves.py')
+SPEC = spec_from_file_location('parallel_saves_adoption', ROOT / 'ops/local-ci/parallel-game-saves.py')
 ADOPTION = module_from_spec(SPEC)
 SPEC.loader.exec_module(ADOPTION)
 
@@ -56,18 +56,29 @@ class PixiJsCloudSaveAdoptionTests(unittest.TestCase):
                     'SELECT Document FROM WebGameSaves WHERE UserId=2 AND Slot=1').fetchone()[0], 'kept playing Rust')
                 self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
 
-    def test_nothing_changes_until_the_companion_definition_turns_adoption_on(self):
+    def test_the_release_manifest_decides_whether_saves_are_adopted(self):
         with tempfile.TemporaryDirectory() as directory:
-            database = database_with(directory, [(1, 0, 9, 'PixiJS only')])
-            companion = Path(directory) / 'companion-game.json'
-            companion.write_text(json.dumps({'mount': '/game-rust', 'adoptPixiJsSaves': False}))
-            self.assertEqual(ADOPTION.main(database, companion), {'skipped': 'adoptPixiJsSaves is off'})
+            database = database_with(directory, [(1, 0, 9, 'PixiJS only'), (2, 0, 4, 'forked'), (2, 1, 4, 'forked')])
+            manifest = Path(directory) / 'game-artifact.json'
+            manifest.write_text(json.dumps({'companion': {'mount': '/game-rust', 'adoptPixiJsSaves': False}}))
+            # Before the swap only the parallel-launch fork runs.
+            result = ADOPTION.main(database, manifest)
+            self.assertEqual(result, {'fork': {'copied': 1, 'alreadyMigrated': False}})
             with sqlite3.connect(database) as db:
-                self.assertEqual(db.execute('SELECT COUNT(*) FROM WebGameSaves').fetchone()[0], 1)
                 self.assertIsNone(db.execute(
-                    "SELECT 1 FROM sqlite_master WHERE name='GameSaveMigrations'").fetchone())
-            companion.write_text(json.dumps({'mount': '/game', 'adoptPixiJsSaves': True}))
-            self.assertEqual(ADOPTION.main(database, companion)['adopted'], 1)
+                    "SELECT 1 FROM GameSaveMigrations WHERE Name='pixijs-adoption'").fetchone())
+                db.execute("UPDATE WebGameSaves SET Revision=12, Document='kept playing PixiJS' WHERE UserId=1 AND Slot=0")
+            # Older releases have no companion block; a missing manifest argument adopts nothing.
+            self.assertNotIn('adoption', ADOPTION.main(database))
+            manifest.write_text(json.dumps({'files': {}}))
+            self.assertNotIn('adoption', ADOPTION.main(database, manifest))
+            manifest.write_text(json.dumps({'companion': {'mount': '/game', 'adoptPixiJsSaves': True}}))
+            result = ADOPTION.main(database, manifest)
+            self.assertEqual(result['fork']['alreadyMigrated'], True)
+            self.assertEqual({key: result['adoption'][key] for key in ('replaced', 'same')}, {'replaced': 1, 'same': 1})
+            with sqlite3.connect(database) as db:
+                self.assertEqual(db.execute(
+                    'SELECT Document FROM WebGameSaves WHERE UserId=1 AND Slot=1').fetchone()[0], 'kept playing PixiJS')
 
     def test_the_shipped_companion_definition_keeps_adoption_off(self):
         companion = json.loads((ROOT / 'frontend/tools/companion-game.json').read_text())

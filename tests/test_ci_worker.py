@@ -573,6 +573,30 @@ class ArtifactAdmissionTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'unchanged'):
                 artifact.check_release(root)
 
+    def test_operator_tools_in_the_rust_archive_are_admitted_without_installation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.release(root)
+            for name in ('game-artifact.json', 'game-source-artifact.json'):
+                manifest = json.loads((root / name).read_text())
+                manifest['files']['bin/solomon-save-check'] = 'c' * 64
+                manifest['files']['bin/solomon-save-rows.py'] = 'd' * 64
+                (root / name).write_text(json.dumps(manifest))
+            self.add_source_provenance_from(root)
+            artifact.check_release(root)
+            self.assertFalse((root / 'GameHost/solomon-save-check').exists())
+            manifest = json.loads((root / 'game-artifact.json').read_text())
+            manifest['files']['bin/unknown-tool'] = 'e' * 64
+            (root / 'game-artifact.json').write_text(json.dumps(manifest))
+            with self.assertRaisesRegex(ValueError, 'unsupported release member|membership'):
+                artifact.check_release(root)
+
+    def add_source_provenance_from(self, root):
+        source = json.loads((root / 'game-source-artifact.json').read_text())
+        source.pop('remountedFrom', None)
+        (root / 'game-artifact.json').write_text(json.dumps(source))
+        self.add_source_provenance(root)
+
     def test_installer_rejects_a_root_that_escapes_the_external_volume(self):
         root = installer.VOLUME / '..' / 'unowned-ci-root'
         with self.assertRaisesRegex(RuntimeError, 'must live on its external volume'):
@@ -661,6 +685,21 @@ class ArtifactAdmissionTests(unittest.TestCase):
             self.assertTrue(any(gzip.decompress(path.read_bytes()) == site
                                 for path in (publish / 'wwwroot').glob('*.gz')),
                             'the game exclusion must retain normal Website compression')
+
+    def test_the_worker_component_set_is_what_installed_workers_publish(self):
+        # An installed worker publishes the next version from its own fixed list, then
+        # runs that version's install.py. A new component is therefore missing from the
+        # first publication and admission fails, so carry new behaviour in an existing
+        # component. Growing the set needs the explicit admission in ops/local-ci/README.md.
+        components = {'deploy-main.sh', 'run-worker.py', 'install.py', 'deployment-publication.py',
+                      'deploy-runtime.sh', 'parallel-game-saves.py', 'check-linux-artifact.py'}
+        self.assertEqual(set(installer.FILES), components)
+        script = (OPS / 'deploy-main.sh').read_text()
+        lists = [line.split('for name in ', 1)[1].split(';', 1)[0].split()
+                 for line in script.splitlines() if 'for name in deploy-main.sh' in line]
+        self.assertEqual(len(lists), 2)
+        for names in lists:
+            self.assertEqual(set(names), components)
 
     def test_each_required_installed_component_changes_version_admission(self):
         with tempfile.TemporaryDirectory() as directory:

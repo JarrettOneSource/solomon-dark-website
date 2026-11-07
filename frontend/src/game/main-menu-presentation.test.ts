@@ -18,11 +18,12 @@ test('game account presentation preserves the exact Website username', () => {
   })
 })
 
-test('editor tests project the current Website account without changing the disposable wizard identity', () => {
+test('editor tests project the current Website account into the Rust test document', () => {
   const editor = readFileSync(new URL('../pages/Boneyard.tsx', import.meta.url), 'utf8')
-  const runtime = readFileSync(new URL('../editor/PixiEditorTestRuntime.tsx', import.meta.url), 'utf8')
+  const selector = readFileSync(new URL('../editor/EditorTestRuntime.tsx', import.meta.url), 'utf8')
+  const runtime = readFileSync(new URL('../editor/RustEditorTestRuntime.tsx', import.meta.url), 'utf8')
   assert.match(editor, /<EditorTestRuntime\s+accountUsername=\{user\?\.username \?\? null\}/)
-  assert.match(runtime, /<MainMenuScene[\s\S]*?accountUsername=\{accountUsername\}/)
-  assert.match(runtime, /profile: \{ accountUsername: null, highestWave: null, totalPlaytimeMs: 0 \}/)
-  assert.match(runtime, /\}, \[doc\]\)/)
+  assert.match(selector, /lazy\(\(\) => import\('\.\/RustEditorTestRuntime\.tsx'\)\)/)
+  assert.doesNotMatch(selector, /import\('\.\/PixiEditorTestRuntime/)
+  assert.match(runtime, /accountUsername/)
 })
