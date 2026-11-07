@@ -39,6 +39,28 @@ Caster and peer field regressions cover each until-hurt charm, both together,
 and loss followed by Cheat Death, including event order and no repeated loss.
 This changes event retention, not damage, charm lifetime or field mechanics.
 
+### Bounded current PixiJS rescue visibility
+
+A November 7 Mac Chrome control uses the built client and local authority with
+explicit fixtures for owned selectors 7/24/25, learned Ether Drain, generated
+Boneyard admission and lethal damage. Ordinary right-button input creates the
+actual field after Solomon releases combat. The charged rescue changes HP from
+46.403 to 25, consumes the one charge and leaves the actor alive at that accepted
+instant. The composed frame contains both `CHEAT DEATH!` and
+`CHARM EFFECT LOST!` during the native white flash. Every foreground Cheat Death
+code point has its authored mask, positive ink bounds and positive intersection
+with the notification clip and viewport. The zero-size positioning anchor is
+intentional; visibility must inspect its bitmap glyphs rather than the anchor
+box. The native clip still removes its authored top pixel from some glyphs.
+
+Recorded sound starts include loss, the three Flash rates 1/0.8/0.5 and Enemy
+Flash at rate 1. Saved Leave and same-document Continue retain the consumed
+charge without replaying the notice. Browser/request error arrays are empty and
+the owned browser exits normally. This accepts the narrow charged-rescue notice
+and playback-event scope. The later frame has depleted health while the field
+remains active, so it does not establish living continuation, survival/endurance,
+physical audibility, or the historical player-centered expansion allegation.
+
 ## 2026-10-13 — Charm status row removed
 
 At the user's request, the persistent charm status row and its tooltip controls
