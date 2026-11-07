@@ -15,8 +15,6 @@ import './index.css'
 
 import { AuthProvider } from './lib/auth'
 import { websiteBase } from './lib/website-mount.ts'
-import { gameRuntime } from './lib/game-runtime.ts'
-import { migrateParallelGuestSave } from './lib/parallel-save-migration.ts'
 import Shell from './components/Shell'
 import Home from './pages/Home'
 import SearchParties from './pages/SearchParties'
@@ -34,12 +32,9 @@ import NotFound from './pages/NotFound'
 import RouteError from './pages/RouteError'
 import { Spinner } from './components/ui'
 
-const Game = gameRuntime === 'rust'
-  ? lazy(() => import('./pages/RustGame'))
-  : lazy(async () => {
-    await migrateParallelGuestSave()
-    return import('./pages/Game')
-  })
+// /game is the Rust game, served by the companion mount, so this route only leaves the
+// site. PixiJS's Game page stays in the repository until that client is removed.
+const Game = lazy(() => import('./pages/RustGame'))
 
 const router = createBrowserRouter([
   {

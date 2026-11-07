@@ -9,8 +9,8 @@ solomondarker.com {
 	}
 
 	# Only the authoring shelf and disposable Test document may be embedded.
-	@embedded path /boneyard-library /game-rust/boneyard-library /game-stg/boneyard-library /game-rust/editor-test/ /game-rust/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
-	@topLevel not path /boneyard-library /game-rust/boneyard-library /game-stg/boneyard-library /game-rust/editor-test/ /game-rust/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
+	@embedded path /boneyard-library /game/boneyard-library /game-stg/boneyard-library /game/editor-test/ /game/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
+	@topLevel not path /boneyard-library /game/boneyard-library /game-stg/boneyard-library /game/editor-test/ /game/editor-test/* /game-stg/editor-test/ /game-stg/editor-test/*
 	header @embedded {
 		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; media-src 'self'; upgrade-insecure-requests"
 		X-Frame-Options "SAMEORIGIN"
@@ -23,9 +23,15 @@ solomondarker.com {
 	@assets path /assets/*
 	header @assets Cache-Control "public, max-age=31536000, immutable"
 
-	redir /game-rust /game-rust/ 308
-
+	# The Rust game replaced PixiJS at /game; its former /game-rust links still arrive.
+	redir /game-rust /game/ 308
 	handle_path /game-rust/* {
+		redir * /game{uri} 308
+	}
+
+	redir /game /game/ 308
+
+	handle_path /game/* {
 		header Cache-Control "no-cache"
 		@rust_api path /api/* /uploads/*
 		handle @rust_api {

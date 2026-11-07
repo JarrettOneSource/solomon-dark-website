@@ -1,16 +1,16 @@
-# Parallel browser games and the Rust artifact boundary
+# The Rust game and its artifact boundary
 
-Website supplies the latest retained PixiJS game at `/game` and mounts the
-qualified Rust release at `/game-rust/`. PixiJS source and its Node authority
-are restored from Website `093aee9938e0cae2fabfafc5403b01aed961397e`, whose gameplay
-is identical to `fa08ae249ff5563570bdb2a653e2ef9358ce7b83`. Shared Website account,
-content, authoring and operational fixes remain current.
+The Website serves the qualified Rust release at `/game/` and owns the harness
+that deploys it: artifact admission, the mounted companion, its API and the
+deployment worker. The Rust repository owns the game, its build and the desktop
+app. `/game-rust/` links redirect to `/game/`. The PixiJS client is no longer
+served; its source and Node authority stay in this repository until they are
+removed. When Rust took `/game`, each player's PixiJS save became their Rust save
+([adoption](#adoption-when-rust-replaces-pixijs)).
 
-Each runtime has its own authority, admission API and continuation saves.
 Accounts, JWT configuration, published content, uploads and leaderboards remain
-in the canonical Website storage. The C# source is shared by both API processes;
-root authoring Test uses PixiJS, and mounted authoring Test uses the Rust iframe.
-Desktop packaging and updates remain owned by the separate Rust repository.
+in the canonical Website storage. Both API processes use the Rust save
+namespace. Authoring Test runs the Rust iframe.
 
 ## Build and artifact identity
 

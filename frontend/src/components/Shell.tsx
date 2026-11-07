@@ -20,7 +20,6 @@ import {
 } from '../fx/jukebox'
 import { useAuth } from '../lib/auth'
 import { art } from '../lib/assets'
-import { gameRuntime } from '../lib/game-runtime.ts'
 
 // The site is the door to the web port: Search Parties and the Library
 // live in-game now (the Dark Cloud), so they no longer get tabs. Their
@@ -29,7 +28,7 @@ import { gameRuntime } from '../lib/game-runtime.ts'
 //
 const NAV = [
   { to: '/', label: 'Home', end: true },
-  { to: '/game', label: gameRuntime === 'rust' ? 'Play Rust' : 'Play PixiJS' },
+  { to: '/game', label: 'Play' },
   { to: '/downloads', label: 'Download' },
   { to: '/about', label: 'About' },
 ]
@@ -203,9 +202,6 @@ export default function Shell() {
             {NAV.map((n) => (
               <NavItem key={n.to} {...n} />
             ))}
-            <a href={gameRuntime === 'rust' ? '/game' : '/game-rust/'} className="text-sm text-gold hover:text-gold-bright">
-              {gameRuntime === 'rust' ? 'Play PixiJS' : 'Play Rust'}
-            </a>
           </nav>
 
           <div className="ml-auto flex items-center gap-3 md:ml-6">
@@ -292,9 +288,6 @@ export default function Shell() {
               {NAV.map((n) => (
                 <NavItem key={n.to} {...n} />
               ))}
-              <a href={gameRuntime === 'rust' ? '/game' : '/game-rust/'} className="py-2 text-sm text-gold">
-                {gameRuntime === 'rust' ? 'Play PixiJS' : 'Play Rust'}
-              </a>
               {user ? (
                 <>
                   <NavItem to="/account" label="Account" />

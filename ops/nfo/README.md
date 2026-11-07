@@ -24,8 +24,9 @@ processes from the same release directory:
 - `solomon-dark-rust-api.service` runs the same C# source at 5231 using `RustSite`
   and the Rust save namespace, with shared canonical account/content storage; and
 - Caddy terminates TLS and forwards `/game-hub` and `/game-sessions/*` to the
-  root supervisor. `/game-rust/*` routes to its own API/authority and client
-  files, while `/game-stg/*` retains its existing isolated services.
+  root supervisor. `/game/*` routes to the Rust API/authority and client files,
+  `/game-rust` and `/game-rust/*` redirect there with their path and query, and
+  `/game-stg/*` retains its existing isolated services.
 
 `/etc/solomon-dark-game.env` must be mode `0600`, owned by root, and contain:
 
@@ -151,8 +152,8 @@ and announced deployments stop recovery. See the Report 74 retained-authority
 contract in ledger 145; the proxy reload itself is not interruption-free.
 The Website stays live until
 the save grace completes so authenticated cloud-slot writes can finish. Root
-`/deployment.json` identifies Website/PixiJS. `/game-rust/deployment.json`
-identifies the immutable Rust artifact, while `/game-rust/api/game/deployment`
+`/deployment.json` identifies Website/PixiJS. `/game/deployment.json`
+identifies the immutable Rust artifact, while `/game/api/game/deployment`
 exposes its separate ready publication. The root drain announces Website/PixiJS
 revision; the companion drain announces Rust revision. New admissions and PixiJS
 reload polling wait while their publication is pending.
@@ -184,7 +185,7 @@ protocol changes. A release is healthy only when all of these pass:
 ## Embedded documents
 
 The checked-in Caddy policy permits same-origin framing only for the Website
-`/boneyard-library` shelf and Rust `/game-rust/editor-test/` disposable Test document,
+`/boneyard-library` shelf and Rust `/game/editor-test/` disposable Test document,
 including their explicit `/game-stg` mount equivalents. All other pages retain
 `frame-ancestors 'none'` and `X-Frame-Options: DENY`. A different mount must map
 those same two document routes explicitly. The CSP permits WASM through
