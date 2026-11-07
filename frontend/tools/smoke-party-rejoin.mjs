@@ -1,6 +1,6 @@
 import { GameWelcomeReceiver } from '../src/game/protocol/game-welcome-transfer.ts'
 import assert from 'node:assert/strict'
-import { randomBytes } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -143,6 +143,14 @@ try {
         reservationId,
       }))),
     })
+  })
+  // This static fixture has no diagnostic-log backend. Acknowledge actual run
+  // submissions through the same response contract used by the managed API.
+  await context.route('**/api/game/run-performance', async route => {
+    assert.equal(route.request().method(), 'POST')
+    assert.ok(route.request().postDataJSON()?.performance)
+    await route.fulfill({ status: 201,
+      json: { logId: randomUUID(), submittedAtUtc: new Date().toISOString() } })
   })
   await context.route('**/deployment.json*', async route => {
     const revision = new URL(route.request().url()).searchParams.get('current')
