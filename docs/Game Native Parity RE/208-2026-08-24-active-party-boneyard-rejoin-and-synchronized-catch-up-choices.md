@@ -34,8 +34,11 @@ and materialized at `(565.6231, 400)` inside combat bounds
 local save revision from 2 to 6. All five composed frames were reviewed; page,
 console, HTTP, request and host error arrays were empty and the owned browser
 exited normally. This establishes fixture-assisted entry/catch-up behavior,
-not natural retail or historical performance acceptance. Full Website gate and
-installed acceptance remain separate release requirements.
+not natural retail or historical performance acceptance. The full Website gate
+also passes: 93 backend/worker tests (two configured skips), frontend suites,
+types/lint, production build and renderer quality gates. Mutation results are
+670 killed, two timed out, 215 compile errors, 24 documented equivalents and no
+survivors. Installed acceptance remains a separate release requirement.
 
 Existing active players,
 transport reattachment to an existing actor, authored facing, progression,
