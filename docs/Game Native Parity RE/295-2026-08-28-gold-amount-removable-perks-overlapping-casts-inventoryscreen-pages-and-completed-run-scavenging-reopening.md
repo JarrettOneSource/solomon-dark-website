@@ -1215,6 +1215,15 @@ tier 3 even while amount/text/credit continue above 8.
 | refund | no retail producer | owner-directed policy: none | gold unchanged by removal |
 | participant/network ownership | existing host action seam | requested extension is host-authoritative and participant-private | another participant remains byte-for-byte unchanged |
 
+Removing Weird Caster preserves the secondary already learned by that wizard.
+Entering the Boneyard and saved Continue retain that book. Fresh Create/New Game
+without selector 14 constructs the ordinary starter book; first-mix history alone
+does not grant the extra skill.
+
+Hagatha's owned cells must receive input above the Party HUD. The opaque
+Inventory/service layer (`30000`) covers the Party chip (`15000`), including the
+first owned cell. Closing the book restores the ordinary Party control.
+
 ### Overlapping primary and secondary casting
 
 | Member / branch | Native source | Disposition | Proof contract |
