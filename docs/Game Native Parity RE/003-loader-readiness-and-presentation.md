@@ -106,14 +106,18 @@ resolution must destroy a late renderer without exposing it.
 
 Validation: repeatable actual Mac Chrome held Create
 asset, release, manual selection, cancellation and failed-asset journeys with
-composed screenshot review. Rust's earlier actual guest first/settled screenshots show the complete name,
-background and hands together. The admitted Rust menu owners are byte-identical
-between 58521585 and this task's cdb4a1c8, and no Rust change is required. These
-prior images are bounded controls, not a new current artifact run.
+composed screenshot review. A current Rust `32ea2114` artifact (the frozen `cdb4a1c8` plus an unrelated
+snapshot encoder correction) holds `assets/stock/Create.png`: the native Loader
+stays at interface preparation at 25%, with no Title/Create controls. Release then
+admits the ordinary College path and complete first/settled Create frames. The
+three composed images are reviewed and page/console/failed-response arrays are
+empty. College admission deliberately disables Back until loadout completion;
+that caller rule is preserved. No Rust menu change is required.
 
 Mac candidate acceptance: 21 existing motion/name/finalization/loading tests,
 frontend TypeScript build and Vite production build pass. Chrome156's production
-build journey holds the Create atlas through consent: the cover and visible Back
+build journey with complete Cheats-enabled Settings holds the Create atlas
+through the visible CHEATS ENABLED consent: the cover and visible Back
 remain, while every native control is hidden/inert and no canvas exists. Release
 shows complete Create, accepts edited name/Water/Mind, reaches College and saves
 on ordinary Leave. Separate contexts cancel before resolution without a late
