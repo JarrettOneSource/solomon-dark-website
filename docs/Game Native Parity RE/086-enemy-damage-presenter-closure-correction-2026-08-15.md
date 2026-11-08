@@ -683,3 +683,84 @@ from the exact Mac worktree. Publication also reruns the focused integration
 file and the browser journey in both Complex Lighting modes. The campaign
 execution outcome records the final commit, full gate, browser receipts, and
 publication identity; no production deployment is initiated by this report.
+
+
+## 2026-11-08 — Report 37 hosted Faculty death performance reopening
+
+The unchanged schema-39 reporter save is already after Aliss/Sirmin deaths; its
+surviving Lucritius can be killed with ordinary primary input. The original
+JSON SHA-256 is `6a38ba74541d45b31c5425a7a06467f5831414f483b0976ffa5f04ee37d10672`.
+Current hosted Rust `178b07f0` produces 8,559/8,569 retained death effects in the
+original-camera and ordinary-S-after-lethal controls. Both 16-second windows
+average about 55 FPS, with 11/12 intervals above 50 ms. Pixi `5235889`'s original-camera
+retirement window averages 51.3 FPS; ordinary movement moving the death root
+offscreen yields about 60 FPS. No rule, population, lifetime, RNG, save or
+authority input is modified. These runs do not recover the original Aliss
+lethal edge or qualify the reporter device/public network.
+
+A separate source-identical named-WASM diagnostic (release opt3/LTO, preserved
+function names, no baseline timing comparison) attributes 937.9 ms of 3,116.4 ms
+to snapshot decoding,331.2 ms to presentation sampling and 273.4 ms to enemy draw
+groups. Canonical scalar sine/cosine account for 251.8 ms inclusive; their shared
+argument reducer accounts for 89.9 ms. `EnemyView::draw_sprite` currently invokes
+the two scalars separately, and `float::sin_cos` is itself just the same pair of
+scalar calls. Each scalar repeats identical argument reduction.
+
+The bounded correction under investigation is the deterministic pair evaluator:
+reuse one canonical reduction and the existing two polynomial kernels, returning
+exactly the scalar results (including signed zero, reduction boundaries, very
+large finite operands and nonfinite handling). This is not a platform combined
+trigonometric routine. Keep all fdlibm/V8 rounding points and native numeric
+contracts. Use that existing pair interface in the shared enemy sprite drawer.
+
+Complete affected membership: the shared EnemyView sprite path (BadGuys,
+DeadHawg, Demon, Faculty, Heartmonger and Unholy, all death-effect kinds and
+normal/additive texture modes), plus every existing `float::sin_cos` consumer:
+secondary draws, primary spell draws, player-effect geometry, Wizard material
+geometry, Weld presentation, the graphics rotated-sprite primitive and bot
+observation heading vectors. These existing consumers all receive the identical
+scalar result bits through the same public interface. Independent scalar
+`sin`/`cos` call sites (including Tree wobble, spawn/movement kernels and scalar
+pulses) retain their implementation; they are outside this paired-interface and
+measured enemy-drawer correction. Standard-library `.sin_cos()` methods also
+retain their existing owner. No bot or training rule is changed. Pixi uses V8 scalar math directly and has no matching Rust
+software-reduction wrapper to repair. The existing independent V8 bit fixture
+will also check the paired interface; existing presentation/trajectory goldens
+remain the behavior checks. The paired numeric contract, shared EnemyView path and all seven existing paired
+consumers are `verified-already-at-parity` with their scalar results preserved.
+Independent scalar and standard-library callers, Pixi V8 math, transport and
+historical Aliss/public-network clauses are `out-of-system` for this bounded
+arithmetic cleanup; their remaining performance/qualification is not closed.
+
+Runtime/profile evidence: `/Users/jarrett/codex-runs/solomon-open-reports-20261108/report37/`.
+Original clean timings, diagnostic binding/logs, original images and process
+closure records are kept separately there. No current completion mark is earned.
+
+
+Local Rust `081174fe` shares that one reduction and uses the pair in EnemyView.
+All 20,100 independent V8 inputs check both scalar and paired outputs; 12 existing
+enemy regression cases, the final numeric recheck, formatting and the ordinary
+release build pass. All 33 original screenshots across 11 actual cases were
+directly reviewed, including original-camera, ordinary S after lethal and both
+local release binaries. All owned browsers exit 0 and fixture services/listeners
+are absent after the runs. Full root gates and publication remain pending.
+
+The matched ordinary local release pair isolates the first five simulation
+seconds after the first delivered Dying state: baseline 44.14 FPS versus
+candidate 45.29 FPS, maximum 83.4 ms in both, and 12/13 intervals above 50 ms. Observed
+peak effects are 8,837/8,905. This is one unreplicated pair; it does not establish
+a general FPS improvement, and current hosted lag still reproduces.
+
+Exact-production CPU profiles use function maps whose optimized output hashes
+match each tested WASM byte for byte. Receive callbacks occupy about 1.06/1.02 s
+of the respective 3-second captures. Reduction CPU per asynchronously bracketed
+frame is 0.703/0.476 ms, but sampled mean effects differ 3,340/2,917. Those samples
+do not prove a speedup percentage. The implementation removes one redundant
+reduction whenever the scalar reduction path is needed, while retaining both
+canonical kernels. No effect cap, cadence change or transport shortcut is used.
+
+Report 37 and shared October 31 target 1565941045420752897 remain open. The next
+useful check is per-snapshot socket-arrival-to-accepted-frame latency correlated
+with the long frame gaps, separating inflate, delta apply/size accounting and
+typed reconstruction at this same full burst. Do not treat this small cleanup
+as a solution to that synchronous workload or the unobserved original Aliss edge.
