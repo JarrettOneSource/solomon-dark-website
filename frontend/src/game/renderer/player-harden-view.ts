@@ -17,7 +17,7 @@ export class PlayerHardenView {
 
   constructor(ice: Texture, renderer: Pick<Renderer, 'render'>) {
     this.renderer = renderer
-    this.capture = new NativePlayerDiffuseCapture(renderer)
+    this.capture = new NativePlayerDiffuseCapture(renderer, [1, 1, 1, 0])
     this.container.visible = false
     this.container.eventMode = 'none'
     this.container.zIndex = 8

@@ -19,7 +19,8 @@ export class PlayerStoneskinView {
 
   constructor(texture: Texture, renderer: Pick<Renderer, 'render'>) {
     this.renderer = renderer
-    this.capture = new NativePlayerDiffuseCapture(renderer)
+    // DrawSpecial 0x546A11 clears black; Harden and Webbed explicitly clear white.
+    this.capture = new NativePlayerDiffuseCapture(renderer, [0, 0, 0, 0])
     this.container.visible = false
     this.container.zIndex = 8
     this.stone = new Sprite(texture)
