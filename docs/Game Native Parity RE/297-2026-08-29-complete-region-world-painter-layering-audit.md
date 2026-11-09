@@ -4,14 +4,14 @@
 
 The original October 20 report describes Blizzard Beam interruptions against
 graves, distant scenery and mobs with every advanced option enabled. Its
-November 1 source recheck is unchanged and unwithdrawn. The original MP4 is
+November 9 source recheck is unchanged and unwithdrawn. The original MP4 is
 2,279,655 bytes, SHA-256
 `cffa3ceb621438b51cb7d4ba66239bea045094c94e80c00cd1181485bc62ca04`.
 The existing Rust same-scene Shadows On/Off/On comparison reproduces the
 interruptions while directional ground wedges disappear and return. This
-falsifies a directional-shadow-only cause; normal scenery and its class-local
-flat shadow still participate in the queue. It does not establish equal retail
-pixels or close the all-enabled report.
+excludes directional shadows as the sole cause of every interruption; normal
+scenery and its class-local flat shadow still participate in the queue. It does
+not establish equal retail pixels or close the all-enabled report.
 
 The native system in this follow-up is **ZAnimSplit presentation**, from a
 retained child and its immutable factory geometry through live quality selection,
@@ -60,6 +60,35 @@ body while the live setting differs. The Faculty sibling was also absent from
 that repair. This follow-up closes those omitted quality members rather than
 altering the reported all-enabled beam to draw last or removing native bands.
 
+### November 9 — actual gray-region draw attribution
+
+Read-only GPU observation of Website `5235889f` and Rust `081174fe` client frames
+attributes the current gray wedge to a gravestone's directional shadow. Both
+clients used ordinary Blizzard input in the declared whole Report 115 scene,
+with all four lighting/shadow/effects options On and Light Quality 100%. Actual
+draw calls, framebuffer pixels and triangle buffers were retained unchanged.
+At screen pixels `(1040,80)` and `(1020,100)`, earlier beam draws reach white;
+Pixi draw 145 and Rust draw 164 then reduce them to RGB `(44,44,44)` and
+`(33,33,33)`. Pixi's only covering triangles at those witnesses belong to
+`complex-shadow:main:100`, immediately before its Gravestone record 97 art.
+The captured black-alpha ramp and Rust's packed vertex alpha independently
+predict those channels within one byte using normal source-over blending.
+
+The grave intervenes between Blizzard bands 8 and 9. The next additive band
+restores white below the captured boundary near screen Y 135.31 while leaving
+the upper gray pixels intact: 25 world units become 33.75 screen pixels at
+zoom 1.35. Later Tree record 250 canopy art changes the selected gray pixel
+from 44 to 26/28 in the separate client windows; it does not create the wedge.
+This follows entry 090's caster-local shadow-before-art ownership and the
+retained `ZAnimSplit` bottom-Y queue/clip contract. The evidence identifies
+ordinary occlusion of earlier slices, not missing beam submissions.
+
+These are instrumented current-client frames, not synchronized client/retail
+comparisons or performance/continuous-gameplay acceptance. The original report
+has no saved checkpoint, and its mob crossings were not individually attributed.
+Exact retail pixel equality and the full historical claim remain unestablished.
+No product patch or completion mark is supported by this bounded finding.
+
 ### Validation contract
 
 Exercise the real prepared Air and Faculty ribbon paths with independent
@@ -83,10 +112,10 @@ not the final integrated gate or an actual game journey.
 
 The coordinator still owns exact integrated M2 gates and actual game acceptance.
 The live journey must exercise both quality settings and a retained-body quality
-transition in both clients, plus a Faculty crossing witness. A matched retail
-scene/cast or per-draw attribution at an interrupted pixel is still needed to
-resolve the original all-enabled pixel concern. Preserve that uncertainty and
-withhold its completion mark.
+transition in both clients, plus a Faculty crossing witness. The November 9
+per-draw attribution explains the selected current gray/scenery crossing;
+matched retail equality and the remaining historical/mob clauses are still
+unestablished. Preserve those limits and withhold the report's completion mark.
 
 Private original media, live source snapshots, byte checks and reusable prior
 comparison hashes are retained under
