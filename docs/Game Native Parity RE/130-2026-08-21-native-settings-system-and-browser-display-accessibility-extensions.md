@@ -1415,7 +1415,7 @@ sampler, alpha-factor, grid, material, tint, or pass-count change is needed.
 
 | Capture member | Native clear | Disposition |
 | --- | --- | --- |
-| Stoneskin, live Enhanced Effects On and Off, initial and reused target | `(0,0,0,0)` at `0x00546A11` | candidate ported in both clients; focused Pixi pixels pass, Rust and final scene acceptance pending |
+| Stoneskin, live Enhanced Effects On and Off, initial and reused target | `(0,0,0,0)` at `0x00546A11` | candidate ported in both clients; focused Pixi and native GPU pixels pass, final scene acceptance pending |
 | Harden | `(1,1,1,0)` at `0x00546EC8` | verified-already-at-parity; preserve white |
 | Webbed | `(1,1,1,0)` through `0x0054797F` | verified-already-at-parity; preserve white |
 | Planewalker | `(1,1,1,0)` at `0x005473D2` | out-of-system: distinct existing renderer, unchanged |
@@ -1443,5 +1443,16 @@ Harden and Webbed match their independent white references before and after.
 All eight original red/green images were reviewed; both browser error arrays are
 empty and browser/server shutdown completes. These are synthetic fractional-alpha
 material-view checks, not an ordinary full-art wizard or historical image match.
-Rust composed pixels, actual both-client material journeys and final gates remain
-pending.
+The native GPU probe uses real wizard art and an independently black-cleared
+reference, plus white Harden/Webbed controls. The old implementation fails 117
+of 485 cases with 145,186 differing channels (maximum 75); the corrected build
+has zero differing channels in all 485 cases. The explicit white controls pass
+in both arms, and a later Stone capture clears the shared target back to black.
+The expected red process exits 1 and the corrected process exits 0 normally.
+All 1,940 original images are bound to 393 byte-identical representatives; all
+393 were visually reviewed at their original 256-pixel scale. Quiet Stone cases
+show the corrected darker fractional-alpha contour. High selected-helper and
+Damage x4 cases remain deliberately bright, and independent Shield composition
+remains separate. These are composed-material checks, not a retail screenshot
+match or Report 135 acceptance. Actual both-client material journeys and final
+gates remain pending.
