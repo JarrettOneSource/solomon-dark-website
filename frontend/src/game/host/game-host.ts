@@ -31,7 +31,7 @@ import type { PartyJoinRequester, PartyPlayerProfile, PartyRosterPlayer, PlayerS
 import type { GameSaveIntegrity } from '../save/game-save-contract.ts'
 import { parseGameSaveDocument } from '../save/game-save-contract.ts'
 import type { RestoredGameSaveProfile } from '../save/game-save-document.ts'
-import { createGameProfileSaveDocument, createGameSaveDocument, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile, retireGameSaveWizard } from '../save/game-save-document.ts'
+import { createGameProfileSaveDocument, createGameSaveDocument, createGameSaveDocumentWithPartyRecovery, hydrateGameSaveProfile, restoreGameSaveDocument, restoreGameSaveProfile, retireGameSaveWizard } from '../save/game-save-document.ts'
 import type { NativeGameSaveSource } from '../save/portable-game-profile.ts'
 import type { BoneyardCatalog } from './boneyard-catalog.ts'
 import { createBoneyardCatalog, materializeBoneyard, materializeStockTutorial, recoverSavedBoneyardRoadLinks } from './boneyard-catalog.ts'
@@ -53,7 +53,7 @@ import { WebLuaRuntime } from './lua/web-lua-runtime.ts'
 import type { MlBotHostIntent, MlBotPolicyInference } from './ml-bot-host-controller.ts'
 import { ML_BOT_CHARACTER, MlBotHostController } from './ml-bot-host-controller.ts'
 import type { PartyRecoveryClaim, PartyRecoveryRosterMember } from './party-recovery-claim.ts'
-import { createPartyRecoveryClaim, decodePartyRecoveryClaim, verifyPartyRecoveryClaim } from './party-recovery-claim.ts'
+import { createOwnerPartyRecoveryClaim, decodePartyRecoveryClaim, verifyPartyRecoveryClaim } from './party-recovery-claim.ts'
 import type { PartyIdentity, PartySystemState } from './party-system.ts'
 import { createPartySystem, decidePartyJoinRequest, joinPartyPlayer, partyByJoinCode, partyByListingId, partyForPlayer, projectPartyState, registerPartyPlayer, removePartyPlayer as removePrivatePartyPlayer, requestPartyJoin, restorePartyMembership, rotatePartyJoinCode, setPartyEnhancedEffects, setPartyVisibility } from './party-system.ts'
 import type { PreparedModHost } from './prepared-mod-host.ts'
@@ -4190,44 +4190,40 @@ export async function startGameHost(options: GameHostOptions): Promise<GameHost>
         playerId: client.playerId,
         state: saveState,
       }
-      const unsignedDocument = terminal
-        ? createGameProfileSaveDocument(documentOptions)
-        : createGameSaveDocument({
-            ...documentOptions,
-            loadedBoneyard: client.partyRejoinSlot
-              ? loadedBoneyardForPartyRejoin(client.partyRejoinSlot)
-              : loadedBoneyardForPlayer(client.playerId),
-          })
+      const saveOptions = {
+        ...documentOptions,
+        loadedBoneyard: terminal ? null : client.partyRejoinSlot
+          ? loadedBoneyardForPartyRejoin(client.partyRejoinSlot)
+          : loadedBoneyardForPlayer(client.playerId),
+      }
       const slot = terminal ? null : partyRejoinSlotForClient(client)
       const lineage = slot ? partyRecoveryLineages.get(slot.recoveryId) ?? null : null
       if (slot && lineage) {
         const party = activePartySystem()?.parties.find(({ id }) => id === lineage.partyId)
         if (!party) throw new Error('party recovery lineage lost its membership')
-        const token = createPartyRecoveryClaim(partyRecoverySecret, {
-          contentManifestSha256: lineage.content.manifest.manifestSha256,
-          globalScoreEligible: client.globalScoreEligible,
-          integrity,
-          leaderboardUserId: client.leaderboardUserId,
-          partyMemberCount: lineage.partyMemberCount,
-          partyLeaderPlayerId: party.leaderPlayerId,
-          partyRoster: recoveryRosterForParty(party.id),
-          partyVisibility: party.visibility,
-          playerId: client.playerId,
-          recoveryId: lineage.recoveryId,
-          runId: lineage.runId,
-          sessionKind,
-          targetRevision,
-        }, unsignedDocument)
-        slot.token = token
-        document = createGameSaveDocument({
-          ...documentOptions,
-          loadedBoneyard: client.partyRejoinSlot
-            ? loadedBoneyardForPartyRejoin(client.partyRejoinSlot)
-            : loadedBoneyardForPlayer(client.playerId),
-          partyRejoinToken: token,
-        })
+        const created = createGameSaveDocumentWithPartyRecovery(saveOptions, save => (
+          createOwnerPartyRecoveryClaim(partyRecoverySecret, {
+            contentManifestSha256: lineage.content.manifest.manifestSha256,
+            globalScoreEligible: client.globalScoreEligible,
+            integrity,
+            leaderboardUserId: client.leaderboardUserId,
+            partyMemberCount: lineage.partyMemberCount,
+            partyLeaderPlayerId: party.leaderPlayerId,
+            partyRoster: recoveryRosterForParty(party.id),
+            partyVisibility: party.visibility,
+            playerId: client.playerId,
+            recoveryId: lineage.recoveryId,
+            runId: lineage.runId,
+            sessionKind,
+            targetRevision,
+          }, save)
+        ))
+        slot.token = created.token
+        document = created.document
       } else {
-        document = unsignedDocument
+        document = terminal
+          ? createGameProfileSaveDocument(documentOptions)
+          : createGameSaveDocument(saveOptions)
       }
     } catch (error) {
       logGameServerEvent(

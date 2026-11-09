@@ -15,7 +15,7 @@ import {
   parseGameSaveDocument,
   type GameSaveIntegrity,
 } from '../save/game-save-contract.ts'
-import { restoreGameSaveDocument } from '../save/game-save-document.ts'
+import { type CreatedRecoverySave, restoreGameSaveDocument } from '../save/game-save-document.ts'
 
 const CLAIM_PREFIX = 'sdrpr2'
 const CLAIM_VERSION = 2
@@ -67,6 +67,25 @@ export function createPartyRecoveryClaim(
   const normalized = normalizedRecoveryDocument(unsignedDocument, null)
   if (normalized === null) throw new Error('party recovery document must have a null claim')
   validateDocumentBindings(unsignedDocument, claim, null)
+  return signDocument(secret, claim, normalized)
+}
+
+export function createOwnerPartyRecoveryClaim(
+  secret: string,
+  claim: PartyRecoveryClaim,
+  created: CreatedRecoverySave,
+): string {
+  validateSecret(secret)
+  validateClaim(claim)
+  if (!created.matchesOwner(claim.playerId, claim.runId, claim.integrity)) {
+    throw new Error('party recovery document bindings are invalid')
+  }
+  const normalized = normalizedRecoveryDocument(created.document, null)
+  if (normalized === null) throw new Error('party recovery document must have a null claim')
+  return signDocument(secret, claim, normalized)
+}
+
+function signDocument(secret: string, claim: PartyRecoveryClaim, normalized: string): string {
   const payload: SignedPartyRecoveryClaim = {
     ...claim,
     documentSha256: sha256(normalized),

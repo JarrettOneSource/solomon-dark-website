@@ -92,6 +92,30 @@ export interface CreateGameSaveDocumentOptions {
   readonly state: GameSimulationState
 }
 
+// The value constructor stays local: a signer can only receive this view from
+// the creator that paired the unsigned bytes with their authoritative owner.
+class CreatedRecoverySave {
+  private readonly unsigned: string
+  private readonly playerId: string
+  private readonly runId: string
+  private readonly integrity: GameSaveIntegrity
+
+  constructor(document: string, playerId: string, runId: string, integrity: GameSaveIntegrity) {
+    this.unsigned = document
+    this.playerId = playerId
+    this.runId = runId
+    this.integrity = integrity
+  }
+
+  get document(): string { return this.unsigned }
+
+  matchesOwner(playerId: string, runId: string, integrity: GameSaveIntegrity): boolean {
+    return this.playerId === playerId && this.runId === runId && this.integrity === integrity
+  }
+}
+
+export type { CreatedRecoverySave }
+
 export interface CreateGameProfileSaveDocumentOptions {
   readonly integrity: GameSaveIntegrity
   readonly mods: readonly GameContentIdentity[]
@@ -217,6 +241,32 @@ const HUB_STUDENT_POPULATION_KEYS = [
 export function createGameSaveDocument(
   options: CreateGameSaveDocumentOptions,
 ): string {
+  return encodeDocument(prepareGameSaveDocument(options))
+}
+
+export function createGameSaveDocumentWithPartyRecovery(
+  options: CreateGameSaveDocumentOptions,
+  createToken: (created: CreatedRecoverySave) => string,
+): { readonly document: string, readonly token: string } {
+  if (
+    options.partyRejoinToken != null
+    || options.state.world.kind !== 'boneyard'
+    || options.state.run.phase !== 'active'
+    || options.loadedBoneyard === null
+  ) throw new Error('party recovery creation requires an unsigned active Boneyard')
+  const prepared = prepareGameSaveDocument(options)
+  const unsigned = encodeDocument(prepared)
+  const token = createToken(new CreatedRecoverySave(
+    unsigned, options.playerId, options.loadedBoneyard.runId, options.integrity,
+  ))
+  if (!validPartyRejoinToken(token)) {
+    throw new Error('game save party rejoin token requires an active Boneyard')
+  }
+  prepared.continuation.summary.partyRejoinToken = token
+  return { document: encodeDocument(prepared), token }
+}
+
+function prepareGameSaveDocument(options: CreateGameSaveDocumentOptions) {
   const { ownerIndex, ownerState } = ownerProjection(options.state, options.playerId)
   if (ownerState.run.phase === 'game-over' || ownerState.run.phase === 'loadout') {
     throw new Error(`game save cannot checkpoint ${ownerState.run.phase}`)
@@ -226,8 +276,7 @@ export function createGameSaveDocument(
   if (
     partyRejoinToken !== null
     && (
-      partyRejoinToken.length > 8_192
-      || !/^sdrpr2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(partyRejoinToken)
+      !validPartyRejoinToken(partyRejoinToken)
       || ownerState.world.kind !== 'boneyard'
       || ownerState.run.phase !== 'active'
     )
@@ -249,7 +298,7 @@ export function createGameSaveDocument(
           enemyEvents: ownerState.world.enemyEvents.filter(event => event.type !== 'player-charm-lost'),
         },
   }
-  return encodeDocument({
+  return {
     continuation: {
       loadedBoneyard: options.loadedBoneyard,
       simulation,
@@ -274,7 +323,11 @@ export function createGameSaveDocument(
         gameSimulationRetiredWizardEconomy(ownerState, options.playerId),
       ),
     ),
-  })
+  }
+}
+
+function validPartyRejoinToken(token: string): boolean {
+  return token.length <= 8_192 && /^sdrpr2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(token)
 }
 
 function diskSimulationState({

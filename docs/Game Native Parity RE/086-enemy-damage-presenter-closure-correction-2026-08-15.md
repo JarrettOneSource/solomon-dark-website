@@ -824,3 +824,59 @@ binding actual authority `4264` source and binary hashes; it is not release
 qualification. Root full gates/publication remain pending, and Report 87 remains
 open. Pixi's corresponding direct-token path is verified-already-at-parity for
 this specific redundancy. No completion reaction is earned.
+
+### Hosted save boundary timing
+
+The targeted November 9 follow-up retains the complete original workloads and
+correlates browser packet events, actual native message callbacks, accepted raw
+session ticks and temporary host stage timings. At supervisor tick 3,000,
+Report 81 blocks save publication for 120.3 ms alongside a 183.3 ms accepted-tick
+hold; Report 87 blocks publication for 221.7 ms alongside a 283.4 ms hold. The
+Report 87 constructor spends 77.5 ms normalizing its unsigned document and
+83.8 ms parsing/restoring its recovery bindings. Nearby browser callbacks remain
+below 10 ms. This identifies a synchronous host save cost beyond the simulation
+timer; frame cadence alone could not locate it.
+
+The complete Report 37 death burst also exposes native receive callbacks up to
+53.6 ms and a separate 1.14-second autosave publication block for an 8.6 MB save.
+Buffered delivery means a raw accepted-tick hold is not the entire publication
+delay. These are diagnostic runs, with extra CDP traffic and stage timing; their
+FPS values are not candidate performance acceptance.
+
+The Rust LuaValue decoder selects the incoming JSON kind directly, retaining
+number bits, object insertion/numeric-key order and duplicate-key replacement.
+Actual normalization falls from about 44/77 ms to 5/11 ms in Reports 81/87, but
+visitor-only controls retain 133/200 ms accepted-world holds. Pixi already uses
+native JSON.parse for this boundary.
+
+Both maintained owner-save creators now prepare their projection once, expose
+an opaque creator-held binding to claim signing and encode that same structured
+document with the returned token. Exact raw-checked signatures and full save
+bytes agree; incoming/raw signing paths keep full parse/restore validation.
+Native pinned recovery and full supervisor recovery checks pass, along with the
+paired creator contract test, Pixi types, lint and boundary checks. Pixi updates
+its slot token after final encoding succeeds; the prior final-encoding error
+could leave a changed token without a published document.
+
+Paired original-workload controls reduce native 81 periodic publication from
+120.3 to 24.1 ms. The final native 87 control takes 35.8 ms versus 221.7 ms after
+already encoded world/continuation JSON trees move into their parents instead
+of being reserialized by json!. Neither control observes an accepted-world hold
+above 80 ms. Later signed native checkpoints are byte-for-byte as published,
+with final transfer ACK independently observed. Pixi 87 periodic publications
+take 26.3/20.8 ms versus 54.7/36.9 ms, and a later signed checkpoint is durable.
+The public codec accepts all four actual new durable checkpoints. All errors
+are empty and Node/Chrome exits are 0; actual original images and process closure
+are reviewed. Original 87 bearing is mostly below camera, so no peak-visibility
+acceptance follows. JavaScript object assembly already retains its value trees.
+
+Constructor stages isolated 19.5 ms of continuation assembly for a 7.80 MB save,
+plus 75.7 ms of simulation projection. The final move-based heavy 37 control
+retains the complete original workload and a 7.60 MB save: construction takes
+145.3 ms and publication 158.3 ms. Earlier prepared-only controls took 268.1 ms
+at 8.77 MB, and the original trace blocked 1.14 seconds. The final frozen client
+still has 51.8 ms receive callbacks and a 199.9 ms accepted-world hold. These
+residual constructor/receive costs and natural population/admission variation
+prevent full historical lag acceptance or an exact speed-ratio claim. All new
+receipts remain in the task's `followup1/` scratch, with no new archive copy;
+coordinator full gates and deployment remain separate.

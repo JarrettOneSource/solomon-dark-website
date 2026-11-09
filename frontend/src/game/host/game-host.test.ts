@@ -97,13 +97,16 @@ import {
 } from './project-boneyard.ts'
 import { GAME_WEBSOCKET_COMPRESSION } from './websocket-compression.ts'
 import {
+  type CreateGameSaveDocumentOptions,
   createGameProfileSaveDocument,
   createGameSaveDocument,
+  createGameSaveDocumentWithPartyRecovery,
   restoreGameSaveDocument,
   restoreGameSaveProfile,
 } from '../save/game-save-document.ts'
 import type { GameSaveIntent } from '../save/game-save-contract.ts'
 import {
+  createOwnerPartyRecoveryClaim,
   createPartyRecoveryClaim,
   verifyPartyRecoveryClaim,
 } from './party-recovery-claim.ts'
@@ -328,7 +331,7 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
   )
   assert.ok(loaded)
   const playerId = 'member-player'
-  const unsignedDocument = createGameSaveDocument({
+  const documentOptions: CreateGameSaveDocumentOptions = {
     integrity: 'global-clean',
     loadedBoneyard: loaded,
     mods: [],
@@ -336,7 +339,8 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
     partyRejoinToken: null,
     playerId,
     state: enterBoneyardWorld(createGameSimulation({ [playerId]: SECOND_CHARACTER }), loaded),
-  })
+  }
+  const unsignedDocument = createGameSaveDocument(documentOptions)
   const targetRevision = 'a'.repeat(40)
   const claimInput = {
     contentManifestSha256: '0'.repeat(64),
@@ -384,6 +388,23 @@ test('party recovery claim seals the exact owner checkpoint and deployment targe
     verifyPartyRecoveryClaim(LEADERBOARD_RECEIPT_SECRET, token, finalDocument),
     claimInput,
   )
+  const created = createGameSaveDocumentWithPartyRecovery(documentOptions, save => (
+    createOwnerPartyRecoveryClaim(LEADERBOARD_RECEIPT_SECRET, claimInput, save)
+  ))
+  assert.equal(created.token, token)
+  assert.equal(created.document, createGameSaveDocument({
+    ...documentOptions,
+    partyRejoinToken: token,
+  }))
+  assert.throws(() => createGameSaveDocumentWithPartyRecovery(documentOptions, save => (
+    createOwnerPartyRecoveryClaim(LEADERBOARD_RECEIPT_SECRET, {
+      ...claimInput,
+      runId: `${claimInput.runId}-other`,
+    }, save)
+  )), /party recovery document bindings are invalid/)
+  assert.throws(() => createGameSaveDocumentWithPartyRecovery(
+    documentOptions, () => 'invalid-token',
+  ), /party rejoin token/)
 
   const legacyUnsigned = structuredClone(final)
   legacyUnsigned.schemaVersion = 12
