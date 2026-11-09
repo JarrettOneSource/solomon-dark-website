@@ -764,3 +764,63 @@ useful check is per-snapshot socket-arrival-to-accepted-frame latency correlated
 with the long frame gaps, separating inflate, delta apply/size accounting and
 typed reconstruction at this same full burst. Do not treat this small cleanup
 as a solution to that synchronous workload or the unobserved original Aliss edge.
+
+### Current hosted save publication cost in Reports 81 and 87
+
+The untouched Report 81 and 87 saves now run through the actual private Website
+API/TLS/supervisor owners in both maintained clients. Ordinary seven Boulder
+releases and 15 seconds of held Burning Bolt remain near 60 presentation frames
+per second. Native accepted session ticks nevertheless repeat for 150/283 ms
+around 166/310 ms snapshot gaps. Existing host archives record no simulation
+tick above 10 ms (worst 2.44/4.42 ms) but 106/252 ms behind schedule. These are
+world-state freshness findings, not an all-smooth-gameplay acceptance.
+
+The separate native host sample includes `publish_player_save`, claim binding
+restoration, save construction and parsing outside the timed simulation step.
+One concrete redundant operation is in `hosted/saves.rs`: `owner_save` creates
+the recovery token, writes it into a new save, then `publish_player_save` parses
+the entire new document only to recover that same token for a staged slot. The
+planned narrow correction returns the document and its optional token together.
+It does not skip recovery-claim validation, restore checks at untrusted input,
+save construction, acknowledgement, signing, hashing or transport publication.
+It does not establish that this one parse explains the full observed hold.
+
+Membership is complete for this private return path: profile-only terminal saves,
+ordinary saves without a recovery lineage, signed recovery saves, and staged
+rejoin saves for both private and global worlds all carry the same document and
+the token that their existing constructor accepts. `owner_save` has one caller,
+`publish_player_save`; the slot changes only when the generated token is present,
+as before. Existing cache equality, sequence, atomic-save and error rules remain.
+Pixi's corresponding `game-host.ts` already assigns the generated token directly
+to its rejoin slot and does not parse the new document to retrieve it; this
+specific redundancy is native-only. Full creation/verification work and the
+remaining intermittent publication/scheduling cost stay open.
+
+Retained runtime evidence: `solomon-open-reports-20261108/report81/` and
+`report87/` under the M2 task root. Targeted existing hosted-save/recovery checks
+and actual candidate publication are required before accepting the correction.
+
+Local Rust `4264bd07` carries that token with the document. Existing recovery
+fixtures pass 20 creation and 16 verification rows; the complete hosted
+supervisor source-parity/recovery test passes. Launcher all-target Clippy and
+formatting pass, and an independent source review accepts terminal, unsigned,
+signed and staged-save propagation without a correctness issue.
+
+The ordinary native-only candidate authority build runs the untouched Report 87
+save against the unchanged source-bound `081` client and frozen Website API.
+It accepts 32 casts at HP 55 and persists schema-52 revision 3 with a recovery
+token; the public native parse/restore/roundtrip check accepts that actual stored
+checkpoint. All nine full images across baseline Pixi/native and candidate
+native runs were directly reviewed; errors are empty, owned Chrome exits are 0
+and owned services/listeners are absent.
+
+The remaining native accepted-tick hold is 233 ms around a 252 ms snapshot gap,
+versus 283/310 ms in the single baseline. Natural populations and admission
+timing differ, so this pair does not establish a causal percentage improvement.
+The implementation removes exactly one redundant decode; save generation,
+signing and intermittent publication/scheduling cost remain. The private
+compatibility experiment retains `178` deployment metadata while explicitly
+binding actual authority `4264` source and binary hashes; it is not release
+qualification. Root full gates/publication remain pending, and Report 87 remains
+open. Pixi's corresponding direct-token path is verified-already-at-parity for
+this specific redundancy. No completion reaction is earned.
