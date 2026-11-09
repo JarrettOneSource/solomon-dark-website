@@ -13,7 +13,7 @@ const player = createGameSnapshot(createGameSimulation({ player: {
   discipline: 'mind', displayName: 'Stone clear', element: 'earth',
 } }), 'player').players.player
 const root = fileURLToPath(new URL('../', import.meta.url))
-const server = await createServer({ root, appType: 'custom', logLevel: 'error',
+const server = await createServer({ root, appType: 'custom', logLevel: 'error', cacheDir: `${output}/vite-cache`,
   plugins: [{ name: 'stone-clear-pixi',
     resolveId(id) { if (id === 'virtual:stone-clear-pixi') return '\0stone-clear-pixi' },
     load(id) { if (id === '\0stone-clear-pixi') return 'export { BufferImageSource, Container, Matrix, Mesh, MeshGeometry, RenderTexture, Sprite, Texture } from "pixi.js"' },

@@ -1415,7 +1415,7 @@ sampler, alpha-factor, grid, material, tint, or pass-count change is needed.
 
 | Capture member | Native clear | Disposition |
 | --- | --- | --- |
-| Stoneskin, live Enhanced Effects On and Off, initial and reused target | `(0,0,0,0)` at `0x00546A11` | recovered-pending-port in both clients |
+| Stoneskin, live Enhanced Effects On and Off, initial and reused target | `(0,0,0,0)` at `0x00546A11` | candidate ported in both clients; focused Pixi pixels pass, Rust and final scene acceptance pending |
 | Harden | `(1,1,1,0)` at `0x00546EC8` | verified-already-at-parity; preserve white |
 | Webbed | `(1,1,1,0)` through `0x0054797F` | verified-already-at-parity; preserve white |
 | Planewalker | `(1,1,1,0)` at `0x005473D2` | out-of-system: distinct existing renderer, unchanged |
@@ -1432,5 +1432,16 @@ On/Off/On, reused targets and white Harden/Webbed controls.
 
 This is direct evidence of a current compositing defect and predicts a darker
 Stone edge. It does not alone identify every pixel of the October 20 screenshot
-or resolve Report 135's separate actor-local glow. Focused red/green pixels,
-actual both-client material journeys and the final gates remain pending.
+or resolve Report 135's separate actor-local glow. The focused Website unit fails on the old white clear and passes with the
+correction. Seven focused material/lifetime checks, changed-file lint and probe
+syntax pass. The real WebGL material probe uses the production Stone view with
+an independently black-cleared, fractional-alpha body reference. The old capture
+differs in 193,728 channels; its final two-pass On frame differs in 9,924 channels
+(maximum 98), and Off in 10,029 (maximum 95). The corrected capture and composed
+frames have zero differing channels across On/Off/On and retain the same target.
+Harden and Webbed match their independent white references before and after.
+All eight original red/green images were reviewed; both browser error arrays are
+empty and browser/server shutdown completes. These are synthetic fractional-alpha
+material-view checks, not an ordinary full-art wizard or historical image match.
+Rust composed pixels, actual both-client material journeys and final gates remain
+pending.
