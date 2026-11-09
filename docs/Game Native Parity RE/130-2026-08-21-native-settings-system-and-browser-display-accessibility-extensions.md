@@ -1383,3 +1383,54 @@ numbers. The built Settings journeys separately retain individually verified
 streaming-media cancellations rather than hiding them. Compact measured data
 is in `report38-enhanced-effects-performance.json`; the archive release
 receipt owns the final unchanged full-gate, publication and cleanup status.
+
+### 2026-11-09 — Stoneskin capture clear color
+
+Report 125's pale contour reopens one shared-capture assumption. The Stone
+branch does not use the transparent-white clear selected by its neighboring
+material branches. Earlier composed comparisons either reused the production
+capture helper or compared only outer-effect membership, so they did not detect
+this difference.
+
+Fresh Capstone 5.0.7 reads of retail `SolomonDark.exe` 0.72.5, 4,723,200 bytes,
+SHA-256 `03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `0x00400000`, establish the complete clear path. Stone selects
+its render target at `0x005469A6`, writes four float zeros at
+`0x005469AB..0x005469C0`, copies those four values through `0x0040F9E0`, and
+calls `0x0041D840` at `0x00546A11`. The latter forwards the four components to
+`0x00440D40`, which packs color zero and submits D3D Clear. The float copier
+neither substitutes white nor premultiplies. Harden at `0x00546E60`,
+Planewalker at `0x0054736A`, and Webbed at `0x00547939` instead explicitly
+write RGB one and alpha zero. Webbed forwards its color through `0x00528930`.
+
+The target retains raw RGBA under the previously recovered non-separate native
+blend equations. Normal composition writes `Cs*As + Cd*(1-As)` and
+`As*As + Ad*(1-As)`; multiply writes destination RGBA times source RGBA.
+Thus transparent-white RGB survives under fractional body alpha and into the
+Stone texture and its two later composites. It is not a premultiplication
+adapter. Pixi's target explicitly has `no-premultiply-alpha`; its WebGL clear
+passes the four values directly. Rust uses RGBA8 and samples this target with
+`TextureColorMode::Texture`. Both use linear sampling. No texture upload,
+sampler, alpha-factor, grid, material, tint, or pass-count change is needed.
+
+| Capture member | Native clear | Disposition |
+| --- | --- | --- |
+| Stoneskin, live Enhanced Effects On and Off, initial and reused target | `(0,0,0,0)` at `0x00546A11` | recovered-pending-port in both clients |
+| Harden | `(1,1,1,0)` at `0x00546EC8` | verified-already-at-parity; preserve white |
+| Webbed | `(1,1,1,0)` through `0x0054797F` | verified-already-at-parity; preserve white |
+| Planewalker | `(1,1,1,0)` at `0x005473D2` | out-of-system: distinct existing renderer, unchanged |
+| Enhanced hit and compact ground masks | existing independent capture owners | out-of-system: retain their existing white clear; no changed contract |
+
+The correction belongs to each material caller: the shared diffuse-capture
+operation accepts the caller's explicit clear color, and only Stone selects
+black. Every capture clears the reused target, so prior material contents cannot
+leak between frames or modes. The Rust reference must explicitly clear black
+without calling the production diffuse-capture wrapper. The Pixi pixel
+regression must compare the actual Stone capture and composites against an
+independently black-cleared reference, including fractional-alpha edges,
+On/Off/On, reused targets and white Harden/Webbed controls.
+
+This is direct evidence of a current compositing defect and predicts a darker
+Stone edge. It does not alone identify every pixel of the October 20 screenshot
+or resolve Report 135's separate actor-local glow. Focused red/green pixels,
+actual both-client material journeys and the final gates remain pending.

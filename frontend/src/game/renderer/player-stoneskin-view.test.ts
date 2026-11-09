@@ -17,6 +17,7 @@ test('Stoneskin keeps its two masked passes and born distortion across live mode
     assert.ok(options.target instanceof RenderTexture)
     if (options.clear) {
       captures++
+      assert.deepEqual(options.clearColor, [0, 0, 0, 0])
       assert.equal(excluded.visible, false)
     } else {
       multiplies++
