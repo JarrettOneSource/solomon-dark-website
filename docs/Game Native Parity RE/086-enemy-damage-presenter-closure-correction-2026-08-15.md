@@ -880,3 +880,52 @@ residual constructor/receive costs and natural population/admission variation
 prevent full historical lag acceptance or an exact speed-ratio claim. All new
 receipts remain in the task's `followup1/` scratch, with no new archive copy;
 coordinator full gates and deployment remain separate.
+
+### Rust outbound batching and pending inbound work
+
+The November 9 current-source host probe is attribution only: Rust d1cec637 plus
+the numeric-only diagnostic patch, native binary SHA-256
+`caf4f419f86cd453993a25e08721292ad8b7186145611a7c807b73b79b2c26f2`.
+Original Report 37 and 87 ZIPs were admitted through the ordinary File/preview/
+Replace/Continue flow; ordinary pointer input followed. No direct damage or
+runtime state injection was used. Probe logging adds scheduling overhead.
+
+The socket worker's `send_outbox` can select a newly produced second snapshot
+before returning to `drive_peer` for its next input/ACK read. In Report 37's
+Continue/readiness phase, peer 3 batch 604 encoded sequence 72 for 24.971 ms and
+sequence 73 for 30.936 ms, totaling 56.853 ms with no blocked TCP write. Browser ACK 71
+was sent about 1.075 ms before that batch began; socket text ordinal 363 was read
+58.008 ms after the browser send, then waited 21.790 ms for authority dispatch.
+The cross-process clock bridge uses an integer-millisecond host anchor. The trace
+does not observe when those bytes became readable in the server kernel.
+
+This supports a bounded duplex-fairness correction, subject to a deterministic
+real-TCP regression: hold snapshot A immediately before encoding, send actual
+Input/ACK I and verify the complete masked frame with nonconsuming TCP peek, queue
+reliable R1 and replace an obsolete snapshot with B, then require reading I before
+encoding B. Reliable wire order must remain R0,A,R1,B; B must use the last actually
+written A baseline, with exact reconstructed values. The proposed correction is
+to end an outbound batch after one snapshot so the existing read/flush boundary
+runs before another. No queue capacity, wire/save format, game timing, render ACK
+watermarks or snapshot-baseline rule changes. Regression and correction remain
+unexecuted at this ledger entry.
+
+The measured active prefixes do **not** establish that batching caused their
+historical gameplay lag: Report 37 has 343 single-snapshot batches during 17.120 s
+before natural player death, and Report 87 has 556 during 27.780 s before the natural
+level 32 picker. Maximum completed submitted tick holds are 66.7/66.8 ms, pending
+depth is <=2 and neither active prefix has highwater suppression. Both full
+journeys remain strict failures: 37 cannot perform the ordinary saved Leave after
+death; 87's post-window Pause attempt meets the picker barrier. Postdeath/modal
+frames are excluded from active-gameplay statistics. Healthy FPS alone is not
+world-freshness acceptance.
+
+At active Report 87 supervisor tick 3000, the 1,431,184-byte periodic checkpoint
+costs 27.551 ms to construct and 2.156 ms to enqueue for transfer (29.748 ms total),
+with 34.861 ms total host tick and 3.492 ms snapshot stage. Later tick 6000/9000 costs
+occur with the picker held; Report 37 tick 3000 occurs after death and creates no
+new checkpoint. These independent save observations do not justify a new save
+architecture or repeat the already-installed constructor/signing optimizations.
+
+This is a Rust transport fairness scope, not a historical-lag cure or a new
+completion reaction. Website/Pixi retains its own host and transport diagnosis.
