@@ -83,6 +83,13 @@ it never silently imports that save or provisions another game. Durable active-r
 rejoin remains an explicit, separately validated operation and may restore only
 its last completed checkpoint, which can lag accepted live state.
 
+Caddy 2.11.7's reload cleanup can write its raw Close control inside a text frame
+still being copied. A private interrupted-frame control confirms that this can
+make an otherwise valid payload invalid UTF-8. Browser transport errors therefore
+wait for the actual Close event and retain its diagnostic; eligible `1001`/`1006`
+losses use the same bounded recovery. See the upstream
+[stream cleanup and Close writer](https://github.com/caddyserver/caddy/blob/v2.11.7/modules/caddyhttp/reverseproxy/streaming.go).
+
 Focused public HTTP/WebSocket/client regressions cover the causal path. Report74
 acceptance additionally requires exact integrated M2 builds and actual local
 Caddy-reload browser journeys for both maintained clients, including accepted
