@@ -286,6 +286,15 @@ class MacInstallationTests(unittest.TestCase):
     @unittest.skipUnless(sys.platform == 'darwin', 'native macOS process lifecycle')
     def test_cancellation_terminates_owned_group_and_releases_only_its_lease(self):
         import signal
+        self.assert_cancellation_cleans_up(signal.SIGTERM)
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'native macOS process lifecycle')
+    def test_interrupt_terminates_owned_group_and_releases_only_its_lease(self):
+        import signal
+        self.assert_cancellation_cleans_up(signal.SIGINT)
+
+    def assert_cancellation_cleans_up(self, cancel_signal):
+        import signal
         import time
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / 'ci'
@@ -305,18 +314,24 @@ class MacInstallationTests(unittest.TestCase):
                 while not (root / 'grandchild.pid').exists() and child.poll() is None and time.monotonic() < end:
                     time.sleep(0.02)
                 self.assertTrue((root / 'grandchild.pid').exists())
-                child.send_signal(signal.SIGTERM)
+                child.send_signal(cancel_signal)
                 output, errors = child.communicate(timeout=10)
-                self.assertEqual(child.returncode, 143, errors.decode())
+                self.assertEqual(child.returncode, 128 + cancel_signal, errors.decode())
                 self.assertFalse(lease.exists())
                 status = json.loads((root / 'state/status.json').read_text())
                 self.assertEqual(status['state'], 'cancelled')
-                self.assertEqual(status['exit_code'], 143)
+                self.assertEqual(status['exit_code'], 128 + cancel_signal)
                 grandchild = int((root / 'grandchild.pid').read_text())
                 result = subprocess.run(['/bin/ps', '-p', str(grandchild), '-o', 'stat='], capture_output=True, text=True)
                 self.assertTrue(not result.stdout.strip() or result.stdout.strip().startswith('Z'), result.stdout)
                 self.assertFalse(runner.group_active(int((root / 'child.pid').read_text())))
             finally:
+                group_file = root / 'child.pid'
+                if group_file.exists():
+                    try:
+                        os.killpg(int(group_file.read_text()), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                 if child.poll() is None:
                     child.kill()
                     child.communicate()

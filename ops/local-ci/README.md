@@ -11,7 +11,8 @@ exclusive lease `/Volumes/Drive/codex-acceptance/solomon-heavy-lease`. A foreign
 lease or an already-running native Clang compiler defers admission without
 stopping that work. Heavy work started later must use the same lease convention.
 Signals terminate only the owned process group and release only its matching
-lease. Each invocation has a 90-minute cap. Standard launchd classification,
+lease. Cancellation uses a distinct exception so subprocess I/O fallback handling
+cannot consume the signal. Each invocation has a 90-minute cap. Standard launchd classification,
 existing nice level and I/O priority preserve the measured compute policy.
 
 Pinned tools, caches, temporary files, source worktrees, artifacts, complete

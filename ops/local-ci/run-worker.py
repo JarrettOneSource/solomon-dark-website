@@ -17,6 +17,10 @@ VOLUME = Path('/Volumes/Drive')
 LEASE = VOLUME / 'codex-acceptance/solomon-heavy-lease'
 
 
+class InvocationCancelled(Exception):
+    """Keep cancellation distinct from I/O errors handled by subprocess waits."""
+
+
 def now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
@@ -186,7 +190,7 @@ def run_once(root):
             cancelled = True
             cancel_signal = signum
             if child is not None:
-                raise InterruptedError('CI invocation was cancelled')
+                raise InvocationCancelled('CI invocation was cancelled')
 
         handlers = {number: signal.signal(number, terminate) for number in (signal.SIGTERM, signal.SIGINT)}
         result = 1
@@ -200,9 +204,9 @@ def run_once(root):
                                              env=worker_environment(root, config),
                                              stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                     if cancelled:
-                        raise InterruptedError('CI invocation was cancelled during startup')
+                        raise InvocationCancelled('CI invocation was cancelled during startup')
                     code = child.wait(timeout=90 * 60)
-                except (subprocess.TimeoutExpired, InterruptedError):
+                except (subprocess.TimeoutExpired, InvocationCancelled):
                     cancelled = True
                     code = 128 + cancel_signal if cancel_signal is not None else 124
                 except OSError as error:
