@@ -232,9 +232,37 @@ No member is browser-blocked.
 - Web ownership stays split between parent session/modal state and scene-local
   Inventory presentation, but one pure input rule and one overlap predicate
   must govern both components. The old screen remains mounted and inert until
-  its 40th close tick; the new screen owns input immediately.
+  its remaining reveal reaches zero; the new screen owns input immediately.
 - `open-panel` plays once at close start for ordinary close and either
   replacement. A newly mounted sibling adds no open cue.
+
+### Interrupted opening keeps its current reveal
+
+Fresh read-only disassembly of the same retail executable confirms that close
+reverses the existing reveal. Inventory `0x00550777` sets closing byte `+0x14C`
+without resetting progress `+0x150`. Its tick at `0x00551BFA–0x00551C37`
+subtracts the double at `0x007847B0`, clamps zero and invokes destruction when
+the result reaches zero. Skills uses the same rule: `0x006568E3` sets closing
+byte `+0x98`, while `0x00656831–0x0065686E` subtracts from existing progress
+`+0x94` and retires at zero. The stored decrement is
+`0.02500000037252903`; each native write stores single precision.
+
+The full close duration above applies to a settled screen. An interrupted
+opening retains its current brightness and needs only the remaining decrement
+ticks to retire. It must not jump to full opacity at the close edge. This
+applies to both optional books and to their owned art, labels and controls.
+The deliberate Rename Sack addition inherits this owner; ledger 299 describes
+its separately repaired DOM opacity and page lifetime. Game-owned world
+notifications are outside this close contract.
+
+Pixi's Inventory renderer already captures `openingReveal` when close starts
+and passes it to `hubNativeUiCloseReveal`. The Rust `PlayerPanels` owner
+likewise samples opening progress at the close time before subtracting close
+ticks. Its existing instantaneous SkillSelector close and service callbacks
+remain unchanged. Regression evidence must inspect the painted Rename button
+and glyph vertices during both partial and settled closes, verify retirement,
+and retain page-motion ownership checks. Actual browser composition remains a
+separate acceptance step; this finding alone does not close Report 111.
 
 ### Validation contract and receipt
 
