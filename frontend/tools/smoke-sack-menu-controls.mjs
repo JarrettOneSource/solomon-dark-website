@@ -97,6 +97,7 @@ async function journey(scenario) {
     localStorage.setItem(settingsKey, JSON.stringify(controls))
     window.__sackPageTimings = []
     window.__sackControlPresentation = []
+    let previousReveal = null
     const sampleControls = () => {
       const stage = document.querySelector('.hub-native-ui-stage')
       const canvas = stage?.querySelector('.hub-inventory-native-canvas')
@@ -104,6 +105,13 @@ async function journey(scenario) {
       const reveal = Number(canvas?.dataset.nativeRevealProgress)
       const transition = stage?.dataset.nativeSackTransition ?? ''
       if (stage && canvas && Number.isFinite(reveal)) {
+        const owner = stage.getAttribute('aria-label')
+        const previous = previousReveal?.stage === stage && previousReveal.owner === owner
+          ? previousReveal : null
+        const direction = previous && reveal < previous.reveal ? 'closing'
+          : previous && reveal > previous.reveal ? 'opening'
+            : previous?.direction ?? 'opening'
+        previousReveal = { stage, owner, reveal, direction }
         let opacity = button ? 1 : 0
         let visible = button !== null && button !== undefined
         for (let node = button; node; node = node.parentElement) {
@@ -113,13 +121,13 @@ async function journey(scenario) {
         }
         window.__sackControlPresentation.push({
           kind: stage.closest('.hub-native-ui-overlay').dataset.surfaceKind,
-          owner: stage.getAttribute('aria-label'),
+          owner,
           scene: document.querySelector('.boneyard-scene') ? 'Boneyard' : 'College',
-          path: stage.dataset.nativeSackPath, transition, reveal,
+          path: stage.dataset.nativeSackPath, transition, reveal, direction,
           itemId: button?.dataset.inventoryRenameOpen ?? null,
           opacity, visible: visible && opacity > 0,
         })
-      }
+      } else previousReveal = null
       requestAnimationFrame(sampleControls)
     }
     requestAnimationFrame(sampleControls)
@@ -340,11 +348,13 @@ async function journey(scenario) {
     }
     receipt.renamePresentation = await page.evaluate(() => window.__sackControlPresentation)
     const moving = receipt.renamePresentation.filter(row => row.transition !== '')
-    const fading = receipt.renamePresentation.filter(row => row.transition === ''
+    const closing = receipt.renamePresentation.filter(row => row.transition === ''
+      && row.direction === 'closing' && row.scene === 'Boneyard'
       && row.itemId !== null && row.reveal > 0.1 && row.reveal < 0.9)
     const owned = receipt.renamePresentation.filter(row => row.itemId !== null)
     assert.ok(moving.length > 0, 'No Sack page transition was sampled')
-    if (!scenario.portrait) assert.ok(fading.length > 0, 'No closing Rename Sack control was sampled')
+    if (!scenario.portrait) assert.ok(closing.length > 0,
+      'No Boneyard Rename Sack control was sampled while Inventory opacity decreased')
     assert.equal(moving.filter(row => row.visible).length, 0,
       'Rename Sack must retire while the native Sack page/caption changes owner')
     assert.equal(owned.filter(row => Math.abs(row.opacity - row.reveal) > 0.001).length, 0,
