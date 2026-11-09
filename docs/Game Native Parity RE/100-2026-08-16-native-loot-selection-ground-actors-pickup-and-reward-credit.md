@@ -316,13 +316,13 @@ frame-complete or audio analysis. It does not reveal the authoritative reward
 or establish inventory ownership. The final media job exited zero at 07:26 UTC
 with no page errors; invalid earlier samples were excluded from the result.
 
-Report 102 stays open, with no completion reaction. The missing evidence is an
-occurrence save or deterministic reproduction, its complete owned-recipe set,
-and authoritative Goodie seed/selected reward/state (including relevant arena
-limits and allocator state). The focused kernel tests establish the known empty
-branch; they do not replay the reporter's actual cause. The discovered
-selector-99 omission and nondefault item-limit difference are recorded for
-separate follow-through; neither is silently added to this release.
+An opened chest can legitimately be empty when the named-reward pool is
+exhausted by owned or direct-ground recipes. Paired current-client controls cover
+both the last eligible recipe and that same recipe already on the ground: the
+latter produces no duplicate item or empty Sack. This explains the reported
+outcome and ownership mechanism without identifying the original hidden seed.
+The separate selector-99 omission and nondefault item-limit difference do not
+justify a guaranteed-reward reroll or change this empty-pool contract.
 
 
 ## 2026-09-24 — Report 21: Item Charm probability investigation
