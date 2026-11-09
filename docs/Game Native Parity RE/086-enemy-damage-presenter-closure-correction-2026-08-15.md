@@ -899,16 +899,30 @@ was sent about 1.075 ms before that batch began; socket text ordinal 363 was rea
 The cross-process clock bridge uses an integer-millisecond host anchor. The trace
 does not observe when those bytes became readable in the server kernel.
 
-This supports a bounded duplex-fairness correction, subject to a deterministic
-real-TCP regression: hold snapshot A immediately before encoding, send actual
-Input/ACK I and verify the complete masked frame with nonconsuming TCP peek, queue
-reliable R1 and replace an obsolete snapshot with B, then require reading I before
-encoding B. Reliable wire order must remain R0,A,R1,B; B must use the last actually
-written A baseline, with exact reconstructed values. The proposed correction is
-to end an outbound batch after one snapshot so the existing read/flush boundary
-runs before another. No queue capacity, wire/save format, game timing, render ACK
-watermarks or snapshot-baseline rule changes. Regression and correction remain
-unexecuted at this ledger entry.
+Two deterministic real-TCP regressions now establish the exact readability
+boundary for actual Input and SnapshotAck messages. Each holds snapshot A before
+encoding, sends the inbound frame, verifies its complete masked bytes through
+nonconsuming server TCP peek, queues reliable R1 and replaces an obsolete snapshot
+with B, then observes the real socket read and encode boundaries. Both baseline
+tests finish the complete wire/reconstruction/normal-close journey and fail only
+the final order: `Readable, Encode(B), Inbound` instead of
+`Readable, Inbound, Encode(B)`.
+
+The correction ends an outbound batch after one selected snapshot, allowing the
+existing read/flush boundary before another. Both regressions pass and retain
+reliable wire order R0,A,R1,B, exact reconstructed state/f64 bits, and B's last
+actually written A baseline; replaced unsent sequence 2 never becomes a baseline.
+All 18 existing/new transport tests pass on the final source, including real
+partial-write/close/heartbeat/media-integrity and Welcome/save coalescing controls.
+Launcher all-targets Clippy and workspace formatting pass. The first Clippy run's
+test-only callback type-complexity warnings were corrected with named exact
+callback types; its failed receipt remains preserved. The scheduling hooks compile
+only for tests. No private performance probe is included in product source.
+
+No queue capacity, wire/save format, game timing, render ACK watermarks or
+snapshot-baseline rule changes. This is local transport verification; combined
+release gates, current original-workload browser acceptance, publication and
+installed behavior remain with the coordinator.
 
 The measured active prefixes do **not** establish that batching caused their
 historical gameplay lag: Report 37 has 343 single-snapshot batches during 17.120 s
