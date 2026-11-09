@@ -7,10 +7,12 @@ export const NATIVE_PLAYER_DIFFUSE_TARGET_SIZE = 256
 export class NativePlayerDiffuseCapture {
   private readonly transform = new Matrix(1, 0, 0, 1, 128, 153)
   private readonly renderer: Pick<Renderer, 'render'>
+  private readonly clearColor: [number, number, number, number]
   private target: RenderTexture | null = null
 
-  constructor(renderer: Pick<Renderer, 'render'>) {
+  constructor(renderer: Pick<Renderer, 'render'>, clearColor: [number, number, number, number]) {
     this.renderer = renderer
+    this.clearColor = clearColor
   }
 
   render(source: Container, excluded: readonly Container[]): RenderTexture {
@@ -22,7 +24,7 @@ export class NativePlayerDiffuseCapture {
     for (const child of excluded) child.visible = false
     try {
       renderNativeDiffuseMask(this.renderer, {
-        clear: true, clearColor: [1, 1, 1, 0], container: source,
+        clear: true, clearColor: this.clearColor, container: source,
         target: this.target, transform: this.transform,
       })
     } finally {

@@ -11,7 +11,7 @@ export class PlayerEnhancedHitView {
   private sprite: Sprite | null = null
 
   constructor(renderer: Pick<Renderer, 'render'>) {
-    this.capture = new NativePlayerDiffuseCapture(renderer)
+    this.capture = new NativePlayerDiffuseCapture(renderer, [1, 1, 1, 0])
     this.container.visible = false
   }
 

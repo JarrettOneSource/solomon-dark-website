@@ -14,7 +14,7 @@ export class PlayerWebbedView {
   private readonly record = nativeEnemySpriteRegistration('DeadHawg', 29)
 
   constructor(cocoon: Texture, renderer: Pick<Renderer, 'render'>) {
-    this.capture = new NativePlayerDiffuseCapture(renderer)
+    this.capture = new NativePlayerDiffuseCapture(renderer, [1, 1, 1, 0])
     this.container.visible = false
     this.foreground.visible = false
     this.cocoon = new Sprite({ texture: cocoon, label: 'player-cocoon', eventMode: 'none' })
