@@ -206,6 +206,49 @@ test('ordinary Hub prediction respects the annalist and bench contact before rev
   assert.ok(players.local.position.y > start.y, 'reverse input must move back out of the contact')
 })
 
+for (const scenario of [
+  { name: 'prevents new bench-pocket entry', start: { x: 898, y: 500 }, entering: true },
+  { name: 'escapes a retained bench-pocket position', start: { x: 842.9961464554825, y: 440.6021311517868 }, entering: false },
+  { name: 'escapes a retained rejected-separation position', start: { x: 927.7249718, y: 452.5413180 }, entering: false },
+]) {
+  test(`ordinary Hub movement ${scenario.name} in authority and prediction`, () => {
+    let world = createHubWorld(['local'], {
+      skorcha: null,
+      skorchaHiddenTicks: 1_000_000,
+      studentPopulation: createHubStudentFixturePopulation({ count: 0 }),
+    })
+    let players = { local: createPlayerCharacter(CHARACTER, scenario.start) }
+    // Recovered Report 57 entry, then the existing ordinary east escape.
+    const phases = scenario.entering ? [
+      { ticks: 180, movement: { x: 0, y: -1 } },
+      { ticks: 40, movement: { x: -1, y: 0 } },
+      { ticks: 120, movement: { x: 0, y: -1 } },
+      { ticks: 40, movement: { x: 0, y: 0 } },
+      { ticks: 180, movement: { x: 0, y: 1 } },
+    ] : []
+    phases.push({ ticks: 300, movement: { x: 1, y: 0 } })
+    for (const phase of phases) {
+      for (let tick = 0; tick < phase.ticks; tick += 1) {
+        const input = { ...createIdlePlayerCharacterInput(), movement: phase.movement }
+        const predicted = predictPlayerCharacterInHub(
+          players.local, input, world.collisionRngState, 1, world.participants.local,
+        )
+        const stepped = stepHubWorldTick(world, players, { local: input }, { local: 1 })
+        const authority = stepped.players.local
+        assert.deepEqual(predicted.player, authority)
+        assert.equal(predicted.collisionRngState, stepped.world.collisionRngState)
+        if (scenario.entering) {
+          assert.ok(Math.hypot(authority.position.x - 895.5, authority.position.y - 455.5) >= 33,
+            `fixed NPC remains solid at input ${JSON.stringify(phase.movement)} tick ${tick}`)
+        }
+        players = { local: authority }
+        world = stepped.world
+      }
+    }
+    assert.ok(players.local.position.x > 1080, 'ordinary east movement reaches the open courtyard')
+  })
+}
+
 function assertFixedBodyPrediction(
   actor: Pick<HubRegionPhysicsBody, 'id' | 'position' | 'radius' | 'region'>,
   collegeIntroPending = false,

@@ -7,6 +7,7 @@ import {
 import {
   HUB_FIXED_ACTOR_COLLISION_LAYOUT,
   HUB_STORY_OFFICE_POLISHER_ACTOR,
+  constrainHubBenchEntry,
   hubFixedActor,
   planHubParticipantMovement,
   stepHubParticipantMovement,
@@ -433,7 +434,9 @@ export function stepHubWorldTick(
     nextPlayers[playerId] = commitPlayerCharacterTick(
       player,
       playerPlans.get(playerId)!,
-      position,
+      staticCollisionEnabled.get(`player-${playerId}`) === false
+        ? position
+        : constrainHubBenchEntry(participants[playerId].region, player.position, position),
     )
   }
 

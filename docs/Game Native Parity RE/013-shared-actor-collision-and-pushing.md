@@ -706,3 +706,31 @@ Supported frontend lint and production build passed before the index callback;
 full exact-tree acceptance is still owned by the combined gate. The first
 browser attempt failed at private synthetic-save admission before gameplay;
 that is a fixture investigation, not a passed recipient journey.
+
+
+## Report 57: fixed-actor entry prevention
+
+The November 11 product direction treats the reported pocket as a bug unless
+native evidence establishes deliberately intended gameplay. The recovered
+full-candidate rejection rule explains accidental entry; no authored event,
+reward, interaction or scripted path makes that entry a desired feature.
+The former pending product decision is therefore resolved in favor of prevention.
+
+The correction belongs to ordinary College participant movement, after the
+shared actor solve and before the wizard commits its position. New entry into
+Boasticus from the open courtyard is rejected when scenery prevents separation.
+The existing bench endpoint `(856,465)` and fountain corner `(920,427)` define
+which side is the retained pocket. An older save behind that boundary, or one
+already overlapping the NPC, retains ordinary escape. This is an intentional
+correction to native contact admission, not newly recovered native behavior.
+Authority and local prediction apply the same rule in both clients. The fixed
+body and scenery tables, Student movement, Boneyard contacts, and scripted
+College transitions retain their existing behavior.
+
+Acceptance must reproduce N180/W40/N120/idle40/S180 from `(898,500)`, reject the
+first previously retained overlap `(927.7249718,452.5413180)`, preserve escape
+from that overlap and `(842.9961464554825,440.6021311517868)`, and cover normal
+conversations and saved Leave/Continue through both actual clients. The retained
+27 permanent bodies, conditional Office polisher and three Skorcha placements
+remain the membership boundary. This entry records the authorized contract;
+implementation and release qualification are still pending.

@@ -2,6 +2,7 @@ import { resolveActorMotion, type ActorPhysicsWorld } from '../core-kernels/acto
 import {
   HUB_FIXED_ACTOR_COLLISION_LAYOUT,
   HUB_STORY_OFFICE_POLISHER_ACTOR,
+  constrainHubBenchEntry,
   hubFixedActor,
   planHubParticipantMovement,
   stepHubParticipantMovement,
@@ -110,14 +111,17 @@ export function predictPlayerCharacterInHub(
       return moved.position
     },
   }
-  const committed = commitPlayerCharacterTick(previous, plan, resolveFixedActorMovement(
+  const resolved = resolveFixedActorMovement(
     previous,
     plan,
     participant,
     collegeIntroPending,
     world,
     options.skorchaPosition ?? null,
-  ))
+  )
+  const committed = commitPlayerCharacterTick(previous, plan, movement.plan
+    ? resolved
+    : constrainHubBenchEntry(participant.region, previous.position, resolved))
   const stepped = stepHubParticipantMovement(
     participant,
     committed,

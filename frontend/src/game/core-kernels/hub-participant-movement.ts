@@ -99,10 +99,12 @@ function privateRoomFixedActors(): readonly HubRegionPhysicsBody[] {
   return bodies
 }
 
+const HUB_ANNALIST_ACTOR = hubFixedActor('annalist', 'courtyard', 895.5, 455.5, 8)
+
 export const HUB_FIXED_ACTOR_COLLISION_LAYOUT: readonly HubRegionPhysicsBody[] = [
   hubFixedActor('perk-witch', 'courtyard', 1340, 280, 15),
   hubFixedActor('potion-trader', 'courtyard', 1397, 664, 30),
-  hubFixedActor('annalist', 'courtyard', 895.5, 455.5, 8),
+  HUB_ANNALIST_ACTOR,
   hubFixedActor('items-trader', 'courtyard', 1700.5, 449.5, 25),
   hubFixedActor('teacher', 'courtyard', 576.5, 710.5, 25),
   ...privateRoomFixedActors(),
@@ -116,6 +118,24 @@ export const HUB_STORY_OFFICE_POLISHER_ACTOR: HubRegionPhysicsBody = hubFixedAct
   735,
   15,
 )
+
+/** Reject new bench-pocket entry when scenery prevents the fixed NPC's separation. */
+export function constrainHubBenchEntry(
+  region: HubRegionId,
+  previous: Vector2,
+  candidate: Vector2,
+): Vector2 {
+  if (region !== 'courtyard') return candidate
+  // The existing bench end (856,465) and fountain corner (920,427) bound the
+  // pocket. Older saves behind that edge must keep their ordinary east escape.
+  const pocketSide = 64 * (previous.y - 465) + 38 * (previous.x - 856)
+  if (pocketSide < 0) return candidate
+  const actor = HUB_ANNALIST_ACTOR
+  const radius = PLAYER_CHARACTER_PHYSICS.radius + actor.radius
+  if (distanceSquared(previous, actor.position) >= radius * radius
+    && distanceSquared(candidate, actor.position) < radius * radius) return previous
+  return candidate
+}
 
 /**
  * True while the College intro exists but no authoritative tick has stepped it
