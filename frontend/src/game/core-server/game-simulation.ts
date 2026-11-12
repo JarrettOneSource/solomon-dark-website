@@ -4910,9 +4910,18 @@ function retainBoneyardEnemyEvents(
       throw new Error(`duplicate Boneyard enemy event ID ${retained[index]!.eventId}`)
     }
   }
-  return retained.length <= BONEYARD_ENEMY_EVENT_LANE_CAPACITY
-    ? retained
-    : retained.slice(-BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
+  let excess = retained.length - BONEYARD_ENEMY_EVENT_LANE_CAPACITY
+  if (excess <= 0) return retained
+  // Ordinary combat traffic must not evict an accepted player notice before
+  // its next snapshot. Keep the same total bound even under status-only pressure.
+  const prioritized = retained.filter(event => {
+    if (excess > 0 && event.type !== 'player-charm-lost' && event.type !== 'player-cheat-death') {
+      excess -= 1
+      return false
+    }
+    return true
+  })
+  return excess > 0 ? prioritized.slice(excess) : prioritized
 }
 
 function retainBoneyardLootEvents(

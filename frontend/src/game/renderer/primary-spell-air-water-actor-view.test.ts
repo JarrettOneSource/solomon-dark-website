@@ -123,7 +123,11 @@ test('native Hail birth draws a small ice chip in both Hub sprites and Boneyard 
       const draw = root.children[0]
       assert.ok(draw instanceof Mesh)
       const vertices = draw.geometry.getBuffer('aPosition').data
-      assert.deepEqual([vertices[0], vertices[1], vertices[18], vertices[19]], [5.25, 14.5, 14.75, 24.5])
+      const stride = draw.geometry.attributes.aPosition!.stride! / Float32Array.BYTES_PER_ELEMENT
+      assert.deepEqual([0, 1, 2, 3].flatMap((corner) => {
+        const offset = corner * stride
+        return [vertices[offset], vertices[offset + 1]]
+      }), [5.25, 14.5, 14.75, 14.5, 14.75, 24.5, 5.25, 24.5])
     } else {
       const draw = visibleSprites(root.children[0]!)[0]!
       assert.equal(draw.width, 9.5)

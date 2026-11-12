@@ -19,6 +19,56 @@ and loot. Current charm/status visibility and loss audio are preserved, includin
 the absent persistent HUD row described below. No gameplay, save or wire contract
 changes. The report's tentative Boast question is separate from this addition.
 
+### Bounded feedback under combat-event pressure
+
+The November 12 source audit reopens the shared retention boundary. Both clients
+formerly sorted accepted enemy events by ID, expired them after 100 ticks, and
+retained only the newest 512. That capacity rule could remove an accepted
+charm-loss or Cheat Death event before the next client snapshot. Earlier damage
+and presentation checks
+covered suppression, ownership and replay, but omitted competition with ordinary
+enemy events. The unchanged October 31 report has no captured accepted-loss
+state, so this source cause is not attributed to that historical occurrence.
+
+Boundary: retain the existing bounded enemy-event lane, while protecting its two
+player status notifications from ordinary combat traffic. No new queue, wire or
+save field is required. Keep original IDs and order, 100-tick expiry, and a total
+capacity of 512; if status events alone exceed capacity, keep their newest 512.
+Damage, charm charges, audio deduplication and notification clocks are unchanged.
+
+| Member | Required disposition and acceptance |
+| --- | --- |
+| `player-charm-lost`: Reverie, Serendipity, or both | Implemented; focused checks prove actual damage-produced loss survives ordinary event overflow |
+| `player-cheat-death`: alone or following charm loss | Implemented; focused checks preserve rescue and loss-before-rescue order |
+| Owner and peer targets | Implemented; focused checks preserve targets and the existing client ownership rules |
+| All 22 other enemy-event kinds | Implemented; the shared ordinary branch removes oldest records first without changing surviving IDs, payloads or order |
+| Initial load, repeats, owner/run replacement | Verified-already-at-parity: existing consumers seed and deduplicate retained events |
+| Event age and capacity, including status-only saturation | Implemented; focused checks retain the exact 100-tick and 512-record bounds |
+| Damage acceptance, charm reactivation, notification rise/fade and loot lane | Out-of-system: existing owners and contracts are unchanged |
+
+The ordinary membership is `cocoon-released`, `player-status-sound`,
+`attack-marker`, `coffin-maggot-release`, `enemy-action-sound`, `enemy-death`,
+`enemy-death-sound`, `enemy-damage-sound`, `player-damage-sound`, `enemy-retired`,
+`enemy-spawned`, `enemy-terminal-output`, `projectile-impact`,
+`projectile-retired`, `player-deflected`, `mage-lightning-contact`,
+`projectile-spawned`, `reward`, `enemy-dialogue-stop`, `enemy-stream`,
+`enemy-screen-flash` and `enemy-camera-shake`. These share the unchanged
+non-status branch; the notification-specific priority is not a new delivery
+guarantee for ordinary sound, particle or camera feedback.
+
+Focused baseline tests in both clients reproduce eviction of actual accepted
+damage feedback after 513 ordinary records. The paired correction passes the
+five charm/rescue selections for owner and peer, exact surviving ordinary
+records, snapshot serialization, notification text/owner selection, age
+100/101 and status-only saturation. The Rust client integration regression also
+passes actual damage, authority retention, JSON snapshot serialization, validated
+checkpoint application and the exactly-once visible notice collector in one
+sequence. Source gates and composed browser acceptance remain release
+requirements. Four bounded original-save performance controls stay below
+the 512-event cap (maximum retained counts 130/48/105/13); this does not turn the
+new regression into an explanation of their historical lag or the October 31
+loss report.
+
 ### Ether Drain's accepted loss is a semantic event
 
 The field's `0x10A` flags suppress ordinary hit presentation. They do not cancel

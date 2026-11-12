@@ -2553,3 +2553,341 @@ implementation and passes on this candidate. The source window is closed;
 matched browser pixels, frame cost and the coordinator's exact combined Mac
 gate remain pending. These checks do not close the generated Wall/terrain gaps
 or establish a global native destination raster phase.
+
+## 2026-11-12 — Record isolation across both maintained clients
+
+The owner requested a complete sibling audit after the accepted Hagatha fix,
+including all atlas drawing paths rather than only College NPCs. The owner also
+authorizes repairing unwanted native defects; deliberate game features remain
+unchanged. Sampling unrelated neighboring artwork is not an authored effect.
+
+### Evidence before implementation
+
+The Rust source at `f2001f48` isolates Courtyard and NPC records, but its general
+quad, indexed UI and mesh submissions still sample the entire page. The Pixi
+source at `02713911` applies the recovered native half/quarter-texel endpoints
+to retail records; that correct interpolation is distinct from restricting the
+bilinear footprint to the record. The old upper/left bleed repair cannot prevent
+lower/right neighbors on tightly packed pages.
+
+An M2 Chrome WebGL2 probe rendered the actual stock RGBA pages through the Rust
+Renderer, comparing each record against a separately uploaded byte-exact crop
+with the same geometry, UV interpolation, blend and target. Golem records 9, 61
+and 199 reproduce foreign alpha at fractional transforms even with the recovered
+native UVs: maximum additional alpha is respectively 63, 63 and 42 of 255 at
+3.5x. These are ordinary left/right limbs and an iron overlay, not unused records.
+Raw-edge Create records 9/11/12 and UI records 3/62 also differ visibly from their
+isolated controls. UI49 is a zero-difference neighboring-edge control. The probe
+retains each original observation; it does not claim composed scene acceptance.
+
+The complete available-page census classifies every rectangle and its adjacent
+texels. The current Pixi stock combat factory owns seven pages and 4,286 nonempty
+records. Its packed Hub and player sources have zero-RGBA gutters at all 576 and
+7,752 rectangles respectively. Solomon's 18 dig and 150 encounter cells have
+transparent boundaries. Those artificial sources retain raw frame UVs and logical
+registration; the packed-support correction below restores transparent filtering
+support omitted by tight quads. UI records, arbitrary meshes, partial record
+slices and point-font sampling remain distinct implementation paths.
+
+### Implementation contract and membership
+
+| Family | Required disposition |
+| --- | --- |
+| Retail world, enemy and spell records on full pages | Preserve recovered geometry/UVs, restrict sample coordinates to the original record's texel centers; exercise all source pages, effect/color variants, transformed and clipped meshes. |
+| Rust raw-edge UI/Create and other record replacements | Preserve current geometry/UVs, isolate original source records; compare actual rows and composed menus. |
+| Record slices, nine-slices and trimmed sprites | Retain full original record bounds, never derive sampling bounds from a slice or trim. |
+| Packed Hub/player/Solomon frames with verified transparent gutters | Preserve existing pack semantics; include boundary and resize controls, do not apply native endpoint offsets to artificial frames. |
+| Independently cropped loose images and animation strips | Use their owning image/frame extent; full textures already clamp in Rust. Recheck Pixi crop-level repeat separately against exact-source evidence. |
+| Fonts | Preserve point sampling and original full glyph bounds; loader/world paths using linear sampling require actual-font comparison. |
+| Ground/roads, generated ramps and explicitly repeating full textures | Preserve authored repeat and unrestricted mesh UVs. |
+| Offscreen targets, shadow/blur captures and clipped composites | Preserve target orientation, interpolation and state restoration; keep shadow's transparent-outside support distinct from record clamping. |
+| Authored mod frames | Separate user-content source policy; prove tight-sheet bleed before changing; do not impose native UV offsets. |
+
+Bounds belong to source-record views and must survive all consumers. In Rust a
+view retains its parent texture handle, full atlas dimensions and texel-coordinate
+space. The batch stores the bounds per vertex so adjacent records on the same
+page remain one GPU submission. Both sprite and effect shaders consume the same
+flat bounds. Pixi uses equivalent immutable record metadata and vertex attributes
+through its existing material owner. Whole-texture and repeating paths do not
+acquire an inferred rectangle. No per-record image copies or global UV shrink
+are required.
+
+Focused stock-member, authored-frame, font and primitive GPU regressions now
+pass with the backend scope recorded below. Repeating/sliced controls and
+same-page batching pass. Composed affected scenes through resize, final combined
+Mac/platform gates, publication, managed installation, installed acceptance and
+task cleanup remain coordinator-owned acceptance. The observed failures establish
+these causes, not a claim that every historical rendering report shares them.
+
+### Pixi source-family reproductions and sampling ownership
+
+The final focused Mac material suite passes 144 visible Golem comparisons
+(maximum one channel unit), 25 trim/source-update/context-restoration/absolute
+Flame/repeating-mesh/mixed-Water/source-retirement controls (maximum one unit),
+and every existing material/lifecycle group. Twelve sprites using three records
+on one page remain one draw in each fixed/Arena mode on Apple M2 ANGLE Metal.
+Test-config TypeScript, 58 focused renderer tests and targeted lint pass. The
+final new CSS cases have their separate focused receipt below; the complete
+combined gate and installed journeys remain separate.
+
+The original 144-row expected-red receipt needs one scope correction. Pixi's
+`BatchableMesh.uvs` skips `TextureMatrix` for a full-source frame when `isSimple`
+is true. The independent full-image crop reference had overridden native UVs,
+but its full-image batch/nine-slice paths incorrectly took this identity fast
+path. Those particular amplitudes are not independent record-bleed evidence.
+The original Sprite, standalone/capture/surface mesh and partial-slice rows
+retain their bleed evidence. The corrected reference explicitly applies its
+native matrix. The production full-source native-record constructor has the
+same contract problem and now preserves its nonidentity matrix through updates;
+an absolute-UV page view deliberately retains identity mapping.
+
+Pixi's high-shader compiler emits GLSL100-compatible programs. All four vertices
+carry the same original bounds through ordinary varyings; explicit `flat`
+qualifiers are unsupported by this compiler path. Console and visible-pixel
+assertions rejected that intermediate candidate rather than accepting two empty
+images. Native endpoint interpolation and source alpha policy stay independent
+from sample-coordinate isolation.
+
+A second actual Mac GPU fixture establishes separate source-family defects:
+
+| Source family | Reproduced observation | Required correction |
+| --- | --- | --- |
+| Loose native records Clothes11/12, College5/11, BadGuys67 actor shadow, Solomon0 | Current raw UV/repeat crops differ from independent native-endpoint/clamped crops at 1.111x and 3.5x fractional/rotated transforms. Per-member maximum channel deltas are 127,183,26,103,165,46. This includes whole-sprite UV differences, not only opposite-edge wrapping. | Classify complete native crops under the existing framed source policy and apply native record UVs once at the source owner. Reuse the exact packed BadGuys67 record for the already loaded actor shadow rather than maintaining a Canvas composite. Retain full-source bounds and normal source lifetime. |
+| Authored mod icon and sprite frames | The actual mod loader accepts a valid 4080x170 hat sheet shared with an 8x8 icon/sprite. The first 8x8 is an opaque red/green checker, next 8x8 blue, remainder magenta. At 7.5x/rotation0.125 both icon and sprite differ from a standalone raw-UV crop by max175 RGB. | Isolate each authored frame at its original frame extent, retaining raw UVs, trim registration and PMA. No native half/quarter offsets apply. All accepted positive fractional dimensions remain valid; inset each axis by at most half its span. |
+| Authored shared wearable image | Requesting the wearable changes the same source to nearest. After context restoration/reupload, the existing icon changes by max183 RGB across 7,538 channels. The immediate old-upload image remains unchanged because direct style mutation takes effect on reupload. | Give nearest wearable views a separate ImageSource/sampler over the same immutable decoded image. Keep ordinary icon/sprite filtering unchanged; retire each owned source once and preserve shared image acquisition ownership. |
+| Packed mortuary paintings | All ten logical 74x224 cells differ from independent full-cell crops: max6/15 at 1.111x and max3 at 3.5x (lower canvas portion clipped). Each packed frame has trimX0,trimY8, width74 and height112/124. | Exact peaks establish clipped alpha-trim support below. Expand only into existing transparent support within the original logical cell; retain each subframe's parent sample bounds and raw frame UVs. |
+
+Sample-bound metadata has one owner shared by native, authored and packed texture
+views. Native geometry/UV generation remains in its native constructor. Authored
+and artificial packed views retain their existing raw UVs. Original logical
+frame bounds survive slices and trims; whole repeating pages remain unbounded.
+Empty packed logical frames must isolate the dedicated transparent texel rather
+than relying on neighboring packed art being empty. Source update/context
+restoration and source retirement must preserve both bounds and sampling policy.
+
+The separate-family diagnostic has empty page, console and failed-response
+arrays. Its original red pixels, source-family membership and full observations
+are retained in the task's `PIXI-ATLAS-AUDIT.md` and
+`pixi-source-family-red.json`. These source policies are authorized corrective
+work. Their focused per-family green is recorded below; composed-scene and
+final publication qualification remain separate.
+
+### Rust authored-source evidence before the canonical cutover
+
+The Rust actual `ModPresentationAssets` owner reproduces the same authored
+boundary on Apple M2 ANGLE Metal. The valid 4080x170 shared sheet and rotated
+8x8 icon differ from an independent raw-UV crop by 163 channel units over433
+pixels. Preparing the wearable changes that already loaded icon by184 units
+over3,584 pixels. The wearable's own nearest reference and post-draw sampler
+restoration are exact, distinguishing shared texture mutation from a leaked
+per-draw sampler. Page/console/request/response error arrays are empty in the
+isolated fixture. The earlier driver attempt accidentally started the game and
+retains its errors; it is not the clean reproduction receipt.
+
+All admitted positive fractional frames must remain supported. The same owner
+fixture includes spans0.5 at origins0.25/0.75 and a1px frame at origin0.5. Full
+half-texel insets can reverse a subpixel interval; its inset must be the smaller
+of half a texel and half the span. This applies to the source view and to the
+small-shadow source support. The independent subpixel controls sample the
+specified midpoint, without calling the product authored-frame painter.
+
+The canonical Rust cutover belongs to `ModSpriteTexture`: retain the complete
+raw frame bounds when creating each cached frame, carry nearest sampling only
+for a wearable's use, and restore it after drawing. Ordinary icons/sprites keep
+their source filtering. Remove shared-page `set_texture_nearest` mutation and
+its now-unused renderer plumbing across wearable preparation callers. Explicit
+UI authored-frame materials carry the same original bounds. The actual owner
+fixture passes four cases on Apple M2 ANGLE Metal: integer 8x8, half-span at
+0.25, half-span at 0.75 and a 1px frame at 0.5. Integer crop differs by at most one
+channel unit; every other crop, shared-source icon, nearest-wearable and icon
+after-wearable comparison is exact. Browser error arrays are empty. This proves
+sampler ownership/restoration and fixture teardown, not context restoration or
+per-handle lifetime instrumentation. The generic 63 stock plus 12 authored UI
+cases pass on Metal and SwiftShader. Composed acceptance and full release
+qualification remain required.
+
+The same fixture also exposes a persistent default-mesh binding lifetime defect:
+render a standalone native material mesh, destroy its owned image source, then
+render another default mesh through the same renderer. Pixi's BindGroup retires
+itself when the old bound TextureSource is destroyed, leaving the pooled shader's
+resource accessors unusable. The native fixed/Arena pools must release borrowed
+texture/sampler bindings after each submission; explicit shaders keep their own
+resource ownership and must not access the default pool's bounds. Hub/Boneyard
+scene teardown destroys its application, and the inspected temporary-target
+consumers mostly batch or use explicit shaders, so this direct renderer contract
+reproduction does not establish a particular historical gameplay occurrence.
+The regression must exercise source retirement and subsequent pool reuse rather
+than keeping dead source generations alive to make the probe pass.
+
+
+### Rust original room frames and bitmap fonts
+
+The separate original-sheet census covers 33 teacher/room/death sheets and 619
+cells. Only the ten Mortuary portrait cells have differing adjacent RGBA edges
+(alpha differences up to 6). A further player census covers 38 files and 838
+logical cells/whole frames without differing internal edges. These original
+sheets are distinct from Pixi's alpha-trimmed packed representation.
+
+The actual Rust renderer comparison initially differed by 2 channel units at
+1.2x in portraits 4 and 8 when the isolated crop used a smaller allocation.
+That amplitude disappears with an independently edge-extruded 74x224 crop in
+the original-size texture. This preserves normalization precision while still
+replacing every neighboring cell. All 30 original-baseline portrait controls
+(ten cells at 0.7/1.2/3.5x) remain within 1 channel unit, including magnified
+samples clipped by the 256px target. No room-frame correction is retained from
+this evidence; the Rust full-sheet representation does not reproduce the Pixi
+packed-painting problem. The same independent reference removes a 2-unit Library
+interpolation difference; all 78 broader stock-record observations and 60
+primitive crops pass on both Metal and SwiftShader.
+
+Corrected independent font references reproduce the old loader's linear sampling
+at all three sizes: maximum channel differences 93/105/109 on Metal and
+88/107/107 on SwiftShader. The final loader candidate is byte-identical to its
+point-sampled references on both backends. World labels at physical widths
+256/384/512 reproduce old differences 119/97/114 on Metal and 118/124/110 on
+SwiftShader; the candidate is exact in all six cases. Ordinary linear sampling
+is restored afterward. The world reference uses independently edge-extruded
+glyph allocations with the original 512x256 normalization denominator, avoiding
+implementation-dependent nearest ties at exact boundaries. Both references
+flush their background/plate before allocating glyph textures. Earlier fixture
+receipts with queued uploads are superseded, not evidence of product font
+amplitudes. All 75 stock/authored UI comparisons also pass on both backends.
+
+### Packed transparent support at alpha trims
+
+The November 12 Pixi candidate on actual Apple M2 Metal retains a separate
+packed-geometry defect after record bounds are isolated. All 24 loose native
+owner rows are within one channel unit; the authored icon, sprite, fractional
+frame, nearest wearable and restored sampler comparisons are exact. The ten
+mortuary Paintings still differ from independently uploaded complete 74×224
+logical cells. Their greatest difference, alpha 15, occurs at logical
+(45.733, 132.030), immediately below the packed trim bottom `8 + 124 = 132`;
+other differences lie at logical Y 7.84–8.00 around the trim top 8. The packed
+quad clips the intended half-texel transparent filtering support. It is not
+foreign neighboring artwork: the complete packed-gutter census is zero RGBA.
+The failed candidate is retained as `pixi-second-material-candidate.log` and
+`pixi-source-family-candidate.json` in the current task evidence.
+
+The shared Hub and player packed constructors must include at most one existing
+transparent gutter pixel on a side that has room within its original logical
+cell. Original logical dimensions, placement, pivot and sample ownership remain
+unchanged; source pages and packing data remain unchanged. Hub subframes must
+intersect the same expanded support with their requested logical slice, without
+clamping an internal slice boundary. Independent trimmed player and other Hub
+controls qualify the shared constructor alongside every Painting frame.
+
+### DOM artwork ownership
+
+A separate actual Chrome CSS comparison mounts the real NativeUiSprite (image
+and tint mask), NativeUiStrip, NativeUiNineSlice, NativeUiPlanView slice,
+HallSprite, HallNineSlice and bitmap glyph-mask owners. Each retains its actual
+geometry, transforms and slice offsets while the reference substitutes an
+independent complete original-record image. All eight controls differ by at
+most one RGB unit. CSS clipping therefore has its own bounded positive control;
+the Pixi sample metadata does not apply to it.
+
+The directly painted Quickbar `NativeSkillIcon` differs by up to 30 RGB units
+(162 channels) for reachable Weld Skills 109, whose 46×45 artwork has a 46×46
+logical box and trim origin (0,1). Its background fills that entire logical
+box, exposing a neighboring atlas row in the intended transparent margin.
+Skills 114 and 117 are also reachable trimmed Weld icons. Quickbar must reuse
+the shared NativeUiSprite owner so only the artwork frame paints at its authored
+trim offset while the existing accessible logical box, placement, opacity and
+binding data remain intact. Extend the regression across the complete trimmed
+Skills membership and an untrimmed control. The clean red receipt and actual /
+independent images are `pixi-css-red/`; two earlier development-HMR failures
+remain separate and are not the accepted browser-error result.
+
+The packed-player CSS helper has the same independently reproduced trim-support
+loss as its Pixi sibling. Actual head and dynamic-robe frames at 2.25x with
+rotation 0.125 differ from complete 170x170 original cells by 3/5 RGB units;
+the robe's strongest pixels straddle logical Y 57, its tight trim top. Extending
+only the CSS painted rectangle into the existing one-pixel transparent gutter
+reduces both comparisons to one unit with unchanged logical registration and
+empty browser-error arrays. This control changes no source pixels. Therefore
+`playerCharacterAtlasCssFrame` must use the same bounded original-cell support
+as the packed Pixi owner across its complete 100-sheet membership. Empty cells
+remain hidden. Six actual ModEnemies/ModPowerups/ModSpellEffects CSS controls,
+including positive fractional frames, are exact against independent crops and
+require no source-policy correction. The packed CSS red and experimental
+support-control receipts remain separate in task evidence.
+
+### Current Pixi source membership and focused disposition
+
+These memberships are closed by the tracked generated catalogs and their source
+owners, rather than the temporary audit files. Sampling metadata belongs to
+`texture-sample-bounds.ts`; native endpoint interpolation remains in
+`native-sprite-record-texture.ts`, and `packed-sprite-support.ts` owns transparent
+support shared by Hub/player Pixi and packed-player CSS.
+
+| Source family and tracked membership owner | Current disposition |
+| --- | --- |
+| `boneyard-combat-atlas.generated.ts`: BadGuys 2,509, DeadHawg 335, Demon 116, Faculty 523, Golem 204, Heartmonger 380, Unholy 219; 4,286 nonempty records on 7 original pages | Original record bounds follow Sprite, generic batch/standalone mesh, explicit diffuse and lit-surface paths. Native straight alpha, endpoint UVs, geometry and blend policy are preserved. |
+| `native-ui-assets.json`: 1,292 records on 13 pages; Bonedit 84, ControlPanel 116, Controls 4, Create 24, Fonts 627, GameOver 3, Inventory 84, LevelPicker 8, Library 33, Loader 5, Skills 166, Title 25, UI 113 | Native UI sprites/slices/nine-slices retain original record bounds. Font catalogs retain 718 glyph rows in 10 banks and independent nearest-sampled page siblings. |
+| `hub-visual-atlas.generated.ts`: 87 sheets, 582 logical frames, 576 unique rectangles on 3 pages | Raw-UV PMA packed frames retain full logical sample bounds; transparent trim support is restored. Subframes intersect support without creating a sampling boundary at the slice. |
+| `player-character-atlas.generated.ts`: 100 sheets, 12,067 logical frames, 7,752 unique rectangles on 3 pages | The same packed support covers all element/equipment/living/death/Enchant frames. CSS Hall wizard layers use the shared support contract. Empty Pixi cells isolate their transparent texel; empty CSS cells stay hidden. |
+| `world-player-textures.ts` strip/grid consumers: Solomon 18 dig cells and 150 encounter cells | Raw frame-edge UVs, original geometry, transparent cell boundaries and per-cell sampling ownership remain intact. |
+| Framed source partitions in `world-player-textures.ts`, `hub-textures.ts`, `boneyard-textures.ts`: Clothes1/2/3/11/12, College5/11/41, Solomon0 | All 9 independent native crops use native full-record endpoints and clamp. Actor shadow reuses exact BadGuys67 through `boneyard-combat-asset-source.ts`. Hub and Boneyard Enchant instances share the same source policy. |
+| `mod-presentation-assets.ts`: icons, sprites/trim overlays, enemy/spell/powerup frames and all wearable pose/headings | Authored raw UV/PMA frame bounds are isolated, including positive fractional spans. Nearest wearable sources share decoded images but own distinct samplers; both source owners retire normally. |
+| Repeating owners: five Road styles, fence grate, greenplasma, etherplane and full DeadHawg field page | Full-image/repeated UVs remain unrestricted. Native UI49 leather and UI10/79 chain TilingSprites retain Pixi's record-local repeat/clamp algorithm. |
+| Generated weather, complex-shadow and Hagatha ramps; resident wall pixels; mod rings; Unforge, Region, player-diffuse, Storm, Leviathan and compact-mask targets | Standalone sources have no atlas neighbors. Their full-image sampling, alpha, orientation and target lifetimes remain intact. |
+| `game-assets.ts` composited menu groups: Loader images, Title artwork/chrome/Hall backdrop, Create caption/caret | Full-image PMA/clamp behavior is unchanged; stock menu records remain in the native UI group above. |
+| DOM NativeUiSprite/mask/Strip/NineSlice/PlanView, HallSprite/NineSlice, native glyph masks, Quickbar and authored ModEnemies/ModPowerups/ModSpellEffects | Original 8 CSS owner controls pass within 1 RGB unit. Every one of the 12 trimmed Skills records plus an untrimmed control passes within 1 after Quickbar reuses NativeUiSprite. Authored 6 integer/fractional controls are exact. Packed-player head/robe controls pass within 1 after the bounded CSS support correction. |
+
+The actual-owner 24 loose-native and 20 Painting GPU rows all pass within one
+channel unit. Authored icon/sprite/fractional/nearest-wearable/restored-icon
+comparisons are exact, with separate samplers and retired owned sources. Another
+20 packed Hub/player/subframe rows pass within two units with no channel outside
+that existing tolerance. Their source texels are exact against the original
+images, and independent edge-extruded references preserving atlas dimensions
+and coordinate origins also remain within two units; this does not establish a
+further foreign-art defect. CSS packed support is independently red-to-green,
+without increasing that GPU tolerance or relaxing the CSS two-unit assertion.
+
+All focused browser page/console/failed-response arrays are empty. The canonical
+material smoke retains every source-family and 29 CSS owner rows. Composed menu,
+trader/room, combat, resize, Unforge and saved-return journeys and the final
+combined/release gates remain separate coordinator work; these fixture results
+do not claim those journeys or installed behavior.
+
+
+### Rust texture allocation during retained draws
+
+The corrected font references exposed a separate public renderer contract to
+verify. Source inspection shows that RGBA uploads, decoded-image uploads and
+render-target allocation bind the newly allocated texture while retaining the
+previous `bound_texture` cache entry. The existing public `&self` allocation
+methods neither flush queued vertices nor invalidate that cached entry. A queued
+draw, or a flushed draw followed by allocation and another draw of the same
+source, can therefore sample the new allocation. Inspected current gameplay
+callers already flush or change binding around their allocations; this finding
+does not establish a historical gameplay occurrence.
+
+The allocation owner must preserve the actual previous texture binding on both
+success and failure, leave the current framebuffer, viewport and sampler intact,
+and retire handles from rejected allocations. This keeps pending batches valid
+without changing the public interface or adding per-draw work. The shared browser
+and native regression independently checks two red source draws separated by
+RGBA, decoded-image, repeating-image and square/rectangular-target allocations,
+followed by a green solid control. It also covers rejected oversized allocations
+and an incomplete browser image, with actual resource retirement recorded.
+The initial native fixture reproduces incorrect pixels in all 14 cases: both
+pending red draws become blue after a blue upload; a preflushed first draw stays
+red while the second becomes blue. Render-target allocations instead produce
+black samples. Metal and SwiftShader each reproduce all 16 browser binding
+failures, eight additional unbound-after-retirement failures and nine leaked
+rejected texture handles. Browser errors and the remaining observed state are
+clean; all baseline receipts are retained.
+
+The common allocation owner restores the actual previous binding and retires
+failed textures; render-target creation also releases its texture if framebuffer
+creation fails. Browser restoration uses the raw WebGL binding because glow
+0.18's resource lookup cannot represent null. The supported browser constructors
+all install that raw context. No public API or per-draw work is added. The
+candidate passes every browser case on Metal and SwiftShader, retires all 43
+tracked handles exactly once on each, and passes the 14 native OpenGL cases.
+The surrounding 78 stock records, 60 primitive crops and existing shader,
+batching, shadow and composition controls pass on both browser backends.
+The first browser baseline stopped in a null-sampler observation panic and is
+retained separately; the corrected baseline uses an actual nearest sampler,
+with explicit null states observed through raw WebGL in the additional cases.

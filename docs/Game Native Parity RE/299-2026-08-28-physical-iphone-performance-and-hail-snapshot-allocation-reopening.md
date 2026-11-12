@@ -2208,3 +2208,167 @@ page/console/request/response errors. Exact-candidate full validation and
 browser execution receipts belong to the task qualification archive; the
 focused checks alone establish neither complete renderer parity nor live
 deployment acceptance.
+
+## Rust point-contact allocation ownership
+
+The November 12 source investigation retains the existing gameplay and target-query
+contract. Rust's point-contact caller reconstructs the current enemy/Maggot rows
+before each projectile, then copies those targets and all immutable scenery
+targets into another vector. Each copy allocates its target IDs again. Burning
+Bolt, Frost Missile and Ball Lightning share that welded missile path; ordinary
+Fire/Ether and delayed Ember contacts use the same query kernel. This is a
+representation cost, not evidence that the historical reporters used Rust or that
+every slowdown has one cause.
+
+A native Apple M2 profile of the unmodified original Report 87 save, held for
+1,000 ticks per restore using a pointer derived from its saved casting direction,
+samples 3,697 main
+thread stacks. Of 3,678 samples inside the session step, 1,661 fall under primary
+contact resolution. The largest individual subtree has 282 samples copying target
+slices, with 177 in its corresponding release path; two target-row construction
+subtrees contribute 132 and 86 samples. The separate unprofiled three-round
+control admits 22 casts per restore, remains alive and averages about 1.178 ms
+per native tick. These are source-cost measurements, not browser FPS or a general
+lag resolution.
+
+Original Report 115 and the distinct late Report 118 save also complete 1,000
+native held-input ticks with the same pointer construction. The pointer is 500
+world units from the wizard's feet along the saved direction; the normal
+25/view-scale casting-origin offset slightly changes the resulting bearing.
+These controls therefore do not claim an exact saved-bearing replay.
+The October 8 Report 9 save
+reaches a real level-up barrier after 62 held ticks or 413 rotating-aim ticks;
+its initial 1,000-call aggregates include frozen calls and do not qualify a
+1,000-tick workload. The original report ZIPs remain in the report archive; extracted copies were
+private diagnostic inputs. Maximum retained enemy-event populations in these
+controls are at most 131; they do not reproduce the separate 512-record status
+feedback overflow.
+
+The point query now accepts borrowed target iterators. It preserves the source
+order, cell-binding priority, first-occurrence ties, eligibility, strict radii,
+Fire's hostile corridor, and freshly rebuilt enemy state between contacts. No
+mutable target cache or gameplay approximation is introduced. Slice callers and
+chained scenery/enemy-row callers use one kernel. Ether allocates its continuation
+target list only after an actual piercing contact requires it.
+
+All 15 focused targeting/contact tests pass, including independent split-list
+ordering, eligibility and hostile-corridor cases. Three alternating baseline /
+candidate pairs per original save complete 18,360 advanced ticks in total; all
+24 final checkpoints are byte-identical within their report. The Report 9 control
+uses 60 ticks, before its level-up barrier; each other control uses 1,000 ticks.
+Median per-run mean native step times are:
+
+| Original save | Before | After | Scope |
+| --- | ---: | ---: | --- |
+| Report 9 | 1.99160 ms | 1.99291 ms | No measurable change in the short control. |
+| Report 87, Burning Bolt | 1.18479 ms | 0.96944 ms | 18.2% lower mean step cost. |
+| Report 115, Frost Missile | 0.77952 ms | 0.53064 ms | 31.9% lower mean step cost. |
+| Late Report 118, Flame | 0.45161 ms | 0.45584 ms | No measurable change. |
+
+These runs use the same derived-direction pointer and unchanged input sequences.
+They establish the allocation correction's bounded native cost and state
+preservation, not historical report closure, browser frame rate or autosave
+latency. Affected browser qualification, publication and installed acceptance
+remain separate.
+
+
+## Hosted autonomous save ownership
+
+A November 12 release-profile diagnostic uses the actual Rust Supervisor and
+HTTP/WebSocket admission, with a retained independent College peer, through
+shared host tick 3,000. The original Report 37 save is measured paused and with
+held input; the original Report 87 save is measured with held input. These are
+35-second local native controls with ordinary transfer acknowledgements and
+Save Before Leave. All temporary timing code is removed from source before the
+measurements; the copied diagnostic uses opt3, LTO and one codegen unit on M2.
+
+Report 37 paused publishes a 3,189,715-byte signed continuation in 52.636 ms;
+the complete authority tick takes 53.893 ms. Its owner projection's GameSession
+clone takes 0.141 ms, compared with 14.590 ms for total projection/preparation,
+4.978 ms for unsigned JSON, 18.013 ms for canonical normalization, 1.428 ms for
+signing, and 4.914 ms for final JSON. Complete owner creation takes 47.652 ms.
+Report 87 publishes 1,206,547 bytes in 30.647 ms; its authority tick takes
+34.142 ms. Its corresponding clone takes 0.134 ms, preparation 12.317 ms,
+unsigned JSON 2.504 ms, normalization 9.376 ms, signing 0.656 ms and final JSON
+2.100 ms. Complete owner creation takes 28.627 ms. Remaining publication work
+includes full UTF-16 counting/materialization and initial reliable serialization.
+
+The held Report 37 control reaches Game Over around 18.1 seconds and produces a
+valid terminal profile. Its later periodic skip is not a heavy active-save
+measurement. Signed final continuations verify for paused 37 and held 87.
+Independent peer snapshot gaps remain below 80 ms, while autonomous encoding
+still blocks three to five 100 Hz authority ticks. These observations do not
+establish historical report closure or browser frame-rate improvement.
+
+The correction is scoped to autonomous periodic, dirty and terminal saves.
+Complete save inputs, staged detached participants, loaded geometry, mod VM
+exports and recovery bindings must be captured together on the authority. Only
+plain owned values may cross to one bounded encoder. It must use the existing
+canonical creator and signer, including ECMAScript normalization. Prepared
+transport must include full UTF-16 or atomic JSON work before returning to the
+authority. Explicit forced Leave/deployment publication retains its synchronous
+exact-document-before-control contract.
+
+Pending requests remain small coalesced identifiers, with fair selection across
+Colleges and players. New dirtiness during an encode must survive completion.
+Stale peer, admission, run, phase, lineage, integrity/eligibility or sequence
+results cannot replace the current save. Initial and terminal obligations retire
+only on accepted successful publication; disconnect/reset cancellation and
+staged-rejoin token ownership remain intact. The new capture implementation must
+be measured separately rather than assuming the clone-only timing above.
+
+
+### Implemented autonomous owner and local qualification
+
+Rust's Supervisor now owns one concrete encoder for periodic, dirty and terminal
+saves. The authority freezes complete plain inputs through the same capture and
+codec used by forced saves, including staged detached participants, loaded
+geometry, live mod exports and recovery bindings. The encoder performs canonical
+creation, normalized signing and full UTF-16/initial JSON transport preparation.
+The authority admits the result only after checking host instance, admission/peer,
+run/phase, party/recovery membership, content, integrity/eligibility and prior
+publication sequence. Tokens install only into the captured player/run/recovery/
+party slot. Later dirty IDs survive completion; initial and terminal markers
+retire only on accepted success. Permanent departure removes its queued ID,
+while retained reconnect actors keep their obligation. Shutdown joins the worker.
+
+Explicit Leave and deployment saves remain synchronous and keep their exact
+checkpoint-before-control ordering. A newer forced sequence invalidates an older
+worker result. Deployment polls completions while suspending new autonomous
+captures and gameplay. One full capture is in flight across all Colleges, with
+fair College/player selection and coalesced pending IDs.
+
+The deterministic held-codec regression failed on the original synchronous path:
+input admission and an independent College could not proceed until encoding was
+released. Nine final owner regressions pass, including frozen bytes and independent
+raw signing, staged recovery, dirty/fair selection, failure markers, stale
+identities, forced publication during deployment, and permanent/retained
+cancellation. All nineteen existing real HTTP/WebSocket Supervisor cases pass,
+covering deployment, reconnect, control, authored runtime, editor-test exclusion,
+archives and shutdown. Launcher Clippy passes for all targets/features with
+warnings denied. Independent contract and standards source reviews find no
+blocking issue. The cancellation regression separately reproduced the queued-ID
+leak before its one-line permanent-removal correction.
+
+The same optimized M2 diagnostic repeats all three 35-second original-save
+controls. Timing instrumentation is restored byte-for-byte before runtime. The
+candidate's complete periodic input capture takes **0.162875 ms** for paused
+Report 37 and **0.143584 ms** for held Report 87; prepared authority admission takes
+**0.004250 ms** and **0.003292 ms**. Their background codec plus transfer preparation
+takes **50.602416 ms** and **30.533833 ms**. Candidate documents are 3,169,023 and
+1,158,211 bytes, compared with the baseline workloads' 3,189,715 and 1,206,547 bytes.
+Natural timing changes the captured state, so these are not identical-state codec
+speed ratios. Capture and completion occur in different authority iterations;
+fair selection gives the independent College the boundary's first capture, so
+that short tick cannot be reported as the report owner's complete tick.
+
+Final signed continuations verify for paused 37 and held 87. Held 37 reaches
+Game Over and publishes a valid 20,579-byte profile; its later duplicate does not
+advance the sequence. Independent-peer maximum snapshot gaps are
+64.95/64.35/63.89 ms across paused 37, held 37 and held 87, with owner maxima
+64.34/70.33/67.97 ms. The measured capture/codec/signing/transport/publication source
+remains unchanged after the diagnostic build; the final additional product delta
+only removes queued work at permanent disconnect and has its own regression.
+These results isolate the reproduced autonomous authority stall. Browser FPS,
+public-network behavior, full release qualification and historical report closure
+remain separate.

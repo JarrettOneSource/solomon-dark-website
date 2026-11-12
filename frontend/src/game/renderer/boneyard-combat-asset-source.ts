@@ -1,7 +1,8 @@
-import { boneyard, primarySpells } from '../../lib/assets.ts'
+import { boneyard, hub, primarySpells } from '../../lib/assets.ts'
 import { boneyardCombatAtlasSource } from '../../lib/boneyard-combat-atlas-key.ts'
 
 const COMBAT_ATLAS_ALIASES = new Map<string, string>([
+  [hub.npcs.teacher.shadow, boneyardCombatAtlasSource('BadGuys', 67)],
   [primarySpells.airWaterActors.coldAura, boneyardCombatAtlasSource('BadGuys', 14)],
   [primarySpells.airWaterActors.hurricaneCore, boneyardCombatAtlasSource('DeadHawg', 15)],
   [primarySpells.airWaterActors.hurricaneLane, boneyardCombatAtlasSource('BadGuys', 84)],

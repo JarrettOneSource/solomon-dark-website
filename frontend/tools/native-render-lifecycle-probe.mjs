@@ -23,11 +23,22 @@ export async function inspectNativeMaterialLifetimes(finishPremultiplied, instal
   const geometries = []
   const batchLifetimes = []
   const shaderSystem = app.renderer.shader
-  const updateUniformGroup = shaderSystem.updateUniformGroup
-  let nativeUniformUpdates = 0
-  shaderSystem.updateUniformGroup = function (group) {
-    if (group === NATIVE_TEXTURE_COLOR_UNIFORMS) nativeUniformUpdates += 1
-    return updateUniformGroup.call(this, group)
+  const uniformSystem = app.renderer.uniformGroup
+  const updateUniformGroup = uniformSystem.updateUniformGroup
+  const gl = app.renderer.gl
+  const uniform1f = gl.uniform1f
+  let nativeUniformSyncs = 0
+  let nativeUniformUploads = 0
+  // Both Pixi's generated and CSP-compatible sync paths reach this common owner.
+  uniformSystem.updateUniformGroup = function (group, ...args) {
+    if (group === NATIVE_TEXTURE_COLOR_UNIFORMS) nativeUniformSyncs += 1
+    return updateUniformGroup.call(this, group, ...args)
+  }
+  gl.uniform1f = function (location, value) {
+    const program = shaderSystem['_activeProgram']
+    const nativeLocation = program && shaderSystem['_getProgramData'](program).uniformData.uIgnoreTextureColor?.location
+    if (location === nativeLocation) nativeUniformUploads += 1
+    return uniform1f.call(this, location, value)
   }
   let arena
   let second
@@ -70,7 +81,8 @@ export async function inspectNativeMaterialLifetimes(finishPremultiplied, instal
       texturesAlive: textures.every(texture => !texture.destroyed),
     }
   } finally {
-    shaderSystem.updateUniformGroup = updateUniformGroup
+    uniformSystem.updateUniformGroup = updateUniformGroup
+    gl.uniform1f = uniform1f
     second?.destroy()
     arena?.destroy()
     if (app.renderer) {
@@ -92,10 +104,12 @@ export async function inspectNativeMaterialLifetimes(finishPremultiplied, instal
       geometries.push(display.geometry)
     }
     app.stage.addChild(display)
-    const updatesBefore = nativeUniformUpdates
+    const syncsBefore = nativeUniformSyncs
+    const uploadsBefore = nativeUniformUploads
     app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
     const values = app.renderer.extract.pixels({ target }).pixels
-    pixels.push({ phase, kind, nativeUniformUpdates: nativeUniformUpdates - updatesBefore,
+    pixels.push({ phase, kind, nativeUniformSyncs: nativeUniformSyncs - syncsBefore,
+      nativeUniformUploads: nativeUniformUploads - uploadsBefore,
       pixel: Array.from(values.slice((8 * 16 + 8) * 4, (8 * 16 + 8) * 4 + 4)) })
   }
 }

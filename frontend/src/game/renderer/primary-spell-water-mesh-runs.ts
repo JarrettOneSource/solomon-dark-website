@@ -28,6 +28,8 @@ import {
 } from '../core-kernels/primary-spell-water.ts'
 import { NATIVE_ARENA_SATURATION } from './native-arena-render-pipeline.ts'
 import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
+import { NATIVE_RECORD_SAMPLE_GLSL } from './native-record-sampling.ts'
+import { textureSampleBounds } from './texture-sample-bounds.ts'
 import {
   NATIVE_AIR_WATER_SPRITES,
   nativeWaterAuraVisualPlan,
@@ -69,6 +71,7 @@ interface NativeWaterMeshRun {
 }
 
 interface NativeWaterTextureLayout {
+  bounds: Float32Array
   bottom: number
   left: number
   right: number
@@ -85,7 +88,7 @@ interface NativeWaterTextureLayouts {
 
 const VERTICES_PER_QUAD = 4
 const INDICES_PER_QUAD = 6
-const FLOATS_PER_VERTEX = 9
+const FLOATS_PER_VERTEX = 13
 const BYTES_PER_FLOAT = Float32Array.BYTES_PER_ELEMENT
 const VERTEX_STRIDE_BYTES = FLOATS_PER_VERTEX * BYTES_PER_FLOAT
 
@@ -95,12 +98,15 @@ const NATIVE_WATER_MESH_BIT_GL = {
     header: `
       in vec4 aWaterColor;
       in float aWaterAdditive;
+      in vec4 aNativeRecordBounds;
+      out highp vec4 vNativeRecordBounds;
       out vec4 vWaterColor;
       out float vWaterAdditive;
     `,
     main: `
       vWaterColor = aWaterColor;
       vWaterAdditive = aWaterAdditive;
+      vNativeRecordBounds = aNativeRecordBounds;
     `,
   },
   fragment: {
@@ -108,10 +114,12 @@ const NATIVE_WATER_MESH_BIT_GL = {
       in vec4 vWaterColor;
       in float vWaterAdditive;
       uniform sampler2D uWaterAtlasTexture;
+      in highp vec4 vNativeRecordBounds;
+      ${NATIVE_RECORD_SAMPLE_GLSL}
     `,
     main: 'outColor = vec4(1.0);',
     end: `
-      vec4 waterSample = texture(uWaterAtlasTexture, vUV);
+      vec4 waterSample = texture(uWaterAtlasTexture, nativeRecordSampleUv(vUV, vNativeRecordBounds));
       float textureAlpha = waterSample.a;
       vec3 textureColor = waterSample.rgb;
       float groupAlpha = vColor.a;
@@ -486,6 +494,7 @@ function writeNativeWaterMeshQuad(
     vertices[offset + 6] = blue
     vertices[offset + 7] = draw.alpha
     vertices[offset + 8] = Number(draw.additive)
+    vertices.set(layout.bounds, offset + 9)
   }
 }
 
@@ -532,6 +541,12 @@ function createNativeWaterMeshRun(
         buffer: vertexBuffer,
         format: 'float32',
         offset: 8 * BYTES_PER_FLOAT,
+        stride: VERTEX_STRIDE_BYTES,
+      },
+      aNativeRecordBounds: {
+        buffer: vertexBuffer,
+        format: 'float32x4',
+        offset: 9 * BYTES_PER_FLOAT,
         stride: VERTEX_STRIDE_BYTES,
       },
     },
@@ -665,6 +680,7 @@ function registeredTextureLayout(
   const left = (trim?.x ?? 0) - registration.anchorX
   const top = (trim?.y ?? 0) - registration.anchorY
   return {
+    bounds: textureSampleBounds(texture),
     bottom: top + (trim?.height ?? registration.height),
     left,
     right: left + (trim?.width ?? registration.width),
@@ -678,6 +694,7 @@ function centeredTextureLayout(texture: Texture): NativeWaterTextureLayout {
   const left = (trim?.x ?? 0) - texture.orig.width * 0.5
   const top = (trim?.y ?? 0) - texture.orig.height * 0.5
   return {
+    bounds: textureSampleBounds(texture),
     bottom: top + (trim?.height ?? texture.orig.height),
     left,
     right: left + (trim?.width ?? texture.orig.width),

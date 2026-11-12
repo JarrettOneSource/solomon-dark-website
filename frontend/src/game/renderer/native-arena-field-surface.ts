@@ -1,6 +1,6 @@
 import {
   Buffer, BufferUsage, Matrix, Shader, UniformGroup, compileHighShaderGlProgram,
-  localUniformBitGl, roundPixelsBitGl, textureBitGl, type Texture,
+  localUniformBitGl, roundPixelsBitGl, type Texture,
 } from 'pixi.js'
 
 import {
@@ -12,6 +12,8 @@ import {
 } from './native-arena-render-pipeline.ts'
 import { NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL } from './native-material-batch.ts'
 import { NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
+import { NATIVE_RECORD_TEXTURE_BIT_GL } from './native-record-sampling.ts'
+import { textureSampleBounds } from './texture-sample-bounds.ts'
 
 const FIELD_COVERAGE_BIT = {
   name: 'native-arena-field-coverage',
@@ -39,7 +41,7 @@ const FIELD_PROGRAMS = [
   NATIVE_ARENA_PREMULTIPLIED_SATURATION_BIT_GL,
 ].map(saturation => compileHighShaderGlProgram({
   name: 'native-arena-field',
-  bits: [NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL, localUniformBitGl, textureBitGl,
+  bits: [NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL, localUniformBitGl, NATIVE_RECORD_TEXTURE_BIT_GL,
     roundPixelsBitGl, saturation, FIELD_COVERAGE_BIT],
 }))
 
@@ -64,6 +66,9 @@ export function createNativeArenaFieldSurface(
     resources: {
       fieldCoverageUniforms: coverage,
       nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
+      nativeRecordSampling: {
+        uNativeRecordBounds: { type: 'vec4<f32>', value: textureSampleBounds(texture) },
+      },
       textureUniforms: { uTextureMatrix: { type: 'mat3x3<f32>', value: texture.textureMatrix.mapCoord } },
       uTexture: texture.source,
     },

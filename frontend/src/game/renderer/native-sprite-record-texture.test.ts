@@ -1,13 +1,67 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { Container, Rectangle, Sprite, TextureSource } from 'pixi.js'
+import { BatchableMesh, Container, MeshGeometry, Rectangle, Sprite, Texture, TextureSource } from 'pixi.js'
 
 import {
   nativeSpriteRecordTexture,
+  nativeSpriteRecordPageTexture,
   nativeSpriteRecordTrimmedTexture,
   nativeSpriteRecordUvs,
 } from './native-sprite-record-texture.ts'
+import { isolateTextureSamples, textureSampleBounds } from './texture-sample-bounds.ts'
+
+test('full-source native records keep their UV matrix in batched meshes after updates', () => {
+  const source = new TextureSource({ width: 16, height: 8 })
+  const texture = nativeSpriteRecordTexture({ source, frame: new Rectangle(0, 0, 16, 8) })
+  const geometry = new MeshGeometry({ uvs: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]) })
+  const mesh = new BatchableMesh()
+  mesh.geometry = geometry
+  mesh.setTexture(texture)
+  try {
+    for (let update = 0; update < 3; update += 1) {
+      texture.update()
+      assert.equal(texture.textureMatrix.isSimple, false)
+      assert.deepEqual([...mesh.uvs], [.5 / 16, .5 / 8, 16.25 / 16, .5 / 8,
+        16.25 / 16, 8.25 / 8, .5 / 16, 8.25 / 8])
+    }
+  } finally { geometry.destroy(true); texture.destroy(true) }
+})
+
+test('authored fractional sample bounds preserve raw UVs and collapse subtexel spans at their center', () => {
+  const source = new TextureSource({ width: 32, height: 16 })
+  const texture = new Texture({ source, frame: new Rectangle(3.25, 2.125, .5, .25) })
+  const uvs = { ...texture.uvs }
+  const framed = isolateTextureSamples(texture)
+  try {
+    assert.equal(framed, texture)
+    assert.deepEqual(texture.uvs, uvs)
+    assert.deepEqual([...textureSampleBounds(texture)], [3.5 / 32, 2.25 / 16, 3.5 / 32, 2.25 / 16])
+    source.resize(64, 32); texture.update()
+    assert.deepEqual([...textureSampleBounds(texture)], [3.5 / 64, 2.25 / 32, 3.5 / 64, 2.25 / 32])
+  } finally { texture.destroy(true) }
+})
+
+test('record slices and absolute-UV views preserve original sample ownership after source updates', () => {
+  const source = new TextureSource({ width: 128, height: 64 })
+  const record = nativeSpriteRecordTexture({
+    source, frame: new Rectangle(20, 12, 10, 8), sourceUv: [.25, .25, .75, .75],
+  })
+  const page = nativeSpriteRecordPageTexture(record)
+  const bounds = textureSampleBounds(record)
+  try {
+    assert.deepEqual(Array.from(bounds), [20.5 / 128, 12.5 / 64, 29.5 / 128, 19.5 / 64])
+    assert.equal(textureSampleBounds(page), bounds)
+    assert.equal(page.textureMatrix.isSimple, true)
+    assert.deepEqual(record.frame, new Rectangle(22.5, 14, 5, 4))
+    source.resize(256, 128)
+    record.update()
+    assert.equal(textureSampleBounds(record), bounds)
+    assert.deepEqual(Array.from(bounds), [20.5 / 256, 12.5 / 128, 29.5 / 256, 19.5 / 128])
+  } finally {
+    page.destroy(false); record.destroy(true)
+  }
+})
 
 test('common native sprite records retain the constructor UV endpoints', () => {
   assert.deepEqual(nativeSpriteRecordUvs(

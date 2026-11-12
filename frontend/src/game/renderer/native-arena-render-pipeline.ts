@@ -11,22 +11,20 @@ import {
   getBatchSamplersUniformGroup,
   localUniformBitGl,
   roundPixelsBitGl,
-  textureBitGl,
   type Container,
   type GlGraphicsAdaptor,
-  type Mesh,
-  type MeshPipe,
   type Renderer,
 } from 'pixi.js'
 import { NATIVE_TEXTURE_COLOR_HEADER, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
+import { NATIVE_RECORD_TEXTURE_BIT_GL } from './native-record-sampling.ts'
+import { textureSampleBounds } from './texture-sample-bounds.ts'
 
 import {
   NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL,
   NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
   installNativeBatchMaterial,
-  nativeTextureMode,
+  createNativeMeshExecutor,
   requireNativeWebGlRenderer,
-  updateNativeMeshVertexColors,
 } from './native-material-batch.ts'
 
 export const NATIVE_ARENA_SATURATION = 0.65
@@ -117,15 +115,8 @@ export function installNativeArenaRenderPipeline(
   const originalMeshShader = meshAdaptor['_shader']
   const originalMeshExecute = meshAdaptor.execute
   meshAdaptor['_shader'] = meshShaders[0]!
-  meshAdaptor.execute = function executeNativeArenaMesh(
-    meshPipe: MeshPipe,
-    mesh: Mesh,
-  ): void {
-    const vertexMode = updateNativeMeshVertexColors(mesh) ? 4 : 0
-    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh) + vertexMode]!
-    // Arena replaces the application's fixed-function shader selection.
-    GlMeshAdaptor.prototype.execute.call(this, meshPipe, mesh)
-  }
+  // Arena replaces the application's fixed-function selection rather than nesting it.
+  meshAdaptor.execute = createNativeMeshExecutor(meshShaders, GlMeshAdaptor.prototype.execute)
 
   const restoreBatchMaterial = installNativeBatchMaterial(nativeRenderer, NATIVE_ARENA_SATURATION_BIT_GL, opaqueRoot)
   const originalParticleExecute = particleAdaptor.execute
@@ -204,7 +195,7 @@ function createNativeArenaMeshShader(mode: number): Shader {
       bits: [
         localUniformBitGl,
         mode < 4 ? NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL : NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
-        textureBitGl,
+        NATIVE_RECORD_TEXTURE_BIT_GL,
         roundPixelsBitGl,
         {
           ...NATIVE_ARENA_SATURATION_BIT_GL,
@@ -218,6 +209,9 @@ function createNativeArenaMeshShader(mode: number): Shader {
     resources: {
       nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
       uTexture: Texture.EMPTY.source,
+      nativeRecordSampling: {
+        uNativeRecordBounds: { type: 'vec4<f32>', value: textureSampleBounds(Texture.EMPTY) },
+      },
       textureUniforms: {
         uTextureMatrix: { type: 'mat3x3<f32>', value: new Matrix() },
       },

@@ -31,7 +31,7 @@ test('Hub world atlas pages stay within the texture limit', () => {
   }
 })
 
-test('Hub startup requests every raw native ground glyph once', async () => {
+test('Hub startup loads complete native ground crops and reuses the actor shadow atlas', async () => {
   const server = await createServer({
     appType: 'custom',
     logLevel: 'silent',
@@ -49,10 +49,14 @@ test('Hub startup requests every raw native ground glyph once', async () => {
     for (const source of [
       hub.npcs.perkWitchGroundGlow,
       hub.npcs.itemsGround,
-      hub.npcs.teacher.shadow,
     ]) {
       assert.equal(sources.filter(loaded => loaded === source).length, 1, `Hub omitted ground glyph ${source}`)
     }
+    const { boneyardCombatAssetSource } = await server.ssrLoadModule('/src/game/renderer/boneyard-combat-asset-source.ts') as Pick<
+      typeof import('./boneyard-combat-asset-source.ts'), 'boneyardCombatAssetSource'
+    >
+    assert.equal(boneyardCombatAssetSource(hub.npcs.teacher.shadow), 'boneyard-combat:BadGuys:67')
+    assert.equal(sources.includes(hub.npcs.teacher.shadow), false)
   } finally {
     await server.close()
   }

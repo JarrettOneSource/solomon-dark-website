@@ -1,4 +1,4 @@
-import { Rectangle, Texture } from 'pixi.js'
+import type { Texture } from 'pixi.js'
 
 import { boneyard, hub } from '../../lib/assets.ts'
 import {
@@ -6,6 +6,7 @@ import {
   destroyPlayerWorldTextureFrames,
   playerWorldAssetSources,
   playerWorldCompositedAssetSources,
+  playerWorldStockFramedAssetSources,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
 import {
@@ -23,8 +24,6 @@ import {
   type BoneyardCombatAtlas,
 } from './boneyard-combat-atlas.ts'
 import { boneyardCombatAssetSource } from './boneyard-combat-asset-source.ts'
-import { NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES } from './native-secondary-assets.ts'
-import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 const ACTOR_FRAME_SIZE = 170
 const ACTOR_HEADINGS = 24
@@ -95,23 +94,24 @@ export function hubWorldAssetSources(): readonly string[] {
   return [...new Set([
     ...HUB_VISUAL_ATLAS_SOURCES,
     hub.props.statue.aura,
-    ...requestedSources.filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
+    ...requestedSources.map(boneyardCombatAssetSource).filter((source) => !boneyardCombatAtlasSourceIsPacked(source)),
     ...BONEYARD_COMBAT_ATLAS_SOURCES,
   ])]
 }
 
 export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
-  const packedSources = hubRequestedAssetSources().filter(boneyardCombatAtlasSourceIsPacked)
+  const packedSources = hubRequestedAssetSources().filter(source => boneyardCombatAtlasSourceIsPacked(boneyardCombatAssetSource(source)))
   const sources = hubWorldAssetSources()
   const composited = [
     ...HUB_VISUAL_ATLAS_SOURCES,
     ...playerWorldCompositedAssetSources(),
   ]
   const compositedSet = new Set(composited)
-  // College record 41's native neighbor texels equal its corresponding edge.
   const stockFramed = [
-    ...NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES,
+    ...playerWorldStockFramedAssetSources(),
     hub.props.statue.aura,
+    hub.npcs.perkWitchGroundGlow,
+    hub.npcs.itemsGround,
   ]
   const stockFramedSet = new Set(stockFramed)
   const loaded = await loadGameTextureEntries({
@@ -131,15 +131,10 @@ export async function loadHubWorldTextures(): Promise<HubWorldTextures> {
     return result
   }
   const combatAtlas = createBoneyardCombatAtlas(texture)
-  for (const source of packedSources) base[source] = combatAtlas.single(source)
-  const statueAuraSource = base[hub.props.statue.aura]
-  if (!statueAuraSource) throw new Error('Hub College Statue aura was not loaded')
-  const statueAura = nativeSpriteRecordTexture({
-    frame: new Rectangle(0, 0, statueAuraSource.width, statueAuraSource.height),
-    source: statueAuraSource.source,
-  })
-  statueAuraSource.destroy(false)
-  base[hub.props.statue.aura] = statueAura
+  for (const source of packedSources) {
+    const packedSource = boneyardCombatAssetSource(source)
+    base[source] = base[packedSource] = combatAtlas.single(packedSource)
+  }
   const visualAtlas = createHubVisualAtlas(texture)
   for (const source of HUB_VISUAL_ATLAS_ORIGINAL_SOURCES) {
     if (source === hub.props.statue.aura) continue

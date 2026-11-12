@@ -1,4 +1,6 @@
 import { Rectangle, Texture } from 'pixi.js'
+import { isolateTextureSamples } from './texture-sample-bounds.ts'
+import { packedSpriteSupport } from './packed-sprite-support.ts'
 
 import {
   HUB_VISUAL_ATLAS_ORIGINAL_SOURCES,
@@ -129,6 +131,8 @@ export function createHubVisualAtlas(
         y,
         width,
         height,
+        sheet[2],
+        sheet[3],
       )
       subframeCache.set(key, frame)
       return frame
@@ -198,12 +202,13 @@ function packedFrameTexture(
   const [page, x, y, width, height] = rectangle
   const pageTexture = pages[page]
   if (!pageTexture) throw new RangeError(`Missing packed Hub atlas page ${page}`)
-  return new Texture({
-    frame: new Rectangle(x, y, width, height),
+  const support = packedSpriteSupport(new Rectangle(trimX, trimY, width, height), origin)
+  return isolateTextureSamples(new Texture({
+    frame: new Rectangle(x + support.x - trimX, y + support.y - trimY, support.width, support.height),
     orig: origin,
     source: pageTexture.source,
-    trim: new Rectangle(trimX, trimY, width, height),
-  })
+    trim: support,
+  }), new Rectangle(x - trimX, y - trimY, originalWidth, originalHeight))
 }
 
 function packedSubframeTexture(
@@ -213,6 +218,8 @@ function packedSubframeTexture(
   logicalY: number,
   logicalWidth: number,
   logicalHeight: number,
+  originalWidth: number,
+  originalHeight: number,
 ): Texture {
   const origin = new Rectangle(0, 0, logicalWidth, logicalHeight)
   if (packed === null) return transparentLogicalTexture(pages, origin)
@@ -223,14 +230,18 @@ function packedSubframeTexture(
   const pageTexture = pages[page]
   if (!pageTexture) throw new RangeError(`Missing packed Hub atlas page ${page}`)
 
-  const left = Math.max(logicalX, trimX)
-  const top = Math.max(logicalY, trimY)
-  const right = Math.min(logicalX + logicalWidth, trimX + packedWidth)
-  const bottom = Math.min(logicalY + logicalHeight, trimY + packedHeight)
+  const support = packedSpriteSupport(
+    new Rectangle(trimX, trimY, packedWidth, packedHeight),
+    new Rectangle(0, 0, originalWidth, originalHeight),
+  )
+  const left = Math.max(logicalX, support.left)
+  const top = Math.max(logicalY, support.top)
+  const right = Math.min(logicalX + logicalWidth, support.right)
+  const bottom = Math.min(logicalY + logicalHeight, support.bottom)
   if (right <= left || bottom <= top) return transparentLogicalTexture(pages, origin)
   const width = right - left
   const height = bottom - top
-  return new Texture({
+  return isolateTextureSamples(new Texture({
     frame: new Rectangle(
       packedX + left - trimX,
       packedY + top - trimY,
@@ -240,7 +251,7 @@ function packedSubframeTexture(
     orig: origin,
     source: pageTexture.source,
     trim: new Rectangle(left - logicalX, top - logicalY, width, height),
-  })
+  }), new Rectangle(packedX - trimX, packedY - trimY, originalWidth, originalHeight))
 }
 
 function transparentLogicalTexture(
@@ -249,10 +260,10 @@ function transparentLogicalTexture(
 ): Texture {
   const page = pages[0]
   if (!page) throw new RangeError('Missing packed Hub atlas page 0')
-  return new Texture({
+  return isolateTextureSamples(new Texture({
     frame: new Rectangle(0, 0, 1, 1),
     orig: origin,
     source: page.source,
     trim: new Rectangle(0, 0, 1, 1),
-  })
+  }))
 }

@@ -1,4 +1,6 @@
 import { Rectangle, Texture } from 'pixi.js'
+import { isolateTextureSamples } from './texture-sample-bounds.ts'
+import { packedSpriteSupport } from './packed-sprite-support.ts'
 
 import {
   PLAYER_CHARACTER_ATLAS_RECTANGLES,
@@ -238,15 +240,19 @@ export function playerCharacterAtlasCssFrame(
   const [page, x, y, width, height] = rectangle
   const source = PLAYER_CHARACTER_ATLAS_SOURCES[page]
   if (!source) throw new RangeError(`Missing packed player atlas page ${page}`)
+  const support = packedSpriteSupport(
+    new Rectangle(trimX, trimY, width, height),
+    new Rectangle(0, 0, originalWidth, originalHeight),
+  )
   return {
     backgroundImage: `url(${source})`,
-    backgroundPosition: `-${x}px -${y}px`,
+    backgroundPosition: `-${x + support.x - trimX}px -${y + support.y - trimY}px`,
     backgroundRepeat: 'no-repeat',
-    height: `${height}px`,
-    left: `${trimX}px`,
+    height: `${support.height}px`,
+    left: `${support.x}px`,
     position: 'absolute',
-    top: `${trimY}px`,
-    width: `${width}px`,
+    top: `${support.y}px`,
+    width: `${support.width}px`,
   }
 }
 
@@ -258,12 +264,12 @@ function packedFrameTexture(
 ): Texture {
   const origin = new Rectangle(0, 0, originalWidth, originalHeight)
   if (packed === null) {
-    return new Texture({
+    return isolateTextureSamples(new Texture({
       frame: new Rectangle(0, 0, 1, 1),
       orig: origin,
       source: pages[0]!.source,
       trim: new Rectangle(0, 0, 1, 1),
-    })
+    }))
   }
   const [rectangleIndex, trimX, trimY] = packed
   const rectangle = PLAYER_CHARACTER_ATLAS_RECTANGLES[rectangleIndex]
@@ -271,10 +277,11 @@ function packedFrameTexture(
   const [page, x, y, width, height] = rectangle
   const pageTexture = pages[page]
   if (!pageTexture) throw new RangeError(`Missing packed player atlas page ${page}`)
-  return new Texture({
-    frame: new Rectangle(x, y, width, height),
+  const support = packedSpriteSupport(new Rectangle(trimX, trimY, width, height), origin)
+  return isolateTextureSamples(new Texture({
+    frame: new Rectangle(x + support.x - trimX, y + support.y - trimY, support.width, support.height),
     orig: origin,
     source: pageTexture.source,
-    trim: new Rectangle(trimX, trimY, width, height),
-  })
+    trim: support,
+  }), new Rectangle(x - trimX, y - trimY, originalWidth, originalHeight))
 }

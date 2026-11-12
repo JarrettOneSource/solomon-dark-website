@@ -7,12 +7,13 @@ import {
   compileHighShaderGlProgram,
   localUniformBitGl,
   roundPixelsBitGl,
-  textureBitGl,
   type Texture,
 } from 'pixi.js'
 import { NATIVE_DIFFUSE_TEXTURE_COLOR_UNIFORMS, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 
 import { NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL } from './native-material-batch.ts'
+import { NATIVE_RECORD_TEXTURE_BIT_GL } from './native-record-sampling.ts'
+import { textureSampleBounds } from './texture-sample-bounds.ts'
 
 import {
   nativeBuildingMeshGrid,
@@ -38,7 +39,7 @@ const NATIVE_STATIC_SURFACE_PROGRAMS = [
   bits: [
     NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
     localUniformBitGl,
-    textureBitGl,
+    NATIVE_RECORD_TEXTURE_BIT_GL,
     roundPixelsBitGl,
     saturation,
   ],
@@ -137,6 +138,9 @@ function createNativeSurfaceShader(texture: Texture, diffuse = false): Shader {
     glProgram: NATIVE_STATIC_SURFACE_PROGRAMS[texture.source.alphaMode === 'no-premultiply-alpha' ? 0 : 1]!,
     resources: {
       nativeTextureColor: diffuse ? NATIVE_DIFFUSE_TEXTURE_COLOR_UNIFORMS : NATIVE_TEXTURE_COLOR_UNIFORMS,
+      nativeRecordSampling: {
+        uNativeRecordBounds: { type: 'vec4<f32>', value: textureSampleBounds(texture) },
+      },
       textureUniforms: {
         uTextureMatrix: {
           type: 'mat3x3<f32>',

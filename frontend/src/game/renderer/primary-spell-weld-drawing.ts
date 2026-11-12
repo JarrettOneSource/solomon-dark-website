@@ -1,6 +1,7 @@
 import { setNativeDiffuseColor } from './native-texture-color.ts'
 import { Container, Graphics, GraphicsContext, Matrix, Mesh, MeshGeometry, Sprite, Texture } from 'pixi.js'
 import { setNativeVertexColors } from './native-material-batch.ts'
+import { nativeSpriteRecordPageTexture } from './native-sprite-record-texture.ts'
 
 import { destroyOwnedMeshGeometry } from './destroy-owned-mesh-geometry.ts'
 import type {
@@ -16,7 +17,7 @@ export class WeldDrawingResources {
   readonly lines = new GraphicsContext()
   readonly meshes: MeshGeometry[] = []
   readonly colors: (Uint32Array | undefined)[] = []
-  private readonly atlasPages = new Map<Texture['source'], Texture>()
+  private readonly atlasPages = new Map<Texture, Texture>()
   private lastMeshPlan: NativeWeldVisualPlan['meshes'] | null = null
 
   update(plan: NativeWeldVisualPlan): void {
@@ -65,10 +66,10 @@ export class WeldDrawingResources {
     if (source.width !== 2048 || source.height !== 2048) {
       throw new RangeError('Native Flame ribbon requires the original 2048-square BadGuys atlas page')
     }
-    let page = this.atlasPages.get(source)
+    let page = this.atlasPages.get(registered)
     if (!page) {
-      page = new Texture({ source })
-      this.atlasPages.set(source, page)
+      page = nativeSpriteRecordPageTexture(registered)
+      this.atlasPages.set(registered, page)
     }
     return page
   }

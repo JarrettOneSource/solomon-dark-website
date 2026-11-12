@@ -1,4 +1,4 @@
-import { Rectangle, Texture } from 'pixi.js'
+import { ImageSource, Rectangle, Texture } from 'pixi.js'
 
 import type {
   ModConsumableContent,
@@ -11,6 +11,7 @@ import type {
 } from '../protocol/game-mod-contract.ts'
 import { gameContentUrl } from '../game-content-cache.ts'
 import { acquireRendererResources } from './renderer-resource-acquisition.ts'
+import { isolateTextureSamples } from './texture-sample-bounds.ts'
 
 export interface ModPresentationTextures {
   destroy(): void
@@ -79,6 +80,7 @@ export async function loadModPresentationTextures(
     Texture.from(asset.image, true),
   ]))
   const frames = new Map<string, Texture>()
+  const nearestBases = new Map<Texture, Texture>()
   const wearableFrames = new Map<string, ModWearableTextureFrames>()
   const derived = new Set<Texture>()
   let destroyed = false
@@ -98,7 +100,7 @@ export async function loadModPresentationTextures(
     if (cached) return cached
     const source = base(content.modId, imagePath, 'mod icon asset')
     const record = icon.frame
-    const texture = new Texture({
+    const texture = isolateTextureSamples(new Texture({
       frame: new Rectangle(record.x, record.y, record.width, record.height),
       orig: new Rectangle(0, 0, record.logicalWidth, record.logicalHeight),
       source: source.source,
@@ -108,7 +110,7 @@ export async function loadModPresentationTextures(
         record.width,
         record.height,
       ),
-    })
+    }))
     frames.set(key, texture)
     derived.add(texture)
     return texture
@@ -124,19 +126,27 @@ export async function loadModPresentationTextures(
     if (columns !== 24 || !Number.isInteger(rows) || rows < 1 || rows > maximumRows) {
       throw new Error(`mod wearable asset has invalid geometry: ${modId}:${path}`)
     }
-    source.source.style.scaleMode = 'nearest'
-    return { rows, source }
+    let nearest = nearestBases.get(source)
+    if (!nearest) {
+      nearest = new Texture({ source: new ImageSource({
+        resource: source.source.resource,
+        alphaMode: source.source.alphaMode,
+        scaleMode: 'nearest',
+      }) })
+      nearestBases.set(source, nearest)
+    }
+    return { rows, source: nearest }
   }
   const actorFrames = (
     sheet: Readonly<{ source: Texture, rows: number }>,
   ): readonly (readonly Texture[])[] => {
     return Object.freeze(Array.from({ length: 24 }, (_, heading) => Object.freeze(
       Array.from({ length: sheet.rows }, (_, pose) => {
-        const texture = new Texture({
+        const texture = isolateTextureSamples(new Texture({
           frame: new Rectangle(heading * 170, pose * 170, 170, 170),
           orig: new Rectangle(0, 0, 170, 170),
           source: sheet.source.source,
-        })
+        }))
         derived.add(texture)
         return texture
       }),
@@ -147,11 +157,13 @@ export async function loadModPresentationTextures(
       if (destroyed) return
       destroyed = true
       for (const texture of derived) texture.destroy(false)
+      for (const texture of nearestBases.values()) texture.destroy(true)
       for (const texture of bases.values()) texture.destroy(true)
       derived.clear()
       frames.clear()
       wearableFrames.clear()
       bases.clear()
+      nearestBases.clear()
       for (const image of images) image.release()
     },
     iconTrim(content) {
@@ -166,7 +178,7 @@ export async function loadModPresentationTextures(
       const cached = frames.get(key)
       if (cached) return cached
       const source = base(modId, imagePath, 'mod sprite asset')
-      const texture = new Texture({
+      const texture = isolateTextureSamples(new Texture({
         frame: new Rectangle(frame.x, frame.y, frame.width, frame.height),
         orig: new Rectangle(0, 0, frame.logicalWidth, frame.logicalHeight),
         source: source.source,
@@ -176,7 +188,7 @@ export async function loadModPresentationTextures(
           frame.width,
           frame.height,
         ),
-      })
+      }))
       frames.set(key, texture)
       derived.add(texture)
       return texture

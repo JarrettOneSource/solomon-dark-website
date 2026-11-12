@@ -14,7 +14,7 @@ const vite = await createServer({
   configFile: fileURLToPath(new URL('../vite.config.ts', import.meta.url)),
   logLevel: 'error', plugins: coveragePlugins, root,
   cacheDir: 'reports/renderer-quality/vite-cache',
-  server: { host: '127.0.0.1', port: 0 },
+  server: { host: '127.0.0.1' },
 })
 await vite.listen()
 const address = vite.httpServer.address()
@@ -28,7 +28,7 @@ try {
     executablePath: process.env.SDR_CHROME_PATH,
     headless: true,
   })
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 } })
+  const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, permissions: ['local-network-access'] })
   const activeMutant = process.env.__STRYKER_ACTIVE_MUTANT__
   if (activeMutant !== undefined) {
     await page.addInitScript(id => { globalThis.__stryker__ = { activeMutant: id } }, activeMutant)
@@ -52,6 +52,46 @@ try {
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
     console.log(JSON.stringify({ errors, measured }))
   } else {
+    const recordSampling = await page.evaluate(async () => {
+      const { inspectNativeRecordSampling } = await import('/tools/native-record-sampling-probe.mjs')
+      return inspectNativeRecordSampling()
+    })
+    console.log(JSON.stringify({ recordSampling, errors }))
+    assert.deepEqual(errors, { console: [], page: [], responses: [] })
+    for (const row of recordSampling.rows) {
+      assert.ok(row.maximumDelta <= 2, `native atlas record must match its independently isolated crop: ${JSON.stringify(row)}`)
+      assert.ok(row.visiblePixels > 0, JSON.stringify(row))
+    }
+    for (const row of recordSampling.controls) {
+      assert.ok(row.maximumDelta <= 2, `record ownership and unrestricted sampling must survive: ${JSON.stringify(row)}`)
+      assert.ok(row.visiblePixels > 0, JSON.stringify(row))
+      if (row.runs !== undefined) assert.equal(row.runs, 1, 'mixed Water records keep one mesh run')
+      if (row.retiredSource !== undefined) assert.equal(row.retiredSource, true)
+    }
+    for (const row of recordSampling.batching) assert.equal(row.draws, 1, JSON.stringify(row))
+    const authoredFixture = await page.evaluate(async () => (await import('/tools/native-record-sampling-probe.mjs')).authoredSamplingFixture())
+    await page.route(`${origin}/api/game/content/sampling-test-tight-sheet`, route => route.fulfill({
+      contentType: 'image/png', body: Buffer.from(authoredFixture, 'base64'),
+    }))
+    const sourceFamilies = await page.evaluate(async () => {
+      const { inspectLooseNativeSampling, inspectAuthoredSampling, inspectPackedPaintingSampling, inspectPackedSupportSampling } = await import('/tools/native-record-sampling-probe.mjs')
+      return { loose: await inspectLooseNativeSampling(), authored: await inspectAuthoredSampling(), paintings: await inspectPackedPaintingSampling(), packedSupport: await inspectPackedSupportSampling() }
+    })
+    console.log(JSON.stringify({ sourceFamilies, errors }))
+    assert.deepEqual(errors, { console: [], page: [], responses: [] })
+    for (const row of [...sourceFamilies.loose, ...sourceFamilies.paintings, ...sourceFamilies.packedSupport]) {
+      assert.ok(row.maximumDelta <= 2, `world texture must match its independently isolated original image: ${JSON.stringify(row)}`)
+      assert.ok(row.visiblePixels > 0, JSON.stringify(row))
+    }
+    for (const role of ['icon', 'sprite', 'fractional', 'wearable', 'sharedFilterMutation']) {
+      const row = sourceFamilies.authored[role]
+      assert.ok(row.maximumDelta <= 2, `authored ${role} must keep its own frame and sampler: ${JSON.stringify(row)}`)
+      assert.ok(row.visiblePixels > 0, JSON.stringify(row))
+    }
+    assert.equal(sourceFamilies.authored.separateSamplerSources, true)
+    assert.equal(sourceFamilies.authored.retiredSources, true)
+    assert.equal(sourceFamilies.authored.iconScaleMode, 'linear')
+    assert.equal(sourceFamilies.authored.wearableScaleMode, 'nearest')
     const { samples, contexts } = await page.evaluate(async () => {
       const { renderNativeMaterialSamples } = await import('/tools/native-render-material-probe.mjs')
       return renderNativeMaterialSamples()
@@ -249,8 +289,10 @@ try {
       for (const row of lifetimes.pixels) {
         const expected = row.phase.includes('arena') ? [128, 86, 170, 255] : [128, 64, 192, 255]
         assert.ok(row.pixel.every((channel, index) => Math.abs(channel - expected[index]) <= 1), JSON.stringify(row))
-        const expectedUpdates = row.kind === 'mesh' ? 0 : Number(options.installTextureAlphaShaders) + Number(row.phase.includes('arena'))
-        assert.equal(row.nativeUniformUpdates, expectedUpdates, `${row.phase}/${row.kind} uniform uploads`)
+        const batchSyncs = row.kind === 'mesh' ? 0 : Number(options.installTextureAlphaShaders) + Number(row.phase.includes('arena'))
+        const automaticSync = Number(options.installTextureAlphaShaders || row.phase.includes('arena'))
+        assert.equal(row.nativeUniformSyncs, batchSyncs + automaticSync, `${row.phase}/${row.kind} uniform synchronizations`)
+        assert.equal(row.nativeUniformUploads, 0, 'unchanged neutral color must not upload another GPU uniform')
       }
       for (const key of ['idempotent', 'previousShadersPreserved', 'retiredArenaShaders', 'replacedStockMesh', 'fixedShadersDestroyed', 'texturesAlive']) {
         assert.equal(lifetimes[key], true, key)
@@ -348,6 +390,31 @@ try {
       changedPixels: 0, changedChannels: 0, maximumDelta: 0,
     })
     console.log(JSON.stringify({ opaqueRetirement }))
+    await page.setViewportSize({ width: 800, height: 640 })
+    await page.evaluate(async () => {
+      const { default: refresh } = await import('/@react-refresh')
+      refresh.injectIntoGlobalHook(window)
+      window.$RefreshReg$ = () => {}
+      window.$RefreshSig$ = () => type => type
+      window.__vite_plugin_react_preamble_installed__ = true
+      document.body.style.background = '#333'
+    })
+    const cssCases = await page.evaluate(async () => (await import('/tools/native-css-sampling-probe.mjs')).cssSamplingCases())
+    const cssSamples = []
+    for (let index = 0; index < cssCases.length; index += 1) {
+      await page.evaluate(async index => (await import('/tools/native-css-sampling-probe.mjs')).mountCssSampling(index), index)
+      const actual = await page.screenshot()
+      await page.evaluate(async () => (await import('/tools/native-css-sampling-probe.mjs')).isolateCssSamplingReference())
+      const expected = await page.screenshot()
+      const result = await page.evaluate(async images => (await import('/tools/native-css-sampling-probe.mjs')).compareCssSamplingImages(images), {
+        actual: actual.toString('base64'), expected: expected.toString('base64'),
+      })
+      const row = { ...cssCases[index], ...result }
+      cssSamples.push(row)
+      assert.ok(row.maximumDelta <= 2 && row.visiblePixels > 0, `CSS artwork keeps its original crop: ${JSON.stringify(row)}`)
+    }
+    await page.evaluate(async () => (await import('/tools/native-css-sampling-probe.mjs')).destroyCssSampling())
+    console.log(JSON.stringify({ cssSamples }))
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
   }
   if (collectCoverage) {

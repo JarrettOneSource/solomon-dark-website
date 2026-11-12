@@ -1,4 +1,5 @@
 import { Rectangle, Texture } from 'pixi.js'
+import { isolateTextureSamples, shareTextureSampleBounds } from './texture-sample-bounds.ts'
 
 export type NativeSpriteRecordSourceUv = readonly [
   left: number,
@@ -34,6 +35,12 @@ interface NativeSpriteRecordUvs {
 }
 
 const FULL_RECORD_UV = [0, 0, 1, 1] as const
+/** Absolute record UVs need an identity texture matrix and the same sample bounds. */
+export function nativeSpriteRecordPageTexture(record: Texture): Texture {
+  const texture = new Texture({ source: record.source })
+  shareTextureSampleBounds(record, texture)
+  return texture
+}
 
 export function nativeSpriteRecordTexture({
   frame,
@@ -57,12 +64,21 @@ export function nativeSpriteRecordTexture({
     source,
     trim,
   })
+  isolateTextureSamples(texture, recordFrame)
+  // Pixi's batched mesh fast path assumes full-source frames have identity UVs.
+  // Subscribe its matrix before the native update so our UVs and flag win last.
+  const fullSourceMatrix = texture.frame.width === source.width && texture.frame.height === source.height
+    ? texture.textureMatrix : null
   const applyNativeUvs = (): void => {
     Object.assign(texture.uvs, nativeSpriteRecordUvs(
       recordFrame,
       { height: source.height, width: source.width },
       sourceUv,
     ))
+    if (fullSourceMatrix) {
+      fullSourceMatrix.update()
+      fullSourceMatrix.isSimple = false
+    }
   }
   texture.on('update', applyNativeUvs)
   applyNativeUvs()

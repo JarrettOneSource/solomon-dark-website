@@ -1,5 +1,6 @@
 import HotbarControls, { useHotbar } from './HotbarControls.tsx'
-import { NativeUiTextGlyphs } from './native-ui/react-raw.ts'
+import { NativeUiSprite, NativeUiTextGlyphs } from './native-ui/react-raw.ts'
+import { nativeUiRecord } from './native-ui/core.ts'
 import {
   useEffect,
   useRef,
@@ -8,7 +9,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 
-import nativeAssetsJson from '../assets/game/native-ui-assets.json' with { type: 'json' }
 import { hub } from '../lib/assets.ts'
 import type { HubEconomyState } from './core-kernels/hub-economy.ts'
 import {
@@ -47,23 +47,6 @@ import NativeBeltPullOffBurst from './NativeBeltPullOffBurst.tsx'
 import NativeBeltItemIcon from './NativeBeltItemIcon.tsx'
 import { nativeBeltPullOffStarted } from './skill-book-model.ts'
 
-interface AtlasRecord {
-  frame: readonly [number, number, number, number]
-  logicalSize: readonly [number, number]
-  trimOrigin: readonly [number, number]
-}
-
-interface NativeAssetManifest {
-  atlases: {
-    Skills: {
-      records: Record<string, AtlasRecord>
-    }
-  }
-}
-
-const nativeAssets = nativeAssetsJson as unknown as NativeAssetManifest
-const ATLAS_WIDTH = 1024
-const ATLAS_HEIGHT = 512
 
 interface SkillQuickbarProps {
   belt: PlayerBeltComponent
@@ -390,11 +373,7 @@ export function NativeSkillIcon({
   record: number
   style?: CSSProperties
 }) {
-  const definition = nativeAssets.atlases.Skills.records[`${record}`]
-  if (!definition) throw new Error(`Missing native Skills record ${record}`)
-  const [x, y] = definition.frame
-  const [logicalWidth, logicalHeight] = definition.logicalSize
-  const [trimX, trimY] = definition.trimOrigin
+  const [logicalWidth, logicalHeight] = nativeUiRecord('Skills', record).logicalSize
   return (
     <span
       aria-hidden={ariaLabel === undefined ? true : undefined}
@@ -405,14 +384,13 @@ export function NativeSkillIcon({
       role={ariaLabel === undefined ? undefined : 'img'}
       style={{
         ...style,
-        backgroundImage: `url("${hub.trader.skillsAtlas}")`,
-        backgroundPosition: `${trimX - x}px ${trimY - y}px`,
-        backgroundSize: `${ATLAS_WIDTH}px ${ATLAS_HEIGHT}px`,
         height: logicalHeight,
         opacity: opacity ?? nativeSkillQuickbarIconAlpha({ cooldown, unavailable: false }),
         width: logicalWidth,
       }}
-    />
+    >
+      <NativeUiSprite atlas="Skills" record={record} />
+    </span>
   )
 }
 

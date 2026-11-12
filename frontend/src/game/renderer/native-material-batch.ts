@@ -1,11 +1,13 @@
 import {
   Batch, BatchGeometry, Batcher, BatcherPipe, Buffer, BufferUsage, DefaultBatcher, Shader,
-  compileHighShaderGlProgram, generateTextureBatchBitGl, getAdjustedBlendModeBlend, getBatchSamplersUniformGroup,
+  Texture, compileHighShaderGlProgram, getAdjustedBlendModeBlend, getBatchSamplersUniformGroup,
   roundPixelsBitGl, type BatchableGraphics, type BatchableMesh, type BatchableSprite,
-  type BatchableElement, type Container, type GlBatchAdaptor, type InstructionSet,
-  type Mesh, type Renderer, type RenderOptions, type Texture, type WebGLRenderer,
+  type BatchableElement, type Container, type GlBatchAdaptor, type GlMeshAdaptor, type InstructionSet,
+  type Mesh, type Renderer, type RenderOptions, type WebGLRenderer,
 } from 'pixi.js'
 import { installNativeTextureColorSync, NATIVE_TEXTURE_COLOR_UNIFORMS, usesNativeDiffuseColor } from './native-texture-color.ts'
+import { nativeRecordTextureBatchBitGl } from './native-record-sampling.ts'
+import { textureSampleBounds } from './texture-sample-bounds.ts'
 
 type NativeBatchMeshElement = Parameters<DefaultBatcher['packAttributes']>[0]
 type NativeBatchQuadElement = Parameters<DefaultBatcher['packQuadAttributes']>[0]
@@ -60,11 +62,17 @@ const NATIVE_TEXTURE_MODE_BIT_GL = {
 class NativeTextureAlphaBatchGeometry extends BatchGeometry {
   constructor() {
     super()
-    const stride = 7 * 4
+    const stride = 11 * 4
     for (const attribute of Object.values(this.attributes)) attribute.stride = stride
     this.addAttribute('aNativeTextureMode', {
       buffer: this.buffers[0]!,
       offset: 6 * 4,
+      stride,
+    })
+    this.addAttribute('aNativeRecordBounds', {
+      buffer: this.buffers[0]!,
+      format: 'float32x4',
+      offset: 7 * 4,
       stride,
     })
   }
@@ -77,7 +85,7 @@ class NativeMaterialBatchShader extends Shader {
         name: material.name,
         bits: [
           NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
-          generateTextureBatchBitGl(maxTextures),
+          nativeRecordTextureBatchBitGl(maxTextures),
           roundPixelsBitGl,
           NATIVE_TEXTURE_MODE_BIT_GL,
           material,
@@ -93,7 +101,7 @@ class NativeMaterialBatchShader extends Shader {
 
 class NativeMaterialBatcher extends Batcher {
   override readonly name = DefaultBatcher.extension.name
-  protected override vertexSize = 7
+  protected override vertexSize = 11
   override geometry = new NativeTextureAlphaBatchGeometry()
   override shader: NativeMaterialBatchShader
   readonly material: NativeBatchMaterial
@@ -120,6 +128,7 @@ class NativeMaterialBatcher extends Batcher {
     const vertexColors = nativeVertexColors.get(drawable)
     const end = element.attributeOffset + element.attributeSize
     const nativeTextureModeValue = nativeTextureMode(element.texture, drawable) + this.blendFlag(element)
+    const bounds = textureSampleBounds(element.texture)
     for (let vertex = element.attributeOffset; vertex < end; vertex += 1) {
       const coordinate = vertex * 2
       const x = positions[coordinate]!
@@ -135,6 +144,10 @@ class NativeMaterialBatcher extends Batcher {
         : multiplyNativePackedColors(vertexColor, element.color)
       uint32View[index++] = textureIdAndRound
       float32View[index++] = nativeTextureModeValue
+      float32View[index++] = bounds[0]!
+      float32View[index++] = bounds[1]!
+      float32View[index++] = bounds[2]!
+      float32View[index++] = bounds[3]!
     }
   }
 
@@ -152,34 +165,32 @@ class NativeMaterialBatcher extends Batcher {
     const textureIdAndRound = textureId << 16 | element.roundPixels & 0xffff
     const nativeTextureModeValue = nativeTextureMode(texture, (element as BatchableSprite | BatchableGraphics).renderable)
       + this.blendFlag(element)
-    float32View[index++] = transform.a * bounds.minX + transform.c * bounds.minY + transform.tx
-    float32View[index++] = transform.d * bounds.minY + transform.b * bounds.minX + transform.ty
-    float32View[index++] = uvs.x0
-    float32View[index++] = uvs.y0
-    uint32View[index++] = element.color
-    uint32View[index++] = textureIdAndRound
-    float32View[index++] = nativeTextureModeValue
-    float32View[index++] = transform.a * bounds.maxX + transform.c * bounds.minY + transform.tx
-    float32View[index++] = transform.d * bounds.minY + transform.b * bounds.maxX + transform.ty
-    float32View[index++] = uvs.x1
-    float32View[index++] = uvs.y1
-    uint32View[index++] = element.color
-    uint32View[index++] = textureIdAndRound
-    float32View[index++] = nativeTextureModeValue
-    float32View[index++] = transform.a * bounds.maxX + transform.c * bounds.maxY + transform.tx
-    float32View[index++] = transform.d * bounds.maxY + transform.b * bounds.maxX + transform.ty
-    float32View[index++] = uvs.x2
-    float32View[index++] = uvs.y2
-    uint32View[index++] = element.color
-    uint32View[index++] = textureIdAndRound
-    float32View[index++] = nativeTextureModeValue
-    float32View[index++] = transform.a * bounds.minX + transform.c * bounds.maxY + transform.tx
-    float32View[index++] = transform.d * bounds.maxY + transform.b * bounds.minX + transform.ty
-    float32View[index++] = uvs.x3
-    float32View[index++] = uvs.y3
-    uint32View[index++] = element.color
-    uint32View[index++] = textureIdAndRound
-    float32View[index] = nativeTextureModeValue
+    const record = textureSampleBounds(texture)
+    float32View[index] = transform.a * bounds.minX + transform.c * bounds.minY + transform.tx
+    float32View[index + 1] = transform.d * bounds.minY + transform.b * bounds.minX + transform.ty
+    float32View[index + 2] = uvs.x0
+    float32View[index + 3] = uvs.y0
+    float32View[index + 11] = transform.a * bounds.maxX + transform.c * bounds.minY + transform.tx
+    float32View[index + 12] = transform.d * bounds.minY + transform.b * bounds.maxX + transform.ty
+    float32View[index + 13] = uvs.x1
+    float32View[index + 14] = uvs.y1
+    float32View[index + 22] = transform.a * bounds.maxX + transform.c * bounds.maxY + transform.tx
+    float32View[index + 23] = transform.d * bounds.maxY + transform.b * bounds.maxX + transform.ty
+    float32View[index + 24] = uvs.x2
+    float32View[index + 25] = uvs.y2
+    float32View[index + 33] = transform.a * bounds.minX + transform.c * bounds.maxY + transform.tx
+    float32View[index + 34] = transform.d * bounds.maxY + transform.b * bounds.minX + transform.ty
+    float32View[index + 35] = uvs.x3
+    float32View[index + 36] = uvs.y3
+    for (let vertex = index; vertex < index + 44; vertex += 11) {
+      uint32View[vertex + 4] = element.color
+      uint32View[vertex + 5] = textureIdAndRound
+      float32View[vertex + 6] = nativeTextureModeValue
+      float32View[vertex + 7] = record[0]!
+      float32View[vertex + 8] = record[1]!
+      float32View[vertex + 9] = record[2]!
+      float32View[vertex + 10] = record[3]!
+    }
   }
 
   protected blendFlag(_element: BatchableElement): number { return 0 }
@@ -367,8 +378,28 @@ function multiplyNativePackedColors(vertex: number, group: number): number {
 }
 
 /** Low bit is texture alpha format; high bit selects diffuse RGB. */
-export function nativeTextureMode(texture: Texture, drawable: object): number {
+function nativeTextureMode(texture: Texture, drawable: object): number {
   return (texture.source.alphaMode === 'no-premultiply-alpha' ? 0 : 1) + (usesNativeDiffuseColor(drawable) ? 2 : 0)
+}
+
+/** Shared default-mesh selection and borrowed texture lifetime for both materials. */
+export function createNativeMeshExecutor(
+  shaders: readonly Shader[],
+  execute: GlMeshAdaptor['execute'],
+): GlMeshAdaptor['execute'] {
+  return function executeNativeMesh(this: GlMeshAdaptor, meshPipe, mesh): void {
+    const vertexMode = updateNativeMeshVertexColors(mesh) ? 4 : 0
+    const shader = shaders[nativeTextureMode(mesh.texture, mesh) + vertexMode]!
+    this['_shader'] = shader
+    shader.resources.nativeRecordSampling.uniforms.uNativeRecordBounds = textureSampleBounds(mesh.texture)
+    try {
+      execute.call(this, meshPipe, mesh)
+    } finally {
+      // Release subscriptions even when drawing fails, before the source owner retires it.
+      shader.resources.uTexture = Texture.EMPTY.source
+      shader.resources.uSampler = Texture.EMPTY.source.style
+    }
+  }
 }
 
 export function installNativeBatchMaterial(

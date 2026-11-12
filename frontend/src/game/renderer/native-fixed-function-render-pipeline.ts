@@ -1,25 +1,26 @@
 import {
   ImageSource,
   Matrix,
+  Rectangle,
   Shader,
   Texture,
   compileHighShaderGlProgram,
   localUniformBitGl,
   roundPixelsBitGl,
-  textureBitGl,
   type GlMeshAdaptor,
   type GlProgram,
-  type Mesh,
-  type MeshPipe,
   type Renderer,
   type WebGLRenderer,
 } from 'pixi.js'
 import { NATIVE_TEXTURE_COLOR_HEADER, NATIVE_TEXTURE_COLOR_UNIFORMS } from './native-texture-color.ts'
 import { installNativePixelCenterProjection } from './native-pixel-center-projection.ts'
+import { NATIVE_RECORD_TEXTURE_BIT_GL } from './native-record-sampling.ts'
+import { textureSampleBounds } from './texture-sample-bounds.ts'
+import { nativeSpriteRecordTexture } from './native-sprite-record-texture.ts'
 
 import {
   NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL, NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL, installNativeBatchMaterial,
-  nativeTextureMode, requireNativeWebGlRenderer, updateNativeMeshVertexColors,
+  createNativeMeshExecutor, requireNativeWebGlRenderer,
 } from './native-material-batch.ts'
 
 const NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS = Object.freeze({
@@ -97,14 +98,7 @@ function installNativeTextureAlphaShaders(nativeRenderer: WebGLRenderer): void {
   const originalMeshDestroy = meshAdaptor.destroy
   originalMeshShader.destroy(true)
   meshAdaptor['_shader'] = meshShaders[0]!
-  meshAdaptor.execute = function executeNativeFixedFunctionMesh(
-    meshPipe: MeshPipe,
-    mesh: Mesh,
-  ): void {
-    const vertexMode = updateNativeMeshVertexColors(mesh) ? 4 : 0
-    this['_shader'] = meshShaders[nativeTextureMode(mesh.texture, mesh) + vertexMode]!
-    originalMeshExecute.call(this, meshPipe, mesh)
-  }
+  meshAdaptor.execute = createNativeMeshExecutor(meshShaders, originalMeshExecute)
   meshAdaptor.destroy = function destroyNativeFixedFunctionMeshAdaptor(): void {
     originalMeshDestroy.call(this)
     for (const shader of meshShaders) shader.destroy(true)
@@ -130,7 +124,7 @@ function createNativeFixedFunctionMeshShader(mode: number, textureColor = false)
       name: `native-fixed-function-mesh-${mode}`,
       bits: [
         localUniformBitGl,
-        textureBitGl,
+        NATIVE_RECORD_TEXTURE_BIT_GL,
         roundPixelsBitGl,
         mode < 4 ? NATIVE_STRAIGHT_UNIFORM_COLOR_BIT_GL : NATIVE_STRAIGHT_VERTEX_COLOR_BIT_GL,
         nativeColorBit,
@@ -142,6 +136,9 @@ function createNativeFixedFunctionMeshShader(mode: number, textureColor = false)
     glProgram,
     resources: {
       nativeTextureColor: NATIVE_TEXTURE_COLOR_UNIFORMS,
+      nativeRecordSampling: {
+        uNativeRecordBounds: { type: 'vec4<f32>', value: textureSampleBounds(Texture.EMPTY) },
+      },
       uTexture: Texture.EMPTY.source,
       textureUniforms: {
         uTextureMatrix: { type: 'mat3x3<f32>', value: new Matrix() },
@@ -156,6 +153,7 @@ export function createNativeTexturedVertexMeshShader(texture: Texture): Shader &
   const shader = Object.assign(createNativeFixedFunctionMeshShader(mode, true), { texture })
   shader.resources.uTexture = texture.source
   shader.resources.uSampler = texture.source.style
+  shader.resources.nativeRecordSampling.uniforms.uNativeRecordBounds = textureSampleBounds(texture)
   shader.resources.textureUniforms.uniforms.uTextureMatrix = texture.textureMatrix.mapCoord
   return shader
 }
@@ -178,10 +176,8 @@ export function nativeStockPointTextureFromImage(
 export function nativeStockFramedTextureFromImage(
   image: HTMLImageElement,
 ): Texture {
-  return nativeTextureFromImage(
-    image,
-    NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS,
-  )
+  const source = new ImageSource({ ...NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS, resource: image })
+  return nativeSpriteRecordTexture({ source, frame: new Rectangle(0, 0, source.width, source.height) })
 }
 
 export function nativeCompositedTextureFromImage(
@@ -194,8 +190,7 @@ function nativeTextureFromImage(
   image: HTMLImageElement,
   options?:
     | typeof NATIVE_STOCK_TEXTURE_SOURCE_OPTIONS
-    | typeof NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS
-    | typeof NATIVE_STOCK_FRAMED_TEXTURE_SOURCE_OPTIONS,
+    | typeof NATIVE_STOCK_POINT_TEXTURE_SOURCE_OPTIONS,
 ): Texture {
   return new Texture({
     source: new ImageSource({

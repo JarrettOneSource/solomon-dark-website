@@ -769,3 +769,51 @@ Visual inspection confirms all bases end inside the purple void. No
 appendage protrudes below it. This validates the reported outcome rather
 than only the diagnostic plan; final publication/live receipts stay in the
 report archive.
+
+## Rust secondary render-target lifetime at world retirement
+
+Rust world retirement now releases secondary render targets and clears their
+presentation plans through `SecondaryView::reset`, preserving shared stock
+uploads. Source review on November 12, 2026 found that the former battle reset
+cleared only Ring of Fire gain memory. Although Boneyard preparation destroyed
+expired actors' targets, College frames did not call it. The last world therefore
+retained its Storm, Leviathan and Leviathan hit targets until another Boneyard
+rendered. This was bounded by the last rendered population, not growth on every
+cast, and is independent of the historical slowdown reports.
+
+The Mac regression reproduced this boundary on the Apple M2 Metal renderer:
+after the canonical reset, the visible Leviathan's 256-square texture and
+framebuffer both remained live according to WebGL, with no deletion calls.
+The fixture rendered 8,642 non-background pixels, had no browser errors and
+closed Chrome normally. This validates the resource defect, not the historical
+slowdown attribution.
+
+Each target owns a 256 by 256 RGBA8 color texture (262,144 bytes before driver
+overhead) and one framebuffer. A Leviathan that received hit feedback owns two
+targets. These are per-world resources; the stock atlases belong to the shared
+view and must survive world replacement. Boneyard scenery, lighting, weather
+and compact-mask resources already retire through their own owners.
+
+| Member | Current evidence and acceptance |
+| --- | --- |
+| Storm weather target | Corrected; Mac GPU regression releases one texture and framebuffer at reset, then recreates identical pixels |
+| Leviathan appendage target | Corrected; Mac GPU regression releases one texture and framebuffer at reset, then recreates identical pixels with reused actor IDs |
+| Leviathan hit redraw target | Corrected; Mac GPU regression releases both ordinary and hit textures/framebuffers, then recreates identical hit pixels |
+| Ordinary actor expiry and repeated reset | Mac GPU regression proves every resource is deleted once, ordinary expiry still releases targets and repeated reset is inert |
+| Pixi secondary world teardown | `NativeSecondaryWorldView.destroy`, Storm view destruction and Leviathan composite destruction already release all three render-texture families; no corresponding source defect found |
+| Historical Reports 79 and 127 slowdown | Not attributed to this bounded retained-resource defect; no historical performance closure follows from it |
+
+The existing secondary owner shares target destruction between reset and final
+teardown. Both battle-reset callers supply the renderer so pending submissions
+finish before deletion. World plans and feedback clear with the targets.
+
+`tools/browser-smoke/secondary-lifecycle.cjs` exercises that canonical operation
+through the development-only GPU fixture using the tracked secondary tick
+recordings. All three families pass on the Apple M2 Metal renderer: actual WebGL
+handles retire once, reconstruction with repeated IDs allocates fresh targets,
+and complete before/after pixel hashes match. The six screenshots were reviewed;
+the ordinary portal, bright hit response and Storm remain visible and unchanged.
+Browser/WebGL errors are empty and the owned Chrome process exits normally.
+This establishes focused renderer lifetime behavior. Complete source gates,
+composed world transitions and installed acceptance remain separate checks.
+No gameplay, cooldown, save or spell geometry contract changes.

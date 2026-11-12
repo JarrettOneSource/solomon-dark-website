@@ -22,6 +22,7 @@ import {
   isNativeWaterMeshActorState,
   NativeWaterMeshRuns,
 } from './primary-spell-water-mesh-runs.ts'
+import { nativeSpriteRecordTexture, nativeSpriteRecordTrimmedTexture } from './native-sprite-record-texture.ts'
 
 test('combined Water mesh keeps exact Hail geometry and Frost pass order across painter gaps', () => {
   const root = new Container()
@@ -74,7 +75,7 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
   const indices = first.geometry.getIndex().data
   assert.ok(vertices instanceof Float32Array)
   const vertex = (quad: number, corner: number) => (
-    (quad * 4 + corner) * 9
+    (quad * 4 + corner) * first.geometry.attributes.aPosition!.stride! / Float32Array.BYTES_PER_ELEMENT
   )
   assert.deepEqual([0, 1, 2, 3].flatMap((corner) => {
     const offset = vertex(0, corner)
@@ -93,6 +94,18 @@ test('combined Water mesh keeps exact Hail geometry and Frost pass order across 
   assert.equal(vertices[vertex(2, 0) + 8], 0)
   assert.equal(vertices[vertex(3, 0) + 8], 1)
   assert.equal(vertices[vertex(4, 0) + 8], 1)
+  // Different records remain in one draw; aura trim retains the complete 63-square owner.
+  for (const [quad, frame] of [
+    [0, [103, 0, 19, 20]], [1, [122, 0, 63, 63]],
+    [2, [0, 0, 93, 145]], [4, [93, 0, 10, 8]],
+  ] as const) {
+    const [x, y, width, height] = frame
+    const bounds = [(x + .5) / 256, (y + .5) / 145, (x + width - .5) / 256, (y + height - .5) / 145]
+    for (let corner = 0; corner < 4; corner += 1) {
+      const offset = vertex(quad, corner) + 9
+      assertClose([...vertices.slice(offset, offset + 4)], bounds)
+    }
+  }
 
   const second = root.children[1]
   assert.ok(second instanceof Mesh)
@@ -407,16 +420,14 @@ function testAtlasTextures(): NativeWaterMeshTexturesForTest {
     resource: new Uint8Array(256 * 145 * 4),
     width: 256,
   })
+  const aura = nativeSpriteRecordTexture({ frame: new Rectangle(122, 0, 63, 63), source })
+  const trimmedAura = nativeSpriteRecordTrimmedTexture(aura, { x: 0, y: 2, width: 63, height: 60 })
+  aura.destroy(false)
   return {
-    aura: new Texture({
-      frame: new Rectangle(122, 0, 63, 60),
-      orig: new Rectangle(0, 0, 63, 63),
-      source,
-      trim: new Rectangle(0, 2, 63, 60),
-    }),
-    core: new Texture({ frame: new Rectangle(0, 0, 93, 145), source }),
-    glint: new Texture({ frame: new Rectangle(93, 0, 10, 8), source }),
-    hail: new Texture({ frame: new Rectangle(103, 0, 19, 20), source }),
+    aura: trimmedAura,
+    core: nativeSpriteRecordTexture({ frame: new Rectangle(0, 0, 93, 145), source }),
+    glint: nativeSpriteRecordTexture({ frame: new Rectangle(93, 0, 10, 8), source }),
+    hail: nativeSpriteRecordTexture({ frame: new Rectangle(103, 0, 19, 20), source }),
   }
 }
 

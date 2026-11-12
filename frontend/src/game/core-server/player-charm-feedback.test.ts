@@ -4,6 +4,7 @@ import test from 'node:test'
 import type { LoadedBoneyard } from '../core-kernels/boneyard.ts'
 import { createNativeRng } from '../core-kernels/native-rng.ts'
 import { createNativeSecondaryPlayerState } from '../core-kernels/native-secondary-abilities.ts'
+import { NativeLootMessagePresentation } from '../loot-message-presentation.ts'
 import { createGameSnapshot } from '../host/game-snapshot.ts'
 import { createGameSnapshotFrame } from '../protocol/entity-replication.ts'
 import { decodeServerGameMessage, encodeGameMessage } from '../protocol/game-protocol.ts'
@@ -11,6 +12,7 @@ import { parseGameSaveDocument, record } from '../save/game-save-contract.ts'
 import { createGameSaveDocument, restoreGameSaveDocument } from '../save/game-save-document.ts'
 import { emitPlayerCheatDeathFeedback } from './boneyard-player-status.ts'
 import {
+  BONEYARD_ENEMY_EVENT_LANE_CAPACITY, BONEYARD_ENEMY_EVENT_RETENTION_TICKS,
   createGameSimulation, damageGameSimulationPlayer, enterBoneyardWorld,
   getPlayerProgression, stepGameSimulationTick, type GameSimulationState,
 } from './game-simulation.ts'
@@ -31,14 +33,14 @@ const BONEYARD: LoadedBoneyard = {
   },
 }
 
-function charmGame(selectors: readonly number[] = [24, 25]): GameSimulationState {
+function charmGame(selectors: readonly number[] = [24, 25], peerSelectors: readonly number[] = [24, 25]): GameSimulationState {
   let state = createGameSimulation({
     owner: { discipline: 'arcane', displayName: 'Owner', element: 'ether' },
     peer: { discipline: 'arcane', displayName: 'Peer', element: 'fire' },
   })
   for (const playerId of ['owner', 'peer']) {
     const economy = playerEconomyAt(state.playerEntities, playerId)!
-    const playerSelectors = playerId === 'owner' ? selectors : [24, 25]
+    const playerSelectors = playerId === 'owner' ? selectors : peerSelectors
     state = { ...state, playerEntities: replacePlayerEconomy(state.playerEntities, playerId, {
       ...economy, firstMixedSelectors: [...playerSelectors], ownedPerkSelectors: [...playerSelectors],
       revision: economy.revision + 1,
@@ -147,6 +149,74 @@ test('lethal loss precedes Cheat Death without replacing its existing rescue eve
   const lethal = damageGameSimulationPlayer(charmGame(), 'owner', 100, state.tick)
   assert.equal(lossEvents(lethal).length, 1)
   assert.equal(getPlayerProgression(lethal, 'owner').lifeState, 'lethal-pending')
+})
+
+for (const selectors of [[24], [25], [24, 25], [7], [7, 24, 25]]) {
+  for (const victim of ['owner', 'peer']) {
+    test(`accepted status feedback survives combat-event pressure for ${victim}/${selectors.join('+')}`, () => {
+      let state = charmGame(selectors, selectors)
+      state = damageGameSimulationPlayer(state, victim, selectors.includes(7) ? 100 : 1, state.tick)
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const accepted = state.world.enemyEvents
+      assert.ok(accepted.length > 0)
+      const firstOrdinaryId = state.world.enemies.nextEventId
+      // Model an intervening burst of ordinary semantic events before the next
+      // snapshot. The status records themselves come from the real damage receiver.
+      const ordinary = Array.from({ length: BONEYARD_ENEMY_EVENT_LANE_CAPACITY + 1 }, (_, index) => ({
+        actorId: index + 1, eventId: firstOrdinaryId + index, tick: state.tick, type: 'enemy-death' as const,
+      }))
+      state = { ...state, world: { ...state.world,
+        enemies: { ...state.world.enemies, nextEventId: firstOrdinaryId + ordinary.length },
+        enemyEvents: [...accepted, ...ordinary],
+      } }
+      state = stepGameSimulationTick(state, {})
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      assert.deepEqual(state.world.enemyEvents.slice(0, accepted.length), accepted)
+      assert.equal(state.world.enemyEvents.length, BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
+      assert.deepEqual(state.world.enemyEvents.slice(accepted.length), ordinary.slice(accepted.length + 1))
+
+      const snapshot = createGameSnapshot(state, victim)
+      const message = { acknowledgedInputSequence: 0,
+        frame: createGameSnapshotFrame(snapshot, 0, undefined, true),
+        sequence: 1, type: 'server-snapshot' as const }
+      assert.deepEqual(decodeServerGameMessage(encodeGameMessage(message)), message)
+      if (snapshot.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      const presentation = new NativeLootMessagePresentation(0)
+      const otherPlayer = new NativeLootMessagePresentation(0)
+      for (const event of snapshot.world.enemyEvents) {
+        presentation.consumeCombat(event, victim)
+        otherPlayer.consumeCombat(event, victim === 'owner' ? 'peer' : 'owner')
+      }
+      assert.deepEqual(presentation.sample(state.tick).map(row => row.text), [
+        ...(selectors.some(selector => selector === 24 || selector === 25) ? ['CHARM EFFECT LOST!'] : []),
+        ...(selectors.includes(7) ? ['CHEAT DEATH!'] : []),
+      ])
+      assert.deepEqual(otherPlayer.sample(state.tick), [])
+
+      state = { ...state, tick: BONEYARD_ENEMY_EVENT_RETENTION_TICKS - 1 }
+      state = stepGameSimulationTick(state, {})
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      assert.deepEqual(state.world.enemyEvents.slice(0, accepted.length), accepted)
+      state = stepGameSimulationTick(state, {})
+      if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+      assert.deepEqual(state.world.enemyEvents, [])
+    })
+  }
+}
+
+test('status-only event pressure still retains only the newest 512 accepted records', () => {
+  let state = damageGameSimulationPlayer(charmGame([7, 24, 25]), 'owner', 100, 0)
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  const templates = state.world.enemyEvents
+  const events = Array.from({ length: BONEYARD_ENEMY_EVENT_LANE_CAPACITY + 3 }, (_, index) => ({
+    ...templates[index % templates.length]!, eventId: index + 1,
+  }))
+  state = { ...state, world: { ...state.world,
+    enemies: { ...state.world.enemies, nextEventId: events.length + 1 }, enemyEvents: events,
+  } }
+  state = stepGameSimulationTick(state, {})
+  if (state.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+  assert.deepEqual(state.world.enemyEvents, events.slice(3))
 })
 
 test('save omits only ephemeral charm loss, preserves live state and event IDs, and permits a fresh later loss', () => {

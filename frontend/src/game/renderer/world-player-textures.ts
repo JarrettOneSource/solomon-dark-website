@@ -21,6 +21,7 @@ import {
   NATIVE_SECONDARY_ASSET_SOURCES,
   NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES,
   NATIVE_SECONDARY_SPRITE_RECORDS,
+  NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES,
   nativeSecondarySpriteKey,
   nativeSecondarySpriteRecord,
 } from './native-secondary-assets.ts'
@@ -46,6 +47,7 @@ import {
   nativeSpriteRecordTexture,
   nativeSpriteRecordTrimmedTexture,
 } from './native-sprite-record-texture.ts'
+import { isolateTextureSamples } from './texture-sample-bounds.ts'
 
 const ACTOR_HEADINGS = 24
 const ACTOR_WALK_FRAMES = 5
@@ -252,6 +254,10 @@ export function playerWorldCompositedAssetSources(): readonly string[] {
   return PLAYER_CHARACTER_ATLAS_SOURCES
 }
 
+export function playerWorldStockFramedAssetSources(): readonly string[] {
+  return [...NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES, enchantStaffAura0, enchantStaffAura1]
+}
+
 export function createPlayerWorldTextures(
   resolveTexture: (source: string) => Texture,
 ): PlayerWorldTextures {
@@ -417,18 +423,9 @@ export function createPlayerWorldTextures(
   )
   const etherPlane = texture(NATIVE_SECONDARY_SPECIAL_ASSET_SOURCES.etherPlane)
   etherPlane.source.addressMode = 'repeat'
-  const secondary = Object.fromEntries(NATIVE_SECONDARY_SPRITE_RECORDS.map((record) => {
-    const source = texture(record.source)
-    return [
-      nativeSecondarySpriteKey(record.atlas, record.entry),
-      record.atlas === 'Clothes'
-        ? nativeSpriteRecordTexture({
-            frame: new Rectangle(0, 0, record.width, record.height),
-            source: source.source,
-          })
-        : source,
-    ]
-  }))
+  const secondary = Object.fromEntries(NATIVE_SECONDARY_SPRITE_RECORDS.map(record => [
+    nativeSecondarySpriteKey(record.atlas, record.entry), texture(record.source),
+  ]))
   const coldAura = nativeSpriteRecordTrimmedTexture(
     texture(primarySpells.airWaterActors.coldAura),
     NATIVE_WATER_AURA_SAFE_ALPHA_TRIM,
@@ -634,7 +631,6 @@ export function destroyPlayerWorldTextureFrames(textures: PlayerWorldTextures): 
     textures.primarySpells.frost.over,
     textures.primarySpells.frost.spark,
   ])
-  derived.add(textures.secondary[nativeSecondarySpriteKey('Clothes', 2)]!)
   for (const texture of derived) texture.destroy(false)
 }
 
@@ -659,7 +655,7 @@ export function stripFrames(
   height: number,
   direction: 'horizontal' | 'vertical',
 ): Texture[] {
-  return Array.from({ length: count }, (_, index) => new Texture({
+  return Array.from({ length: count }, (_, index) => isolateTextureSamples(new Texture({
     source: source.source,
     frame: new Rectangle(
       direction === 'horizontal' ? index * width : 0,
@@ -667,7 +663,7 @@ export function stripFrames(
       width,
       height,
     ),
-  }))
+  })))
 }
 
 export function gridFrames(
@@ -679,10 +675,10 @@ export function gridFrames(
 ): Texture[][] {
   return Array.from({ length: rows }, (_, row) => Array.from(
     { length: columns },
-    (_, column) => new Texture({
+    (_, column) => isolateTextureSamples(new Texture({
       source: source.source,
       frame: new Rectangle(column * width, row * height, width, height),
-    }),
+    })),
   ))
 }
 

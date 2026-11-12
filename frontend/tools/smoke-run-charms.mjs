@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core'
 import { startStaticClientServer } from './static-client-server.mjs'
 import { createNativeRng } from '../src/game/core-kernels/native-rng.ts'
 import {
+  BONEYARD_ENEMY_EVENT_LANE_CAPACITY,
   addPlayerCharacter, createGameSimulation, damageGameSimulationPlayer, enterBoneyardWorld,
   getPlayerEconomy, getPlayerProgression, removePlayerCharacter,
 } from '../src/game/core-server/game-simulation.ts'
@@ -50,7 +51,7 @@ try {
   throw error
 } finally {
   await writeFile(join(output, 'receipt.json'), JSON.stringify({ headed, modes, receipts, errors, rawRequestFailures, failure,
-    qualification: 'Desktop and touch-landscape use the built client, real authority/replication/audio and public saved-run/leave/resume navigation. Narrow portrait checks only the intentional rotate gate; portrait gameplay is not accepted. Declared fixtures: owned charms, initial spent flags, authoritative damage, reactivation via existing purchase reducer, and one synthetic participant. Fresh owner loss shows CHARM EFFECT LOST! through the transient notification clock; retained, peer and zero-damage state does not. The removed charm status row must stay absent throughout active, spent and restored states. Touch is Chrome emulation, not physical-device acceptance.' }, null, 2) + '\n')
+    qualification: 'Desktop and touch-landscape use the built client, real authority/replication/audio and public saved-run/leave/resume navigation. Narrow portrait checks only the intentional rotate gate; portrait gameplay is not accepted. Declared fixtures: owned charms, initial spent flags, authoritative damage, reactivation via existing purchase reducer, one synthetic participant, and 513 ordinary semantic events following actual owner loss before the next snapshot. Fresh owner loss survives that pressure and shows CHARM EFFECT LOST! through the transient notification clock; retained, peer and zero-damage state does not. The removed charm status row must stay absent throughout active, spent and restored states. Touch is Chrome emulation, not physical-device acceptance.' }, null, 2) + '\n')
   await browser.close()
   await server.close()
 }
@@ -75,6 +76,14 @@ async function journey(mode) {
   const page = await context.newPage()
   const lossNotice = page.locator('.boneyard-loot-messages > span[aria-label="CHARM EFFECT LOST!"]')
   const wire = observeGameWire(page)
+  const combatSnapshots = []
+  page.on('websocket', socket => socket.on('framereceived', ({ payload }) => {
+    const message = JSON.parse(typeof payload === 'string' ? payload : payload.toString('utf8'))
+    if (message.type !== 'server-snapshot' || message.frame.world.kind !== 'boneyard') return
+    const events = message.frame.world.enemyEvents
+    combatSnapshots.push({ tick: message.frame.tick, count: events.length,
+      ids: events.map(event => event.eventId) })
+  }))
   let requestContext = 'setup'
   page.setDefaultTimeout(15_000)
   page.on('pageerror', error => errors.page.push(`${mode}: ${error.message}`))
@@ -154,9 +163,15 @@ async function journey(mode) {
     assert.equal(await lossCount(), 0)
     assert.equal(await lossNotice.count(), 0, 'zero damage cannot show a loss notice')
     expectActive(true)
-    damage(owner, 1)
+    const pressure = await damageWithEventPressure()
     await waitForLoss(1)
-    await lossNotice.waitFor({ state: 'visible' })
+    await visibleLoss()
+    await waitUntil(() => combatSnapshots.some(frame => frame.ids.includes(pressure.lossId)
+      && frame.ids.includes(pressure.lastOrdinaryId)),
+    'the actual snapshot transports both the accepted loss and its newer combat pressure', 15_000)
+    receipts.push({ mode, name: 'combat-event-pressure', ...pressure,
+      snapshot: combatSnapshots.find(frame => frame.ids.includes(pressure.lossId)
+        && frame.ids.includes(pressure.lastOrdinaryId)) })
     expectActive(false)
     damage(owner, 1)
     await page.waitForTimeout(250)
@@ -175,7 +190,7 @@ async function journey(mode) {
     Object.assign(host.state(), removePlayerCharacter(host.state(), peer))
     damage(owner, 1)
     await waitForLoss(2)
-    await lossNotice.waitFor({ state: 'visible' })
+    await visibleLoss()
     const audio = await lossEvents()
     assert.ok(audio.every(event => event.playbackRate === 1 && event.volume > 0))
     await page.locator('.boneyard-scene').focus()
@@ -238,10 +253,56 @@ async function journey(mode) {
     const live = host.state()
     Object.assign(live, damageGameSimulationPlayer(live, playerId, amount, live.tick))
   }
+  async function damageWithEventPressure() {
+    const live = host.state()
+    let damaged = damageGameSimulationPlayer(live, owner, 1, live.tick)
+    assert.equal(damaged.world.kind, 'boneyard')
+    const loss = damaged.world.enemyEvents.findLast(event => event.type === 'player-charm-lost'
+      && event.targetPlayerId === owner)
+    assert.ok(loss, 'the real damage receiver accepts the owner loss')
+    const firstId = damaged.world.enemies.nextEventId
+    const ordinary = Array.from({ length: BONEYARD_ENEMY_EVENT_LANE_CAPACITY + 1 }, (_, index) => ({
+      actorId: index + 1, eventId: firstId + index, tick: damaged.tick, type: 'enemy-death',
+    }))
+    damaged = { ...damaged, world: { ...damaged.world,
+      enemies: { ...damaged.world.enemies, nextEventId: firstId + ordinary.length },
+      enemyEvents: [...damaged.world.enemyEvents, ...ordinary],
+    } }
+    // Install damage and pressure atomically before the next real host tick.
+    // The host alone advances the simulation and its presentation histories.
+    const beforeTick = live.tick
+    Object.assign(live, damaged)
+    await waitUntil(() => host.state().tick > beforeTick,
+      'the host did not admit the pressure tick', 15_000)
+    const pressured = host.state()
+    assert.equal(pressured.world.kind, 'boneyard')
+    assert.ok(pressured.world.enemyEvents.some(event => event.eventId === loss.eventId))
+    assert.equal(pressured.world.enemyEvents.length, BONEYARD_ENEMY_EVENT_LANE_CAPACITY)
+    return { lossId: loss.eventId, tick: pressured.tick, ordinaryCount: ordinary.length,
+      lastOrdinaryId: ordinary.at(-1).eventId, retainedCount: pressured.world.enemyEvents.length }
+  }
   function expectActive(active) {
     const runtime = getPlayerProgression(host.state(), owner).hagathaRuntime
     assert.equal(runtime.serendipityActive, active)
     assert.equal(runtime.reverieActive, active)
+  }
+  async function visibleLoss() {
+    // Native baseline text is painted around a zero-width anchor.
+    const glyph = lossNotice.locator(':scope > [data-native-ui-font="menu"] > i').first()
+    await glyph.waitFor({ state: 'visible' })
+    const ink = await lossNotice.evaluate(node => {
+      const glyphs = [...node.querySelectorAll(':scope > [data-native-ui-font="menu"] > i')]
+      return { opacity: Number(getComputedStyle(node).opacity),
+        glyphs: glyphs.map(glyph => ({ bounds: glyph.getBoundingClientRect().toJSON(),
+          mask: getComputedStyle(glyph).maskImage })),
+        clip: node.parentElement.getBoundingClientRect().toJSON() }
+    })
+    assert.ok(ink.opacity > 0)
+    assert.ok(ink.glyphs.length > 0 && ink.glyphs.every(glyph =>
+      glyph.bounds.width > 0 && glyph.bounds.height > 0 && glyph.mask !== 'none'))
+    assert.ok(ink.glyphs.some(glyph => glyph.bounds.bottom > ink.clip.top
+      && glyph.bounds.top < ink.clip.bottom))
+    receipts.push({ mode, name: 'loss-glyph-ink', ...ink })
   }
   function lossEvents() {
     return page.evaluate(() => window.__sdrAudioEvents.filter(event => event.type === 'buffer-start'

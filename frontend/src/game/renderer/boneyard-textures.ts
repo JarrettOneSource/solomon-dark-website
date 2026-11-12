@@ -21,14 +21,12 @@ import { loadGameTextureEntries } from './game-webgl.ts'
 import { NATIVE_ENEMY_ASSET_SOURCES } from './native-enemy-assets.ts'
 import { NATIVE_LOOT_ASSET_SOURCES } from './native-loot-assets.ts'
 import {
-  NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES,
-} from './native-secondary-assets.ts'
-import {
   createPlayerWorldTextures,
   destroyPlayerWorldTextureFrames,
   gridFrames,
   playerWorldAssetSources,
   playerWorldCompositedAssetSources,
+  playerWorldStockFramedAssetSources,
   stripFrames,
   type PlayerWorldTextures,
 } from './world-player-textures.ts'
@@ -105,7 +103,7 @@ export async function loadBoneyardWorldTextures(): Promise<BoneyardWorldTextures
     boneyard.solomonDig,
   ]
   const compositedSet = new Set(composited)
-  const stockFramed = NATIVE_SECONDARY_STOCK_FRAMED_ASSET_SOURCES
+  const stockFramed = [...playerWorldStockFramedAssetSources(), boneyard.solomonFlydirt]
   const stockFramedSet = new Set(stockFramed)
   const loaded = await loadGameTextureEntries({
     composited,
