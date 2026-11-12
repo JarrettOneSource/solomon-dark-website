@@ -452,12 +452,40 @@ export async function inspectAuthoredSampling() {
     wearableCanvas.width = 170; wearableCanvas.height = 170
     wearableCanvas.getContext('2d').drawImage(iconSource.resource, 0, 0, 170, 170, 0, 0, 170, 170)
     const wearableReference = new Texture({ source: new ImageSource({ resource: wearableCanvas, scaleMode: 'nearest' }) })
-    const wearableCandidate = makeDrawable(wearable.primary[0][0], 'sprite')
+    // Nearest filtering can choose opposite texels at a tie after UV denominator
+    // rounding. Preserve the independently authored sheet dimensions and frame.
+    const wearablePage = document.createElement('canvas')
+    wearablePage.width = 24 * 170; wearablePage.height = 170
+    const authoredSheet = await load(`data:image/png;base64,${authoredSamplingFixture()}`)
+    wearablePage.getContext('2d').drawImage(authoredSheet, 0, 0)
+    const matchingWearableReference = new Texture({
+      source: new ImageSource({ resource: wearablePage, scaleMode: 'nearest' }),
+      frame: new Rectangle(0, 0, 170, 170),
+    })
+    const wearableTexture = wearable.primary[0][0]
+    const wearableGeometry = {
+      source: [wearableTexture.source.width, wearableTexture.source.height],
+      frame: [wearableTexture.frame.x, wearableTexture.frame.y, wearableTexture.frame.width, wearableTexture.frame.height],
+      orig: [wearableTexture.orig.width, wearableTexture.orig.height],
+    }
+    const wearableGeometryMatchesFixture = JSON.stringify(wearableGeometry) === JSON.stringify({
+      source: [24 * 170, 170], frame: [0, 0, 170, 170], orig: [170, 170],
+    })
+    const wearableCandidate = makeDrawable(wearableTexture, 'sprite')
     const wearableControl = makeDrawable(wearableReference, 'sprite')
+    const matchingWearableControl = makeDrawable(matchingWearableReference, 'sprite')
     let wearableResult
     try {
-      wearableResult = compare(render(app, target, wearableCandidate, 1.111, .125), render(app, target, wearableControl, 1.111, .125))
-    } finally { wearableCandidate.destroy(); wearableControl.destroy(); wearableReference.destroy(true) }
+      const actual = render(app, target, wearableCandidate, 1.111, .125)
+      wearableResult = {
+        ...compare(actual, render(app, target, matchingWearableControl, 1.111, .125)),
+        crossSizeComparison: compare(actual, render(app, target, wearableControl, 1.111, .125)),
+        geometryMatchesFixture: wearableGeometryMatchesFixture,
+      }
+    } finally {
+      wearableCandidate.destroy(); wearableControl.destroy(); matchingWearableControl.destroy()
+      wearableReference.destroy(true); matchingWearableReference.destroy(true)
+    }
     const fractionalFrame = { ...frame, x: 3.25, y: 2.375, width: .5, height: .25 }
     const fractional = makeDrawable(textures.spriteFrame('fractional', 'sampling-test', 'tight.png', fractionalFrame), 'sprite')
     const centerSource = new BufferImageSource({ width: 1, height: 1, resource: new Uint8Array([0, 255, 0, 255]) })
@@ -484,6 +512,69 @@ export async function inspectAuthoredSampling() {
   }
 }
 
+// Match raster geometry independently: trimming changes SwiftShader's subpixel
+// vertex rounding even when an untrimmed quad has the same ideal UV mapping.
+function independentPackedReference(texture, canvas, slice = [0, 0, canvas.width, canvas.height]) {
+  const { width, height } = canvas
+  const context = canvas.getContext('2d')
+  const pixels = context.getImageData(0, 0, width, height).data
+  let left = width, top = height, right = 0, bottom = 0
+  for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+    if (pixels[(y * width + x) * 4 + 3] === 0) continue
+    left = Math.min(left, x); top = Math.min(top, y)
+    right = Math.max(right, x + 1); bottom = Math.max(bottom, y + 1)
+  }
+  if (right <= left || bottom <= top) throw new Error('selected packed reference must have original alpha ink')
+  const [sliceX, sliceY, sliceWidth, sliceHeight] = slice
+  // The packed format retains one transparent texel around the original ink,
+  // bounded by the original logical image and then by the requested subframe.
+  left = Math.max(sliceX, 0, left - 1); top = Math.max(sliceY, 0, top - 1)
+  right = Math.min(sliceX + sliceWidth, width, right + 1)
+  bottom = Math.min(sliceY + sliceHeight, height, bottom + 1)
+  const supportWidth = right - left, supportHeight = bottom - top
+  const expectedGeometry = {
+    orig: [0, 0, sliceWidth, sliceHeight],
+    trim: [left - sliceX, top - sliceY, supportWidth, supportHeight],
+    frameSize: [supportWidth, supportHeight],
+  }
+  const actualGeometry = {
+    orig: [texture.orig.x, texture.orig.y, texture.orig.width, texture.orig.height],
+    trim: [texture.trim.x, texture.trim.y, texture.trim.width, texture.trim.height],
+    frameSize: [texture.frame.width, texture.frame.height],
+  }
+  const geometryMatchesOriginal = JSON.stringify(actualGeometry) === JSON.stringify(expectedGeometry)
+  if (!geometryMatchesOriginal) throw new Error(`packed geometry differs from original alpha support: ${JSON.stringify({ actualGeometry, expectedGeometry })}`)
+  // Product coordinates are only placement in an equally sized independent page.
+  // The independent source-pixel check below prevents a misplaced product frame
+  // from acquiring a matching but wrong reference through this placement.
+  const originalX = texture.frame.x - left
+  const originalY = texture.frame.y - top
+  const matchingCanvas = document.createElement('canvas')
+  matchingCanvas.width = texture.source.width; matchingCanvas.height = texture.source.height
+  const matchingContext = matchingCanvas.getContext('2d')
+  matchingContext.imageSmoothingEnabled = false
+  // Original pixels and edge extrusion provide the sampler boundary without
+  // using the product clamp or any product geometry constructor.
+  for (let y = -1; y <= 1; y += 1) for (let x = -1; x <= 1; x += 1) {
+    matchingContext.drawImage(canvas,
+      x < 0 ? 0 : x > 0 ? width - 1 : 0, y < 0 ? 0 : y > 0 ? height - 1 : 0,
+      x === 0 ? width : 1, y === 0 ? height : 1,
+      originalX + (x < 0 ? -2 : x > 0 ? width : 0), originalY + (y < 0 ? -2 : y > 0 ? height : 0),
+      x === 0 ? width : 2, y === 0 ? height : 2)
+  }
+  const sourcePixels = document.createElement('canvas')
+  sourcePixels.width = supportWidth; sourcePixels.height = supportHeight
+  const sourceContext = sourcePixels.getContext('2d')
+  sourceContext.drawImage(texture.source.resource, texture.frame.x, texture.frame.y, supportWidth, supportHeight,
+    0, 0, supportWidth, supportHeight)
+  const sourcePixelMaximumDelta = compare(sourceContext.getImageData(0, 0, supportWidth, supportHeight).data,
+    context.getImageData(left, top, supportWidth, supportHeight).data).maximumDelta
+  const reference = new Texture({ source: new ImageSource({ resource: matchingCanvas }),
+    frame: new Rectangle(originalX + left, originalY + top, supportWidth, supportHeight),
+    orig: new Rectangle(...expectedGeometry.orig), trim: new Rectangle(...expectedGeometry.trim) })
+  return { reference, sourcePixelMaximumDelta, geometryMatchesOriginal, expectedGeometry }
+}
+
 export async function inspectPackedPaintingSampling() {
   const pages = await Promise.all(HUB_VISUAL_ATLAS_SOURCES.map(async url => Texture.from(await load(url))))
   const atlas = createHubVisualAtlas(url => pages[HUB_VISUAL_ATLAS_SOURCES.indexOf(url)])
@@ -498,12 +589,16 @@ export async function inspectPackedPaintingSampling() {
       const canvas = document.createElement('canvas'); canvas.width = 74; canvas.height = 224
       canvas.getContext('2d').drawImage(sheet, frame * 74, 0, 74, 224, 0, 0, 74, 224)
       const reference = Texture.from(canvas)
-      const candidate = makeDrawable(atlas.frame(paintings, frame, 0), 'sprite')
+      const texture = atlas.frame(paintings, frame, 0)
+      const independent = independentPackedReference(texture, canvas)
+      const candidate = makeDrawable(texture, 'sprite')
       const control = makeDrawable(reference, 'sprite')
+      const matchingControl = makeDrawable(independent.reference, 'sprite')
       try {
         for (const scale of [1.111, 3.5]) {
           const actual = render(app, target, candidate, scale, .125)
-          const expected = render(app, target, control, scale, .125)
+          const fullImageComparison = compare(actual, render(app, target, control, scale, .125))
+          const expected = render(app, target, matchingControl, scale, .125)
           const comparison = compare(actual, expected)
           const peaks = []
           for (let pixel = 0; pixel < actual.length / 4 && peaks.length < 8; pixel += 1) {
@@ -514,9 +609,15 @@ export async function inspectPackedPaintingSampling() {
               logicalY: (-x * Math.sin(.125) + y * Math.cos(.125)) / scale,
               actual: Array.from(actual.slice(pixel * 4, pixel * 4 + 4)), expected: Array.from(expected.slice(pixel * 4, pixel * 4 + 4)) })
           }
-          rows.push({ frame, scale, ...comparison, peaks })
+          rows.push({ frame, scale, ...comparison, peaks, fullImageComparison,
+            sourcePixelMaximumDelta: independent.sourcePixelMaximumDelta,
+            geometryMatchesOriginal: independent.geometryMatchesOriginal,
+            expectedGeometry: independent.expectedGeometry })
         }
-      } finally { candidate.destroy(); control.destroy(); reference.destroy(true) }
+      } finally {
+        candidate.destroy(); control.destroy(); matchingControl.destroy()
+        reference.destroy(true); independent.reference.destroy(true)
+      }
     }
   } finally {
     atlas.destroy(); pages.forEach(page => page.destroy(true)); target.destroy(true); app.destroy(true, { children: true })
@@ -553,50 +654,28 @@ export async function inspectPackedSupportSampling() {
     canvas.getContext('2d').drawImage(source, sourceX, sourceY, width, height, 0, 0, width, height)
     const whole = Texture.from(canvas)
     const reference = slice ? new Texture({ source: whole.source, frame: new Rectangle(...slice) }) : whole
-    const trim = texture.trim
-    const originalX = texture.frame.x - trim.x - (slice?.[0] ?? 0)
-    const originalY = texture.frame.y - trim.y - (slice?.[1] ?? 0)
-    const matchingCanvas = document.createElement('canvas')
-    matchingCanvas.width = texture.source.width; matchingCanvas.height = texture.source.height
-    const matchingContext = matchingCanvas.getContext('2d')
-    matchingContext.imageSmoothingEnabled = false
-    // Independent original pixels with two-texel edge extrusion; preserve the
-    // atlas denominator and coordinate origin without using product clamping.
-    for (let y = -1; y <= 1; y += 1) for (let x = -1; x <= 1; x += 1) {
-      matchingContext.drawImage(canvas,
-        x < 0 ? 0 : x > 0 ? width - 1 : 0, y < 0 ? 0 : y > 0 ? height - 1 : 0,
-        x === 0 ? width : 1, y === 0 ? height : 1,
-        originalX + (x < 0 ? -2 : x > 0 ? width : 0), originalY + (y < 0 ? -2 : y > 0 ? height : 0),
-        x === 0 ? width : 2, y === 0 ? height : 2)
-    }
-    const matchingPage = Texture.from(matchingCanvas)
-    const matchingReference = new Texture({ source: matchingPage.source,
-      frame: new Rectangle(originalX + (slice?.[0] ?? 0), originalY + (slice?.[1] ?? 0), slice?.[2] ?? width, slice?.[3] ?? height) })
-    const sourcePixels = document.createElement('canvas')
-    sourcePixels.width = texture.frame.width; sourcePixels.height = texture.frame.height
-    const sourceContext = sourcePixels.getContext('2d')
-    sourceContext.drawImage(texture.source.resource, texture.frame.x, texture.frame.y, texture.frame.width, texture.frame.height,
-      0, 0, texture.frame.width, texture.frame.height)
-    const sourcePixelMaximumDelta = compare(sourceContext.getImageData(0, 0, sourcePixels.width, sourcePixels.height).data,
-      canvas.getContext('2d').getImageData(trim.x + (slice?.[0] ?? 0), trim.y + (slice?.[1] ?? 0), trim.width, trim.height).data).maximumDelta
+    const independent = independentPackedReference(texture, canvas, slice)
     const candidate = makeDrawable(texture, 'sprite')
     const control = makeDrawable(reference, 'sprite')
-    const matchingControl = makeDrawable(matchingReference, 'sprite')
+    const matchingControl = makeDrawable(independent.reference, 'sprite')
     try {
       for (const scale of [1.111, 2.25]) {
         const actual = render(app, target, candidate, scale, .125)
-        const expected = render(app, target, control, scale, .125)
+        const fullImageComparison = compare(actual, render(app, target, control, scale, .125))
+        const expected = render(app, target, matchingControl, scale, .125)
         const comparison = compare(actual, expected)
         const peaks = []
         for (let pixel = 0; pixel < actual.length / 4 && peaks.length < 3; pixel += 1) {
           if (comparison.maximumDelta < 2 || ![0, 1, 2, 3].some(channel => Math.abs(actual[pixel * 4 + channel] - expected[pixel * 4 + channel]) === comparison.maximumDelta)) continue
           peaks.push({ x: pixel % SIZE, y: Math.floor(pixel / SIZE), actual: Array.from(actual.slice(pixel * 4, pixel * 4 + 4)), expected: Array.from(expected.slice(pixel * 4, pixel * 4 + 4)) })
         }
-        rows.push({ member, scale, ...comparison, sourcePixelMaximumDelta, peaks,
-          sameCoordinates: compare(actual, render(app, target, matchingControl, scale, .125)) })
+        rows.push({ member, scale, ...comparison, peaks, fullImageComparison,
+          sourcePixelMaximumDelta: independent.sourcePixelMaximumDelta,
+          geometryMatchesOriginal: independent.geometryMatchesOriginal,
+          expectedGeometry: independent.expectedGeometry })
       }
     } finally {
-      candidate.destroy(); control.destroy(); matchingControl.destroy(); matchingReference.destroy(false); matchingPage.destroy(true)
+      candidate.destroy(); control.destroy(); matchingControl.destroy(); independent.reference.destroy(true)
       if (slice) reference.destroy(false); whole.destroy(true)
     }
   }

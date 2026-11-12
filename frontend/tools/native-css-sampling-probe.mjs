@@ -94,39 +94,60 @@ export async function mountCssSampling(index) {
 }
 
 
-// Replace the page image with an independent original-record crop. The actual
-// component's transforms, clipping, source slice and logical geometry stay intact.
+// Replace the page image with independently isolated original-record pixels.
+// The component's transforms, clipping, source slice and geometry stay intact.
 export async function isolateCssSamplingReference() {
   const { atlas, record, source, role } = current
+  const authored = role.startsWith('authored-')
   const definition = role === 'packed-player' ? { frame: [0, 0, 170, 170] } : role.startsWith('authored-')
     ? { frame: current.frame } : role === 'glyph' ? nativeUiFont('body').glyphs['105'] : nativeUiRecord(atlas, record)
   const [frameX, frameY, width, height] = definition.frame
   const [atlasWidth, atlasHeight] = role.startsWith('authored-') || role === 'packed-player'
     ? [source.width, source.height] : nativeUiAtlas(atlas).dimensions
-  const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.ceil(width)); canvas.height = Math.max(1, Math.ceil(height))
-  canvas.getContext('2d').drawImage(source, frameX, frameY, width, height, 0, 0, canvas.width, canvas.height)
-  const url = `url("${canvas.toDataURL()}")`
+  const canvas = document.createElement('canvas')
+  canvas.width = authored ? atlasWidth : Math.max(1, Math.ceil(width))
+  canvas.height = authored ? atlasHeight : Math.max(1, Math.ceil(height))
+  const context = canvas.getContext('2d')
+  if (authored) {
+    // Pixelated CSS can rasterize an 8-pixel crop differently from its 4080-pixel
+    // page. Preserve dimensions, opacity and texel positions while replacing all
+    // pixels outside the record's integer support with a color absent from the fixture.
+    context.fillStyle = '#ffff00'; context.fillRect(0, 0, canvas.width, canvas.height)
+    const left = Math.floor(frameX); const top = Math.floor(frameY)
+    const supportWidth = Math.ceil(frameX + width) - left
+    const supportHeight = Math.ceil(frameY + height) - top
+    context.drawImage(source, left, top, supportWidth, supportHeight, left, top, supportWidth, supportHeight)
+  } else {
+    context.drawImage(source, frameX, frameY, width, height, 0, 0, canvas.width, canvas.height)
+  }
+  const reference = new Image(); reference.src = canvas.toDataURL()
+  await reference.decode()
+  const url = `url("${reference.src}")`
   if (role === 'packed-player') {
     Object.assign(host.firstElementChild.style, { backgroundImage: url, backgroundSize: `${width}px ${height}px`,
       backgroundPosition: '0 0', left: '0', top: '0', width: `${width}px`, height: `${height}px` })
     await new Promise(requestAnimationFrame)
     return
   }
+  let replacements = 0
   for (const element of host.querySelectorAll('*')) {
     for (const prefix of ['background', 'mask']) {
       const image = element.style[`${prefix}Image`]
       if (!image || image === 'none' || !image.includes('url(')) continue
       const imageUrl = image.match(/url\(["']?([^"')]+)/)?.[1]
       if (!imageUrl || new URL(imageUrl, location.href).href !== source.src) continue
+      element.style[`${prefix}Image`] = url
+      replacements += 1
+      if (authored) continue
       const dimensions = element.style[`${prefix}Size`].split(' ').map(Number.parseFloat)
       const scaleX = dimensions[0] / atlasWidth
       const scaleY = dimensions[1] / atlasHeight
       const position = element.style[`${prefix}Position`].split(' ').map(Number.parseFloat)
-      element.style[`${prefix}Image`] = url
       element.style[`${prefix}Size`] = `${width * scaleX}px ${height * scaleY}px`
       element.style[`${prefix}Position`] = `${position[0] + frameX * scaleX}px ${position[1] + frameY * scaleY}px`
     }
   }
+  if (authored && replacements !== 1) throw new Error(`Expected one authored background replacement, got ${replacements}`)
   await new Promise(requestAnimationFrame)
 }
 

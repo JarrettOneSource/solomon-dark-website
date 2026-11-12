@@ -83,6 +83,11 @@ try {
       assert.ok(row.maximumDelta <= 2, `world texture must match its independently isolated original image: ${JSON.stringify(row)}`)
       assert.ok(row.visiblePixels > 0, JSON.stringify(row))
     }
+    for (const row of [...sourceFamilies.paintings, ...sourceFamilies.packedSupport]) {
+      assert.equal(row.geometryMatchesOriginal, true, `packed geometry must match original alpha support: ${JSON.stringify(row)}`)
+      assert.ok(row.sourcePixelMaximumDelta <= 2, `packed source pixels must match the independent original: ${JSON.stringify(row)}`)
+    }
+    assert.equal(sourceFamilies.authored.wearable.geometryMatchesFixture, true)
     for (const role of ['icon', 'sprite', 'fractional', 'wearable', 'sharedFilterMutation']) {
       const row = sourceFamilies.authored[role]
       assert.ok(row.maximumDelta <= 2, `authored ${role} must keep its own frame and sampler: ${JSON.stringify(row)}`)

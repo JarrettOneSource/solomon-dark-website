@@ -2841,7 +2841,9 @@ comparisons are exact, with separate samplers and retired owned sources. Another
 that existing tolerance. Their source texels are exact against the original
 images, and independent edge-extruded references preserving atlas dimensions
 and coordinate origins also remain within two units; this does not establish a
-further foreign-art defect. CSS packed support is independently red-to-green,
+further foreign-art defect. Those observations used Metal; the SwiftShader
+qualification below corrects the independent reference before extending that
+claim to another backend. CSS packed support is independently red-to-green,
 without increasing that GPU tolerance or relaxing the CSS two-unit assertion.
 
 All focused browser page/console/failed-response arrays are empty. The canonical
@@ -2849,6 +2851,72 @@ material smoke retains every source-family and 29 CSS owner rows. Composed menu,
 trader/room, combat, resize, Unforge and saved-return journeys and the final
 combined/release gates remain separate coordinator work; these fixture results
 do not claim those journeys or installed behavior.
+
+### Independent packed-image GPU reference on SwiftShader
+
+Website `6444e623` passes both canonical Mac gates, but the additional Linux
+workflow `43293424309` fails the packed-image comparison. The same Chrome
+SwiftShader failure reproduces on M2 without changing product source: all ten
+Painting frames at scale 1.111 have alpha peaks of 8 or 12 units; loose-native
+controls pass. Packed Hub/player rows also differ, and the nearest authored
+wearable has ten differing channels with a peak of 255. These failures are not
+accepted as tolerance exceptions.
+
+The Painting reference draws the complete untrimmed image while the candidate
+draws the packed support. Rounding transformed vertices to SwiftShader's
+1/16-pixel raster grid changes their interpolation despite an equal ideal UV
+mapping. An independent calculation using original pixels, bilinear sampling
+and the existing alpha blend predicts all 30 logged Painting alpha peaks
+exactly. The packed source RGBA matches the original. Matching only source
+dimensions and atlas origin leaves the unequal geometry and does not remove
+this discrepancy. The nearest comparison separately changes its source width
+from 4,080 to 170, allowing UV rounding to choose opposite texels at a tie.
+
+The test reference must derive the original nonzero-alpha extent, expand by
+one transparent texel within the logical cell, intersect any requested slice,
+and independently assert candidate logical/trim/frame dimensions. It then
+places original pixels in a separate page with matching dimensions and draws
+that derived support, without calling the product support or sample-clamp
+helpers. A separate source-pixel comparison prevents incorrect atlas placement
+from gaining a self-consistent reference. The authored nearest reference uses
+the independently generated 4,080-by-170 fixture and explicit 170-by-170 frame.
+The old full-image and cross-size results remain diagnostic. The two-unit GPU
+tolerance and every source-family assertion remain in place. The corrected M2
+SwiftShader run gives exact pixels for all 20 Painting and 20 packed-support
+rows, source-pixel readback within one unit and matching independently derived geometry. The
+nearest wearable also becomes exact while its old cross-size diagnostic still
+differs on ten channels. All later GPU/material assertions pass; this run then
+fails the separate CSS authored-image comparison described below, so the full
+smoke is not yet accepted.
+
+The CSS probe similarly replaces the 4,080-by-170 pixelated authored sheet with
+an 8-by-8 crop while preserving its displayed size. On SwiftShader this changes
+checker boundaries: enemy/powerup/spell integer rows have peaks 255/255/248;
+their fractional rows remain exact. Repeated captures are byte-identical. A
+direct same-size re-encoded source and then a same-size reference replacing
+every texel outside the selected record with opaque yellow both match exactly.
+Thus the reference must retain source dimensions, texel coordinates and exact
+CSS geometry, changing only the selected image. All outside texels become a
+color absent from the fixture, so incorrect neighboring sampling still fails.
+Fractional rectangles retain their intersecting integer texels. The reference
+is decoded before replacement, and exactly one authored background replacement
+is required. The six authored rows and two-unit limit remain unchanged.
+A separate sequential replacement diagnostic changes the enemy raster by up
+to five units when the original URL is restored, before its small-crop control.
+That cause remains unresolved; this test sequencing limit is retained and is
+not used as the direct comparison.
+
+The complete corrected material/CSS smoke passes on M2 with actual ANGLE Metal
+and ANGLE Vulkan SwiftShader backends. Both retain 144 native rows, 25 record
+controls, 24 loose-native rows, 20 Painting rows, 20 packed-support rows, all
+material/lifetime controls and 29 CSS cases. Packed rendered comparisons and
+the nearest wearable are exact; every independently derived support geometry
+matches, and the separate Canvas source readback differs by at most one unit.
+All six authored CSS rows are exact on both backends; the overall CSS maximum
+is one on Metal and two on SwiftShader. Browser console/page/failed-response
+arrays are empty. Only the three test helpers and this evidence update change;
+product source, thresholds and quality configuration remain unchanged. Complete
+canonical validation and hosted CI for the corrected commit remain required.
 
 
 ### Rust texture allocation during retained draws
