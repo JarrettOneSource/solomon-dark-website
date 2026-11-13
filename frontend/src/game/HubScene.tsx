@@ -1,4 +1,5 @@
 import { useHotbar } from './HotbarControls.tsx'
+import { placePartyChip } from './party-chip-placement.ts'
 import {
   useEffect,
   useLayoutEffect,
@@ -231,6 +232,7 @@ export default function HubScene({
   })
   const sceneRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<HTMLDivElement>(null)
+  const partyPanelRef = useRef<HTMLElement>(null)
   const worldSpeechesRef = useRef(worldSpeeches)
   worldSpeechesRef.current = worldSpeeches
   const rendererRef = useRef<HubWorldRenderer | null>(null)
@@ -310,6 +312,8 @@ export default function HubScene({
   ))
   const [memorial, setMemorial] = useState(hubInitialSnapshot.world.memorial)
   const coarsePointer = useCoarsePointer()
+  const coarsePointerRef = useRef(coarsePointer)
+  coarsePointerRef.current = coarsePointer
   // Touch: whatever hangs from the chip's header (the rows tapped open, an action error
   // line) makes the ally roster under the chip yield. Invitations are a message box over
   // the scene and leave the column alone.
@@ -750,6 +754,24 @@ export default function HubScene({
         scene.dataset.localPlayerScreenX = `${diagnostics.localPlayerScreenX}`
         scene.dataset.localPlayerScreenY = `${diagnostics.localPlayerScreenY}`
       },
+      onGuidanceBounds: (guidance) => {
+        const panel = partyPanelRef.current
+        if (!panel) return
+        const layout = viewportRef.current
+        const coarse = coarsePointerRef.current
+        const scale = coarse ? 0.55 : layout.displayScale
+        const position = placePartyChip({
+          x: coarse ? 6 : 11 * scale,
+          y: coarse ? 54 : 174 * scale,
+          width: panel.offsetWidth * scale,
+          height: panel.offsetHeight * scale,
+        }, {
+          width: layout.width * layout.displayScale,
+          height: layout.height * layout.displayScale,
+        }, guidance)
+        panel.style.left = `${position.x / layout.displayScale}px`
+        panel.style.top = `${position.y / layout.displayScale}px`
+      },
       playerId,
       settings: settingsRef.current,
       viewport: viewportRef.current,
@@ -1077,6 +1099,7 @@ export default function HubScene({
 
         {partyState && partyChip ? (
           <section
+            ref={partyPanelRef}
             className="hub-party-panel"
             aria-label="Party"
             data-party-id={partyState.party.id}

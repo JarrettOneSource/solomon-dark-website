@@ -114,6 +114,54 @@ No member is blocked by the browser platform.
 
 ## Web implementation consequence
 
+### Party composition and maintained Rust presentation
+
+The fixed Party card could cover the world callout when the camera moved.
+Party has no retail counterpart (ledger 136). Both clients now choose its nearest
+clear on-screen position using the rendered guidance bounds and the actual card
+height. The native callout keeps its authored anchor. Both active directional
+hints reserve space between blink frames so Party does not oscillate with their timer.
+This placement is an intentional social-interface extension, not a retail rule.
+
+Pixi excludes invisible sprites from `getBounds()`. Active hint sprites therefore
+stay visible to its geometry traversal while `renderable` controls the blink.
+The browser regression measures both rectangles throughout bright and dark phases.
+
+The Rust simulation already provided the complete onboarding plan, but its
+client ignored the `CourtyardOnboarding` band and never consumed that plan.
+`HubGuidanceView` now paints the existing walk-to-talk art/text in that band and
+both clamped directional arrows in the screen-space pass. Authority, ten help
+rows, acknowledgement, checkpoint semantics and ordinary NPC marker ownership
+remain unchanged. The earlier simulation-only golden test did not qualify this
+missing presentation path.
+
+The tracked `UI.bundle` supplies UI 88 as a 16 by 21 pixel crop registered
+inside a 116 by 128 logical box. Its centered ink spans `(-9,-10)` to `(7,11)`.
+Render that registered crop with the helper's rotation, and reserve the rotated
+logical box, matching the maintained Pixi sprite. Stretching the crop or using
+its ink dimensions as the logical size discards authored registration. UI 28
+retains its 58 by 61 pixel logical dimensions and zero registration offset.
+
+Follow-up membership and bounded qualification on November 13, 2026:
+
+- The pristine callout (UI 28 and Fonts medium glyphs), both UI 88 hints,
+  camera motion, bright/dark phases, all three acknowledgements, two saved
+  Leaves and Continue pass real built-client desktop and touch journeys.
+- Party controls, expanded/collapsed touch layouts and modal/dialogue suppression
+  pass those journeys at 1600x900, 1024x768 and 896x414. Desktop 414x896 retains
+  the world anchor; touch portrait retains the intentional landscape prompt.
+- Member/request/error rows use the measured card height. Pure placement tests
+  cover a tall card, two intersecting hints, off-screen hints and restoration
+  of the normal position. The existing courtyard/private-region guards remain
+  in their renderer owners; this change does not alter room transitions.
+- Rust's real UI-bundle regression verifies crop registration and logical bounds.
+  Website's `smoke:game:hub-party-guidance` and Rust's `hub-guidance.cjs` own the
+  affected browser journeys. Use a fresh private local host for each run.
+
+Other actor bubbles, story dialogue, authored tables and gameplay mutations
+retain the preceding evidence. Release and installed acceptance are separate
+from this local composition qualification.
+
 - Extend participant-private native NPC profile state with the complete
   ten-row help table. Fresh construction uses ten `true` rows; pre-v11 browser
   saves without the field migrate to acknowledged rows so an established web

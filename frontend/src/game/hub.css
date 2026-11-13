@@ -618,9 +618,8 @@
   cursor: pointer;
 }
 
-/* The party chip is the native kit's marble card (NativeUiPartyChip); this rule only
-   places it: under the stock skull and the frame counter, in stage pixels, above the
-   scene. */
+/* The chip starts below the skull. HubScene moves this added social card clear of
+   native College guidance using its rendered dimensions. */
 .hub-party-panel {
   position: absolute;
   z-index: 15000;

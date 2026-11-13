@@ -21,7 +21,7 @@ import type {
 import type { GameWorldSpeech } from '../world-speech-presentation.ts'
 import { deriveHubPlayerActivityItems } from '../hub-player-activity.ts'
 import { hubSouthernCameraTranslation } from '../hub-camera-presentation.ts'
-import { gameViewportWorldZoom, type GameViewportLayout } from './game-viewport.ts'
+import { gameViewportWorldZoom, type GameViewportBounds, type GameViewportLayout } from './game-viewport.ts'
 import {
   HUB_DIAGNOSTIC_WINDOW_FRAMES,
   hubStudentVisibilityDiagnosticsDue,
@@ -193,6 +193,7 @@ interface HubWorldRendererOptions {
   modAssets?: readonly GameModAsset[]
   now?: () => number
   onDiagnostics?: (diagnostics: HubRendererDiagnostics) => void
+  onGuidanceBounds?: (bounds: readonly GameViewportBounds[]) => void
   playerId: string
   settings?: HubWorldPresentationSettings
   viewport: GameViewportLayout
@@ -813,10 +814,17 @@ export async function createHubWorldRenderer(
         ? hubNpcOnboardingPlan(player.economy.npc.helpFlags, snapshot.tick, markerSurface)
         : []
       const directional = onboarding.filter(plan => plan.kind === 'directional')
+      // Hold the reservation between blink frames, so Party does not chase the arrows.
+      const activeDirectional = participant.region === 'courtyard'
+        ? hubNpcOnboardingPlan(player.economy.npc.helpFlags, 41, markerSurface)
+          .filter(plan => plan.kind === 'directional')
+        : []
       for (let index = 0; index < npcDirectionalHints.length; index += 1) {
         const sprite = npcDirectionalHints[index]!
-        const plan = directional[index]
+        const plan = activeDirectional[index]
         sprite.visible = plan !== undefined
+        // Pixi excludes invisible sprites from bounds, even when measured directly.
+        sprite.renderable = plan !== undefined && directional.some(hint => hint.target === plan.target)
         if (!plan) continue
         const actor = NATIVE_HUB_NPC_CATALOG.interactions[plan.target].geometry.position
         const worldPoint = {
@@ -922,6 +930,21 @@ export async function createHubWorldRenderer(
         }),
       ))
       application.render()
+      const guidanceBounds = []
+      const callout = inCourtyard ? courtyardScene.onboardingBounds : null
+      if (callout) guidanceBounds.push(callout)
+      for (let index = 0; index < activeDirectional.length; index += 1) {
+        const { x, y, width, height } = npcDirectionalHints[index]!.getBounds()
+        guidanceBounds.push({ x, y, width, height })
+      }
+      const screenGuidanceBounds = guidanceBounds.map(bounds => ({
+        x: bounds.x * viewport.displayScale,
+        y: bounds.y * viewport.displayScale,
+        width: bounds.width * viewport.displayScale,
+        height: bounds.height * viewport.displayScale,
+      }))
+      canvas.dataset.npcGuidanceBounds = JSON.stringify(screenGuidanceBounds)
+      options.onGuidanceBounds?.(screenGuidanceBounds)
       updateFrameDiagnostics(snapshot)
       if (frameCount % HUB_DIAGNOSTIC_WINDOW_FRAMES !== 0) return
       const averageFrameMs = frameTimeTotal / HUB_DIAGNOSTIC_WINDOW_FRAMES

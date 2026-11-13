@@ -405,6 +405,12 @@ export class HubWorldScene {
     return this.teacher.frame
   }
 
+  get onboardingBounds(): { x: number; y: number; width: number; height: number } | null {
+    if (!this.walkToTalk.container.visible) return null
+    const { x, y, width, height } = this.walkToTalk.container.getBounds()
+    return { x, y, width, height }
+  }
+
   get teacherBurst(): HubTeacherBurstPresentation {
     return this.teacher.burstPresentation
   }
