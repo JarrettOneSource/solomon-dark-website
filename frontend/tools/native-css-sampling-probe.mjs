@@ -89,6 +89,12 @@ export async function mountCssSampling(index) {
     ? '/api/game/content/sampling-test-tight-sheet' : nativeUiAtlasSource(atlas)
   await source.decode()
   current = { ...current, source }
+  if (role === 'packed-player') {
+    // The component uses a packed page, separate from the original reference sheet.
+    const packed = new Image()
+    packed.src = host.firstElementChild.style.backgroundImage.match(/url\(["']?([^"')]+)/)[1]
+    await packed.decode()
+  }
   await new Promise(requestAnimationFrame)
   for (const animation of host.getAnimations({ subtree: true })) { animation.pause(); animation.currentTime = 0 }
 }
