@@ -1,5 +1,38 @@
 # 2026-08-22 — Party social presentation, player cards, and host-routed whispers
 
+## Maintained Rust Party error presentation
+
+The November 13, 2026 College-guidance review found the same Report 04 cause
+in Rust `e0d6539d`: `SocialUi::paint_party_chip` shortens every `party_status`
+through `fit_party_menu_text(..., Medium, 188, 0.85)` and reserves one 22-pixel
+line. The full rejection reaches `party_error` or `receive_hosted_message`
+before this presentation-only loss. The menu sibling has a 680-pixel line;
+roster-name shortening remains its separate bounded-identity contract.
+
+The original message `1551759813929599017` was reread from channel
+`1542255501855825960` on November 13 with nearby messages. Its text and original
+attachment are unchanged, with no withdrawal or edit; the existing completion
+reaction records the earlier Website correction and is retained. Its original
+image visibly ends the message at `That invitation is alread`.
+
+The maintained Rust card now follows the existing complete-message policy below.
+It uses the stock text wrapper with the existing 188-pixel width, 0.85 scale,
+22-pixel pitch and 24-pixel inset. All lines are measured before member and
+request rows, and the complete card height feeds guidance avoidance. Native
+fonts, rejection wording, authority and name fitting retain their contracts.
+
+Mac Chrome reproduced the one-line cutoff before the correction. Final desktop
+and touch journeys pass all 14 distinct messages (15 enum reasons, with the
+null fallback sharing `party-missing`), replacement/removal, both roster rows,
+and touch collapse/expansion. All 19 original images were reviewed: complete
+text remains within the card and clear of the rows. These tests use a real
+native host and ordinary controls with explicit command-response fixtures;
+they qualify presentation, not host rejection policy. A focused menu test
+also retains all 15 enum messages on its existing 680-pixel line. The complete
+Rust source gate passes, as does the Website canonical gate with no runtime
+change needed for its already-correct error layout. Installed/public acceptance
+belongs to the release record, separate from these local results.
+
 ## 2026-09-22 — Report 04: complete party action messages
 
 ### Evidence recorded before implementation
