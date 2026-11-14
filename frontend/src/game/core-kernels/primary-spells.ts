@@ -1411,14 +1411,8 @@ export function stepPrimarySpells(context: PrimarySpellTickContext): PrimarySpel
     }
 
     if (acceptedCast) {
-      nextPlayer = {
-        ...nextPlayer,
-        primaryCast: {
-          ...nextPlayer.primaryCast,
-          lastWeldPlaybackRate: null,
-          lastWeldSoundVariant: null,
-        },
-      }
+      // A snapshot may span the previous emission and this windup. Its audio
+      // metadata belongs to the emission counter until another shot replaces it.
       if (authority.primarySkill.kind === 'weld') {
         if (authority.primarySkill.castKind !== 'one-shot') {
           primaryCast = { ...nextPlayer.primaryCast, channelActive: true }

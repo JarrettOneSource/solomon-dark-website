@@ -112,11 +112,17 @@ export class PrimarySpellAudioSynchronizer {
         const activeWeldBuildId = player.progression.selectedPrimarySkillId === 52
           ? nativeWeldBuildId(player.progression.weldBuildId)
           : null
+        // Selection retains global counters. Establish a new audio baseline
+        // before attributing those counters to the newly selected spell.
+        const samePrimary = player.progression.selectedPrimarySkillId
+          === previous.progression.selectedPrimarySkillId
+          && (activeWeldBuildId === null
+            || activeWeldBuildId === nativeWeldBuildId(previous.progression.weldBuildId))
         const primaryElement = selectedPrimaryElement(
           player.progression.selectedPrimarySkillId,
           player.config.element,
         )
-        if (player.primaryCast.castSequence > previous.primaryCast.castSequence) {
+        if (samePrimary && player.primaryCast.castSequence > previous.primaryCast.castSequence) {
           if (activeWeldBuildId !== null) {
             if (!isWeldOneShot(activeWeldBuildId)) {
               for (let sequence = previous.primaryCast.castSequence;
@@ -141,7 +147,7 @@ export class PrimarySpellAudioSynchronizer {
             }
           }
         }
-        if (player.primaryCast.fizzleSequence > previous.primaryCast.fizzleSequence) {
+        if (samePrimary && player.primaryCast.fizzleSequence > previous.primaryCast.fizzleSequence) {
           const earthVolume = primaryElement === 'earth'
             ? this.earthFizzleVolume(snapshot, playerId, volume)
             : volume
@@ -150,7 +156,7 @@ export class PrimarySpellAudioSynchronizer {
             volume: earthVolume,
           })
         }
-        if (player.primaryCast.emissionSequence > previous.primaryCast.emissionSequence) {
+        if (samePrimary && player.primaryCast.emissionSequence > previous.primaryCast.emissionSequence) {
           if (activeWeldBuildId !== null && isWeldOneShot(activeWeldBuildId)) {
             const playbackRate = player.primaryCast.lastWeldPlaybackRate
             if (playbackRate === null) {

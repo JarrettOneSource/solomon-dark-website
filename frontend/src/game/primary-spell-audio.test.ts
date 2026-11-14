@@ -432,6 +432,25 @@ test('plays ordinary and Ethereal Boulder terminal sound pairs from saved charge
   synchronizer.destroy()
 })
 
+test('changing primary selection does not replay the previous spell emission', () => {
+  const initial = createGameSnapshot(simulation('ether'), PLAYER_ID)
+  const audio = new RecordingAudio()
+  const synchronizer = new PrimarySpellAudioSynchronizer(
+    audio as unknown as GameAudioDirector, PLAYER_ID, initial,
+  )
+  // The skipped snapshot emitted Ether, then the player selected Ball Lightning.
+  synchronizer.update(weldedSnapshot(initial, 1002, { emissionSequence: 1 }))
+  assert.deepEqual(audio.sounds, [])
+  const emitted = weldedSnapshot(initial, 1002, {
+    emissionSequence: 2, lastWeldPlaybackRate: 1.125, lastWeldSoundVariant: 0,
+  })
+  synchronizer.update(emitted)
+  synchronizer.update(emitted)
+  assert.deepEqual(audio.sounds, ['throw-lightning-1'])
+  assert.deepEqual(audio.soundOptions, [{ playbackRate: 1.125, volume: 1 }])
+  synchronizer.destroy()
+})
+
 test('plays retained-rock weld creation at its authoritative randomized pitch', () => {
   const initial = weldedSnapshot(
     createGameSnapshot(simulation('earth'), PLAYER_ID),

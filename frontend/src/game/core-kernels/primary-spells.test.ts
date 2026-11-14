@@ -3367,3 +3367,28 @@ function weldedProfile(
     vector: { buildId, castKind, values },
   }
 }
+
+test('repeated Weld casts retain the last emission audio until the next emission', () => {
+  for (const buildId of [1000, 1001, 1002, 1009] as const) {
+    const profile = weldedProfile(buildId, 'one-shot', [8, 16, 2, 1.1, 1.5, 3, 10, 2, 3])
+    for (const weapon of [null, 'staff', 'wand'] as const) {
+      let state: DirectSpellHarness = { ...directSpellHarness('ether', 1, weapon), primarySkill: profile }
+      let restarts = 0
+      for (let tick = 0; tick < 500; tick += 1) {
+        const before = state.players[PLAYER_ID]!.primaryCast
+        state = stepSpellKernel(state, true, 10_000, true, () => true, profile,
+          () => true, 1.8).state
+        const after = state.players[PLAYER_ID]!.primaryCast
+        if (before.emissionSequence > 0 && after.emissionSequence === before.emissionSequence) {
+          assert.deepEqual(
+            [after.lastWeldPlaybackRate, after.lastWeldSoundVariant],
+            [before.lastWeldPlaybackRate, before.lastWeldSoundVariant],
+            `${buildId}/${weapon} tick ${tick}: snapshots may skip the emission tick`,
+          )
+          if (after.castSequence > before.castSequence) restarts += 1
+        }
+      }
+      assert.ok(restarts > 2, `exercise repeated cast starts for ${buildId}/${weapon}`)
+    }
+  }
+})

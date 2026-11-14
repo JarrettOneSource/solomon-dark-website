@@ -43,6 +43,25 @@
 > Flame presentation and death-payload corrections above supersede it within
 > their stated scope.
 
+## Snapshot audio retention
+
+The native one-shot handlers emit sound at projectile birth. The port transports
+that emission counter with its accepted pitch and variant. Starting another cast
+must retain those values until a new emission replaces them: a network snapshot
+can span both the first emission and the next cast's windup. Clearing the values
+at acceptance leaves an advancing counter without its sound and crashes both
+audio projectors. The original report 87 save reproduced the Rust panic; direct
+held-cast regressions reproduce the shared producer error in both implementations.
+
+This transport rule applies to Burning Bolt, Frost Missile, Ball Lightning and
+Crawling Shock, with bare hands, Staff and Wand. It changes no native pitch,
+variant, RNG draw, cast clock, projectile, mana debit or sound count. Selecting a
+different primary still retires that selection's audio metadata. Audio consumers
+establish a fresh baseline when the selected primary or active Weld changes,
+because retained counters may describe the preceding spell. A coalesced
+Ether-emission/selection regression reproduced the same crash in both consumers;
+the next accepted Weld emission must play once at its actual pitch and variant.
+
 ## Reopened parity boundary
 
 The first welded-primary integration correctly recovered the ten stat-vector
