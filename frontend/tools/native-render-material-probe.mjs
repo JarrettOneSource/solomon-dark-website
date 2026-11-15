@@ -41,9 +41,15 @@ function samplePixels(renderer, target) {
   return Array.from(pixels.slice(offset, offset + 4))
 }
 
-export async function renderNativeMaterialSamples() {
+export async function renderNativeMaterialSamples(onSample = () => {}) {
   const samples = []
   const contexts = []
+  const record = (...values) => {
+    for (const sample of values) {
+      onSample(sample)
+      samples.push(sample)
+    }
+  }
   for (const mode of ['fixed', 'arena']) {
     const app = new Application()
     await app.init({
@@ -64,9 +70,10 @@ export async function renderNativeMaterialSamples() {
       firstSprite.alpha = 128 / 255
       app.stage.addChild(firstSprite)
       app.renderer.render({ container: app.stage, target, clear: true, clearColor: [0, 0, 0, 0] })
-      samples.push({ mode, pixel: samplePixels(app.renderer, target), role: 'first-normal' })
+      const firstSample = { mode, pixel: samplePixels(app.renderer, target), role: 'first-normal' }
       app.stage.removeChild(firstSprite)
       firstSprite.destroy()
+      record(firstSample)
       const gradients = [
         { role: 'gradient', top: [255, 0, 0, 0], bottom: [0, 255, 0, 255] },
         { role: 'faded-gradient', top: [255, 0, 0, 64], bottom: [0, 255, 0, 127], groupAlpha: 128 / 255 },
@@ -104,33 +111,34 @@ export async function renderNativeMaterialSamples() {
                 retainedBufferCount: mesh.geometry.buffers.length === bufferCount,
                 pixel: drawSample(app, target, mesh),
               }
-              samples.push(sample)
               if (surface) surface.destroy()
               else { mesh.geometry.destroy(true); mesh.destroy() }
               sample.colorBufferDestroyed = colorBuffer.destroyed
+              record(sample)
             }
           }
         }
       }
-      samples.push(...uniformSamples(app, target, mode, retainedTextures))
-      samples.push(...uniformSamples(app, target, mode, retainedTextures, false, true))
-      samples.push(...uniformSamples(app, target, mode, retainedTextures))
-      samples.push(...retainedColorModeSamples(app, target, mode, retainedTextures))
-      samples.push(...drawableColorModeSamples(app, target, mode, retainedTextures))
-      samples.push(...textureOpacitySamples(app, target, mode, retainedTextures))
-      samples.push(...texturedCaptureSamples(app, target, mode, retainedTextures))
+      record(...uniformSamples(app, target, mode, retainedTextures))
+      record(...uniformSamples(app, target, mode, retainedTextures, false, true))
+      record(...uniformSamples(app, target, mode, retainedTextures))
+      record(...retainedColorModeSamples(app, target, mode, retainedTextures))
+      record(...drawableColorModeSamples(app, target, mode, retainedTextures))
+      record(...textureOpacitySamples(app, target, mode, retainedTextures))
+      record(...texturedCaptureSamples(app, target, mode, retainedTextures))
       for (const alpha of [0, 1, 128, 255]) {
         const texture = textureFromPixel([128, 64, 192, alpha])
         retainedTextures.push(texture)
         const sprite = new Sprite({ texture, width: size, height: size, blendMode: 'multiply' })
         app.stage.addChild(sprite)
         app.renderer.render({ container: app.stage, target, clear: true, clearColor: [1, 1, 1, 1] })
-        samples.push({ alpha, mode, pixel: samplePixels(app.renderer, target), role: 'multiply' })
+        const sample = { alpha, mode, pixel: samplePixels(app.renderer, target), role: 'multiply' }
         app.stage.removeChild(sprite)
         sprite.destroy()
+        record(sample)
       }
       if (mode === 'arena') {
-        samples.push(...particleBlendSamples(app, target, retainedTextures))
+        record(...particleBlendSamples(app, target, retainedTextures))
       }
       const previousGraphics = app.renderer.renderPipes.graphics['_adaptor'].shader
       const previousProgram = previousGraphics.glProgram
@@ -139,9 +147,9 @@ export async function renderNativeMaterialSamples() {
         previousShaderDestroyed: previousGraphics.resources === null,
         previousProgramDestroyed: previousProgram.vertex === null && previousProgram.fragment === null,
       })
-      samples.push(...uniformSamples(app, target, mode, retainedTextures, true))
-      samples.push(...drawableColorModeSamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
-      samples.push(...textureOpacitySamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
+      record(...uniformSamples(app, target, mode, retainedTextures, true))
+      record(...drawableColorModeSamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
+      record(...textureOpacitySamples(app, target, mode, retainedTextures).map(sample => ({ ...sample, restored: true })))
     } finally {
       target.destroy(true)
       pipeline?.destroy()

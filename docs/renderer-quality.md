@@ -8,6 +8,15 @@ alongside the shared editor, authoring shelf, frontend and backend checks.
 `frontend/tools/quality/scope.mjs` defines the renderer scope; its results do not
 claim coverage of every Website module.
 
+Mutation runs use the same Node tests and GPU assertions as the complete renderer
+checks. The GPU material checks run first and validate samples as they are
+produced while a mutant is active, so a detected failure stops the remaining
+GPU work. Unmutated coverage and browser qualification still collect every sample.
+The existing Stryker event recorder writes each completed mutant to
+`frontend/reports/renderer-quality/mutation/events`, retaining individual results
+if a hosted job is interrupted before its final report. The source scope and
+100% thresholds are unchanged.
+
 The Rust repository owns its renderer, native/WASM checks, desktop packages and
 browser/GPU acceptance. A Website artifact hash check verifies the supplied
 Rust payload's identity; it does not replace those Rust checks. Each maintained

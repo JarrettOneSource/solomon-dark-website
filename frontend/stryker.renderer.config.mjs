@@ -15,7 +15,9 @@ export default {
   concurrency: availableParallelism() >= 16 ? 4 : 2,
   timeoutMS: 10000,
   timeoutFactor: 2,
-  reporters: ['clear-text', 'progress', 'json', 'html'],
+  reporters: ['clear-text', 'progress', 'json', 'html', 'event-recorder'],
+  // Keep completed mutant identities even if the hosted job is interrupted.
+  eventReporter: { baseDir: 'reports/renderer-quality/mutation/events' },
   jsonReporter: { fileName: 'reports/renderer-quality/mutation/mutation.json' },
   htmlReporter: { fileName: 'reports/renderer-quality/mutation/index.html' },
   thresholds: { high: 100, low: 100, break: 100 },
