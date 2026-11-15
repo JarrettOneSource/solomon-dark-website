@@ -2751,6 +2751,10 @@ function normalizeWorld(
           ...waves,
           ...(sourceSchemaVersion < 33 ? legacySpiderWaveProgram(loadedBoneyard, waves) : {}),
           bossEncounters: sourceSchemaVersion < 34 ? defaults.waves?.bossEncounters ?? [] : waves.bossEncounters,
+          // Earlier upgrades could re-save the omitted field under a current schema.
+          skeletonBosses: waves.skeletonBosses === undefined
+            ? defaults.waves?.skeletonBosses ?? null
+            : waves.skeletonBosses,
           openingBursts: waves.openingBursts ?? [],
           openingReleaseThreshold: waves.openingReleaseThreshold ?? 0,
           portalPhaseIndex: waves.portalPhaseIndex ?? 0,

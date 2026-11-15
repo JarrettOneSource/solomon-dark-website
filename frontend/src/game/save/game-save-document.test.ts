@@ -3,7 +3,7 @@ import test from 'node:test'
 import { createNativeFacultyDeathSaveFixture } from '../../../tools/native-faculty-save-fixture.ts'
 import { createNativeWaterAuraActor, createNativeWaterHailActor } from '../core-kernels/air-water-spell-actors.ts'
 import type { BoneyardEnemySpawnIntent } from '../core-kernels/boneyard-wave-director.ts'
-import { BONEYARD_WAVE_ENEMY_TYPES } from '../core-kernels/boneyard-wave-director.ts'
+import { BONEYARD_WAVE_ENEMY_TYPES, stepBoneyardWaveDirector } from '../core-kernels/boneyard-wave-director.ts'
 import { hubCollegeAdmissionPreLoadout } from '../core-kernels/college-admission-lifecycle.ts'
 import { GAME_OVER_AUTOMATIC_EXIT_FADE_TICKS } from '../core-kernels/game-run.ts'
 import { NATIVE_WELD_COMPONENT_SKILL_IDS, nativeSkillPassesOfferEligibility } from '../core-kernels/player-progression.ts'
@@ -17,6 +17,7 @@ import { createNativeWeldPersistentActor, releaseNativeWeldPersistentActor } fro
 import { createNativeRng, drawNativeInteger } from '../core-kernels/native-rng.ts'
 import { nativeDesaturateColor } from '../core-kernels/native-color.ts'
 import { nativeFacultyRecipe } from '../core-kernels/native-survival-faculty.ts'
+import { NATIVE_SURVIVAL_BOSS_SOURCES } from '../core-kernels/native-survival-boss-catalog.ts'
 import { rollNativeStarterEquipmentAppearance } from '../core-kernels/native-starter-equipment.ts'
 import { NATIVE_TUTORIAL_CAMERA_LOCK_SETTLE_TICKS, nativeTutorialAmuletItem } from '../core-kernels/native-tutorial.ts'
 import { createNativeWorldManagerOrder } from '../core-kernels/native-world-manager-order.ts'
@@ -53,6 +54,88 @@ const GUEST = {
   displayName: 'Vibia',
   element: 'water',
 } as const
+
+for (const schema of [33, WEB_GAME_SAVE_SCHEMA_VERSION]) {
+  test(`schema ${schema} continuations missing skeleton boss state resume all twelve authored programs`, () => {
+    const sources = new Set<string>()
+    for (let index = 0; index < 12; index += 1) {
+      const seed = Buffer.alloc(16)
+      seed.writeUInt32BE(index)
+      const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', seed)!
+      sources.add(loadedBoneyard.sourceSha256)
+      const source = NATIVE_SURVIVAL_BOSS_SOURCES.find(row => row.sourceSha256 === loadedBoneyard.sourceSha256)!
+      let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+      if (state.world.kind !== 'boneyard' || state.world.waves === null) throw new Error('expected generated Boneyard')
+      state = { ...state, run: { ...state.run, phase: 'active' },
+        world: { ...state.world, arenaTransition: null, encounter: null,
+          waves: { ...state.world.waves, phase: 'wave-threshold' } } }
+      const document = JSON.parse(createGameSaveDocument({
+        integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state,
+      }))
+      downgradeSaveSchema(document, schema)
+      delete document.continuation.simulation.world.waves.skeletonBosses
+      const restored = restoreGameSaveDocument(JSON.stringify(document)).state
+      const resumed = stepGameSimulationTick(restored, {})
+      assert.equal(resumed.tick, restored.tick + 1)
+      if (resumed.world.kind !== 'boneyard' || resumed.world.waves === null) throw new Error('expected restored waves')
+      assert.deepEqual(resumed.world.waves.skeletonBosses, state.world.waves.skeletonBosses)
+      const context = { bounds: resumed.world.bounds, players: {}, tick: resumed.tick,
+        liveEnemyCount: 0, liveZombieCount: 0, liveBossCount: 0 }
+      for (const [name, program] of [['Ironmaw', source.ironmaw], ['Foulshaft', source.foulshaft]] as const) {
+        const step = stepBoneyardWaveDirector({ ...resumed.world.waves, waveOrdinal: program.waveOrdinal }, context)
+        const birth = step.spawnIntents.find(birth => birth.authoredRecipe?.name === name)
+        assert.equal(birth?.authoredRecipe?.uid, source.recipeUids[name])
+        assert.equal(step.director.skeletonBosses?.ironmawSpawned, name === 'Ironmaw')
+        assert.equal(step.director.skeletonBosses?.foulshaftPhase, name === 'Foulshaft' ? 'reinforcements' : 'eligible')
+        const missed = stepBoneyardWaveDirector({ ...resumed.world.waves, waveOrdinal: program.waveOrdinal + 1 }, context)
+        assert.equal(missed.spawnIntents.some(birth => birth.authoredRecipe?.name === name), false)
+      }
+    }
+    assert.deepEqual(sources, new Set(NATIVE_SURVIVAL_BOSS_SOURCES.map(source => source.sourceSha256)))
+  })
+}
+
+test('skeleton boss continuation preserves progress and explicit absence', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))!
+  const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  const document = JSON.parse(createGameSaveDocument({
+    integrity: 'local-only', loadedBoneyard, mods: [], modState: {}, playerId: 'owner', state,
+  }))
+  const waves = document.continuation.simulation.world.waves
+  const context = { bounds: loadedBoneyard.scene.bounds, players: {}, tick: 1,
+    liveEnemyCount: 1, liveZombieCount: 0, liveBossCount: 1 }
+  waves.phase = 'wave-threshold'
+  waves.waveOrdinal = NATIVE_SURVIVAL_BOSS_SOURCES.find(row => row.sourceSha256 === loadedBoneyard.sourceSha256)!.ironmaw.waveOrdinal
+  for (const phase of ['eligible', 'reinforcements', 'boss-wait', 'retired']) {
+    waves.skeletonBosses = { sourceSha256: loadedBoneyard.sourceSha256, ironmawSpawned: true,
+      foulshaftPhase: phase, foulshaftArchersRemaining: 3, foulshaftTicksRemaining: 25 }
+    const restored = restoreGameSaveDocument(JSON.stringify(document)).state
+    if (restored.world.kind !== 'boneyard' || restored.world.waves === null) throw new Error('expected waves')
+    assert.deepEqual(restored.world.waves.skeletonBosses, waves.skeletonBosses)
+    const step = stepBoneyardWaveDirector(restored.world.waves, context)
+    assert.equal(step.director.skeletonBosses?.foulshaftTicksRemaining,
+      phase === 'reinforcements' || phase === 'boss-wait' ? 24 : 25)
+    assert.equal(step.director.skeletonBosses?.ironmawSpawned, true)
+    assert.equal(step.spawnIntents.some(birth => birth.authoredRecipe?.name === 'Ironmaw'), false)
+  }
+  waves.skeletonBosses = null
+  const restored = restoreGameSaveDocument(JSON.stringify(document)).state
+  if (restored.world.kind !== 'boneyard' || restored.world.waves === null) throw new Error('expected waves')
+  assert.equal(stepBoneyardWaveDirector(restored.world.waves, context).director.skeletonBosses, null)
+})
+
+test('tutorial and custom continuations retain their absence of generated waves', () => {
+  const generated = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16))!
+  const custom = { ...generated, choice: { ...generated.choice, id: 'custom', source: 'mod' as const } }
+  for (const loadedBoneyard of [materializeStockTutorial(Buffer.alloc(16)), custom]) {
+    const state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+    const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+      mods: [], modState: {}, playerId: 'owner', state })
+    const restored = restoreGameSaveDocument(document).state
+    if (restored.world.kind !== 'boneyard') throw new Error('expected Boneyard')
+    assert.equal(restored.world.waves, null)
+  }
+})
 
 test('save byte admission keeps the exact UTF-8 limit without measuring ordinary small documents', () => {
   const guaranteedThreeByteLength = Math.floor(MAX_WEB_GAME_SAVE_BYTES / 3)

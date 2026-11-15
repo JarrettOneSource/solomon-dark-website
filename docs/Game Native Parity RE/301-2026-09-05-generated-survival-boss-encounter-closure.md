@@ -2276,3 +2276,46 @@ Acceptance is a genuine existing enemy-store/renderer regression before the corr
 | Eye, Mouth, Spit, Scream, Flair and death programs | out-of-system | separate producers; complete Discorporeal suite remains green |
 
 The four-line producer correction uses the existing Fade constructor constant, delayed body heading and exact float32 stores. It preserves all ten intended afterimages. The real built flow used a normal Raise Golem belt cast and a stock DemonSkull spawn through the shared Bite owner; ten snapshots appeared at tick 7685 and all were retired by 7725, with twelve repeated observations. This is shared-owner integration evidence, not a replay of the historical boss recipe/save. The public regressions cover all twelve authored sources and the heading/pose/target/fade dimensions. Exact runtime/test candidate `6ecd9247` passed the unchanged M5 all-mode `scripts/validate.sh` at 2026-10-07T00:20:16Z: 42 Python tests, 4,226 Node executions across 22 batches, no failed/cancelled/skipped tests, production builds and configured renderer quality gates with final failures empty. The built production-client/authoritative-host journey passed at 2026-10-07T00:29:02Z with all captured client, host, transport and wire error arrays empty. Five representative screenshots were inspected. Developer setup grants, native-family spawns and ordinary browser input qualify this private fixture; the original save and historical exact trajectory remain unavailable. Publication and live outcomes are recorded separately in the report archive. This acceptance addition changes documentation only.
+
+
+## Reopened continuation migration — November 15, 2026
+
+The sequence-24 installed audit found a production Pixi supervisor exit at
+01:54:20 UTC. A guest continuation reached tick 87319 and
+`stepNativeSkeletonBossProgram` read `sourceSha256` from an undefined program.
+The host's `simulation.tick_failed` and `process.uncaught_exception` records agree;
+systemd restarted it at 01:54:25. No diagnostic archive survived for that session,
+so the guest's exact original document and schema are unavailable.
+
+The causal trace identifies an omitted migration member. The schema-34 roster
+commit `bd93153c` added `waves.skeletonBosses`, but its save migration initializes
+only the sibling `bossEncounters`. Older missing skeleton state survives the
+Website normalizer and reaches the strict-null-only simulation branch. Rust's
+matching normalizer also omits the member; its optional state can disable the
+program instead of crashing. A failing Website save regression reproduced the
+same `sourceSha256` exception; a failing Rust regression showed Ironmaw missing
+at its authored wave. The earlier closure did not exercise absent-field legacy
+continuations through a resumed simulation tick.
+
+The correction belongs to continuation normalization, using the already recovered
+source-specific generated program. It must preserve an existing program's
+Ironmaw latch and Foulshaft phase/counters, preserve explicit null where no program
+is intended, and initialize an absent field from the loaded world's canonical
+constructor. Absence may also survive an earlier upgrade and re-save with a newer
+schema number. The current source-specific wave equality triggers must not be
+replaced with a guessed catch-up schedule. Both normalizers now implement that
+rule. The save-interface regressions cover schema 33 and current re-saves across
+all twelve sources, both boss births with their source-specific recipes, and no
+retroactive birth after a missed wave. They preserve the Ironmaw latch, all four
+Foulshaft phases and counters, explicit null, and the absence of generated waves
+in custom and Tutorial continuations. The focused tests fail before the repair
+and pass after it. Full gates, publication and installed acceptance belong to
+the release result; these regressions do not recover the unavailable guest save.
+
+| Member | Current disposition | Required check |
+| --- | --- | --- |
+| Missing Ironmaw/Foulshaft state, all twelve generated sources | exact-ported | Legacy and re-saved current envelopes restore and execute, using each source's exact recipe/wave data. |
+| Recorded Ironmaw latch and four Foulshaft phases | verified-already-at-parity | Continuation preserves progress and next-step births/timers. |
+| Explicit null, custom Boneyard and tutorial | verified-already-at-parity | No generated program is invented where the constructor supplies none. |
+| Heartmonger, Faculty, Discorporeal, Slumpgut, Portal and Spider migration siblings | verified-already-at-parity for this omission | The normalizer already initializes their historical fields; retained regression coverage remains required. |
+| Boss recipes, effects, reward and native tick programs | out-of-system | No new native behavior is inferred from the migration defect; this ledger's extracted recipes remain authoritative. |
