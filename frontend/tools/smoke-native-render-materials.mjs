@@ -53,6 +53,25 @@ try {
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
     console.log(JSON.stringify({ errors, measured }))
   } else {
+    const opaque = await page.evaluate(async () => {
+      const { inspectNativeOpaqueBatches } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueBatches()
+    })
+    console.log(JSON.stringify({ opaque }))
+    for (const name of ['first', 'updated', 'roundTrip']) {
+      assert.equal(opaque[name].candidateDraws, 1, `${name}: ordered normal/add NPM/PMA draws must share one opaque batch`)
+      assert.equal(opaque[name].candidateIndices, opaque[name].baselineIndices)
+      assert.ok(opaque[name].maximumDelta <= 2, JSON.stringify(opaque[name]))
+    }
+    assert.equal(opaque.target.changedChannels, 0, 'render-texture RGBA must remain byte-identical')
+    assert.equal(opaque.target.candidateDraws, opaque.target.baselineDraws)
+    const transforms = await page.evaluate(async () => {
+      const { compareNativeBatchTransforms } = await import('/tools/native-render-contract-probe.mjs')
+      return compareNativeBatchTransforms()
+    })
+    console.log(JSON.stringify({ transforms }))
+    assert.equal(transforms.length, 6)
+    assert.ok(transforms.every(row => row.changedChannels === 0 && row.visiblePixels > 1000 && row.reusedBatchShaders))
     const { samples, contexts } = await page.evaluate(async failFast => {
       const { renderNativeMaterialSamples } = await import('/tools/native-render-material-probe.mjs')
       const { expectedPixel } = await import('/tools/native-render-expectations.mjs')
@@ -83,6 +102,203 @@ try {
     assert.deepEqual(errors, { console: [], page: [], responses: [] })
     assert.deepEqual(failures, [], 'GPU output must match independent native RGBA interpolation and blending')
     assert.deepEqual(contexts, [{ previousShaderDestroyed: true, previousProgramDestroyed: true }])
+    const contracts = await page.evaluate(async () => {
+      const { inspectNativeRenderContracts } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativeRenderContracts()
+    })
+    console.log(JSON.stringify({ contracts }))
+    assert.deepEqual(contracts.sources.map(({ name, alphaMode, addressMode, scaleMode }) => (
+      [name, alphaMode, addressMode, scaleMode]
+    )), [
+      ['stock', 'no-premultiply-alpha', 'repeat', 'linear'],
+      ['point', 'no-premultiply-alpha', 'repeat', 'nearest'],
+      ['framed', 'no-premultiply-alpha', 'clamp-to-edge', 'linear'],
+      ['composited', 'premultiply-alpha-on-upload', 'clamp-to-edge', 'linear'],
+    ])
+    assert.ok(contracts.sources.every(({ pixel }) => pixel.every(channel => channel === 255)))
+    for (const grid of contracts.grids) {
+      assert.deepEqual(grid.initial, [255, 255, 255, 255])
+      assert.deepEqual(grid.before, [255, 255, 255, 255])
+      assert.deepEqual(grid.after, [63, 63, 63, 255])
+      assert.equal(grid.colors.length, grid.vertices * 4)
+      assert.equal(grid.colors.filter((_, index) => index % 4 !== 3).every(value => value === 63), true)
+      assert.equal(grid.removed && grid.meshDestroyed && grid.geometryDestroyed && grid.shaderDestroyed, true)
+      assert.equal(grid.borrowedTextureAlive, true)
+    }
+    assert.equal(contracts.liveGrids.length, 4)
+    for (const grid of contracts.liveGrids) {
+      assert.equal(grid.geometryRetained && grid.buffersRetained, true)
+      assert.equal(grid.positionsDelivered && grid.uvsDelivered && grid.indicesDelivered && grid.colorsDelivered, true)
+      assert.equal(grid.vertexCount, grid.enhanced ? 9 : 4)
+      assert.equal(grid.indexCount, grid.enhanced ? 24 : 6)
+      assert.equal(grid.colors.length, grid.vertexCount * 4)
+      assert.ok(grid.colors.every((value, index) => value === (index % 4 === 3 ? 255 : 127)))
+      assert.deepEqual(grid.pixel, [127, 127, 127, 255], 'live mode change must update the real GPU buffer shared by redraws')
+    }
+    assert.deepEqual(contracts.roads, {
+      countBefore: 5, countAfter: 3, countAfterEmpty: 3,
+      vertices: 40, indices: 90, meshes: 5, pixel: [128, 128, 128, 255], childrenAfterDestroy: 0,
+      resourcesDestroyed: true, textureAlive: true,
+    })
+    assert.deepEqual(contracts.detachedScene, { destroyed: true, count: 0 })
+    assert.deepEqual(contracts.missingRoad, { message: 'Native Road style 0 texture is unavailable', childrenAfterFailure: 0 })
+    const variants = await page.evaluate(async () => {
+      const { inspectNativeRendererVariants } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativeRendererVariants()
+    })
+    console.log(JSON.stringify({ variants }))
+    assert.deepEqual(variants.errors, ['uninitialized-fixed', 'uninitialized-arena', 'unsupported-renderer'].map(name => (
+      { name, message: 'Native materials require an initialized WebGL renderer' }
+    )))
+    assert.deepEqual(variants.variants, [
+      { name: 'sprite-only', pixel: [128, 128, 128, 64] },
+      { name: 'blend-only', pixel: [64, 64, 64, 64] },
+      { name: 'browser-overlay', pixel: [128, 128, 128, 128] },
+      { name: 'default-particle', pixel: [255, 255, 255, 255] },
+    ])
+    const pixelCenters = await page.evaluate(async () => {
+      const { inspectNativePixelCenterInstallations } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativePixelCenterInstallations()
+    })
+    assert.equal(pixelCenters.length, 2)
+    for (const control of pixelCenters) {
+      assert.equal(control.wrapped, control.enabled)
+      assert.ok(control.idempotent && control.targetDestroyed && control.contextLost)
+      assert.equal(control.rows.length, 15)
+      for (const row of control.rows) {
+        const phase = control.enabled ? 1 : 0
+        const y = row.isRoot ? -1 : 1
+        const expected = { a: 2 * row.resolution / row.width,
+          d: y * 2 * row.resolution / row.height,
+          tx: -1 + phase / row.width, ty: -y + y * phase / row.height }
+        assert.equal(row.isRoot, row.kind !== 'offscreen')
+        assert.equal(row.glError, 0)
+        for (const key of ['a', 'd', 'tx', 'ty']) {
+          assert.ok(Math.abs(row.projection[key] - expected[key]) < 1e-12,
+            JSON.stringify({ enabled: control.enabled, row, expected, key }))
+        }
+      }
+    }
+    console.log(JSON.stringify({ pixelCenters }))
+    const surfaceSampling = await page.evaluate(async () => {
+      const { inspectNativeSurfaceSampling } = await import('/tools/native-render-contract-probe.mjs')
+      return inspectNativeSurfaceSampling()
+    })
+    assert.deepEqual(surfaceSampling, [[160, 160, 160, 255], [160, 160, 160, 255]])
+    const staff = await page.evaluate(async () => {
+      const { compareNativeStaffFrames } = await import('/tools/native-render-staff-probe.mjs')
+      return compareNativeStaffFrames()
+    })
+    console.log(JSON.stringify({ staff }))
+    assert.equal(staff.frames.length, 6)
+    assert.ok(staff.frames.every(row => row.changedChannels === 0 && row.visiblePixels > 50))
+    // The capture shader requires a standalone aura, so each changed frame must
+    // upload its geometry once. Rendering must not upload it again.
+    assert.ok(staff.frames.every(row => row.updatePositionUpdates === 1 && row.renderPositionUpdates === 0))
+    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive && row.positionBufferUpdates === 3))
+    for (const options of [
+      { finishPremultiplied: false, installTextureAlphaShaders: false },
+      { finishPremultiplied: true, installTextureAlphaShaders: false },
+      { finishPremultiplied: false, installTextureAlphaShaders: true },
+      { finishPremultiplied: true, installTextureAlphaShaders: true },
+    ]) {
+      const lifetimes = await page.evaluate(async ({ finishPremultiplied, installTextureAlphaShaders }) => {
+        const { inspectNativeMaterialLifetimes } = await import('/tools/native-render-lifecycle-probe.mjs')
+        return inspectNativeMaterialLifetimes(finishPremultiplied, installTextureAlphaShaders)
+      }, options)
+      console.log(JSON.stringify({ options, lifetimes }))
+      for (const row of lifetimes.pixels) {
+        const expected = row.phase.includes('arena') ? [128, 86, 170, 255] : [128, 64, 192, 255]
+        assert.ok(row.pixel.every((channel, index) => Math.abs(channel - expected[index]) <= 1), JSON.stringify(row))
+        const batchSyncs = row.kind === 'mesh' ? 0 : Number(options.installTextureAlphaShaders) + Number(row.phase.includes('arena'))
+        const automaticSync = Number(options.installTextureAlphaShaders || row.phase.includes('arena'))
+        assert.equal(row.nativeUniformSyncs, batchSyncs + automaticSync, `${row.phase}/${row.kind} uniform synchronizations`)
+        assert.equal(row.nativeUniformUploads, 0, 'unchanged neutral color must not upload another GPU uniform')
+      }
+      for (const key of ['idempotent', 'previousShadersPreserved', 'retiredArenaShaders', 'replacedStockMesh', 'fixedShadersDestroyed', 'texturesAlive']) {
+        assert.equal(lifetimes[key], true, key)
+      }
+      assert.ok(lifetimes.batchLifetimes.every(Boolean))
+    }
+    for (const installTextureAlphaShaders of [false, true]) {
+      const retainedMaterials = await page.evaluate(async installTextureAlphaShaders => {
+        const { inspectRetainedMaterialChanges } = await import('/tools/native-render-lifecycle-probe.mjs')
+        return inspectRetainedMaterialChanges(installTextureAlphaShaders)
+      }, installTextureAlphaShaders)
+      console.log(JSON.stringify({ installTextureAlphaShaders, retainedMaterials }))
+      assert.equal(retainedMaterials.pixels.length, 8)
+      assert.equal(retainedMaterials.preservedUnusedMaterial, true)
+      for (const row of retainedMaterials.pixels) {
+        assert.deepEqual(row.pixel, row.phase === 'arena' ? [128, 86, 170, 255] : [128, 64, 192, 255])
+      }
+    }
+    const opaqueBoundaries = await page.evaluate(async () => {
+      const { inspectNativeOpaqueBoundaries } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueBoundaries()
+    })
+    console.log(JSON.stringify({ opaqueBoundaries }))
+    for (const row of opaqueBoundaries) {
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+      if (['transparent', 'child-cache', 'no-group', 'outside-root', 'foreign-layer'].includes(row.role)
+        || ['changed', 'retained'].includes(row.phase) && row.role !== 'context') {
+        assert.equal(row.changedChannels, 0, JSON.stringify(row))
+        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
+      } else assert.equal(row.candidateDraws, 1, JSON.stringify(row))
+    }
+    const opaqueTransport = await page.evaluate(async () => {
+      const { inspectNativeOpaqueTransport } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueTransport()
+    })
+    console.log(JSON.stringify({ opaqueTransport }))
+    for (const row of opaqueTransport) {
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+      if (row.role === 'texture-capacity') assert.equal(row.candidateDraws, Math.ceil(40 / row.maxTextures))
+      if (row.role === 'gradient' || row.role === 'diffuse') assert.equal(row.candidateDraws, 1)
+      if (row.role === 'empty') assert.equal(row.candidateDraws, 0)
+      if (row.role === 'topology' || row.role === 'mixed-topology' || row.role === 'explicit-npm-pma') {
+        assert.equal(row.changedChannels, 0, JSON.stringify(row))
+        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
+      }
+    }
+    const opaqueRebuilds = await page.evaluate(async () => {
+      const { inspectNativeOpaqueRebuilds } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueRebuilds()
+    })
+    console.log(JSON.stringify({ opaqueRebuilds }))
+    for (const [phase, row] of Object.entries(opaqueRebuilds)) {
+      assert.equal(row.candidateDraws, 1, `${phase}: existing texture slots must remain usable at capacity`)
+      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
+      assert.equal(row.memberCount * 6, row.candidateIndices, `${phase}: retained records must not keep retired drawables`)
+      assert.equal(row.onlyLiveMembers, true, JSON.stringify(row))
+      assert.equal(row.maximumTextures, row.expectedTextures, JSON.stringify(row))
+      assert.ok(row.maximumTextures <= row.limit, JSON.stringify(row))
+      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
+    }
+    const opaqueOwnership = await page.evaluate(async () => {
+      const { inspectNativeOpaqueInstructionOwnership } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueInstructionOwnership()
+    })
+    console.log(JSON.stringify({ opaqueOwnership }))
+    assert.equal(opaqueOwnership.candidateDraws, 3, 'foreign normal-PMA elements retain a separate ordinary batch')
+    assert.equal(opaqueOwnership.candidateIndices, opaqueOwnership.baselineIndices)
+    assert.deepEqual(opaqueOwnership.eligibility, [true, false, true])
+    assert.equal(opaqueOwnership.originalRetired, true, 'reinstallation retires the old material owner')
+    assert.equal(opaqueOwnership.rebuilds, 0, 'unchanged and unrelated renders must preserve cached instructions')
+    assert.equal(opaqueOwnership.retained.changedChannels, 0)
+    assert.equal(opaqueOwnership.afterUnrelated.changedChannels, 0)
+    assert.ok(opaqueOwnership.maximumDelta <= 2)
+    const opaqueRetirement = await page.evaluate(async () => {
+      const { inspectNativeOpaqueRetirement } = await import('/tools/native-render-opaque-probe.mjs')
+      return inspectNativeOpaqueRetirement()
+    })
+    assert.deepEqual(opaqueRetirement, {
+      activeDraws: 1, afterRootDraws: 0, afterRetirementDraws: 0,
+      textureAlive: true, batcherRetired: true, hookRemoved: true,
+      changedPixels: 0, changedChannels: 0, maximumDelta: 0,
+    })
+    console.log(JSON.stringify({ opaqueRetirement }))
     const recordSampling = await page.evaluate(async () => {
       const { inspectNativeRecordSampling } = await import('/tools/native-record-sampling-probe.mjs')
       return inspectNativeRecordSampling()
@@ -186,222 +402,6 @@ try {
       const expected = [...saturate(rgb, 'arena').map(channel => channel * alpha), 255 * alpha * alpha]
       assert.ok(captured[field].every((value, index) => Math.abs(value - expected[index]) <= 2), JSON.stringify({ field, captured, expected }))
     }
-    const contracts = await page.evaluate(async () => {
-      const { inspectNativeRenderContracts } = await import('/tools/native-render-contract-probe.mjs')
-      return inspectNativeRenderContracts()
-    })
-    console.log(JSON.stringify({ contracts }))
-    assert.deepEqual(contracts.sources.map(({ name, alphaMode, addressMode, scaleMode }) => (
-      [name, alphaMode, addressMode, scaleMode]
-    )), [
-      ['stock', 'no-premultiply-alpha', 'repeat', 'linear'],
-      ['point', 'no-premultiply-alpha', 'repeat', 'nearest'],
-      ['framed', 'no-premultiply-alpha', 'clamp-to-edge', 'linear'],
-      ['composited', 'premultiply-alpha-on-upload', 'clamp-to-edge', 'linear'],
-    ])
-    assert.ok(contracts.sources.every(({ pixel }) => pixel.every(channel => channel === 255)))
-    for (const grid of contracts.grids) {
-      assert.deepEqual(grid.initial, [255, 255, 255, 255])
-      assert.deepEqual(grid.before, [255, 255, 255, 255])
-      assert.deepEqual(grid.after, [63, 63, 63, 255])
-      assert.equal(grid.colors.length, grid.vertices * 4)
-      assert.equal(grid.colors.filter((_, index) => index % 4 !== 3).every(value => value === 63), true)
-      assert.equal(grid.removed && grid.meshDestroyed && grid.geometryDestroyed && grid.shaderDestroyed, true)
-      assert.equal(grid.borrowedTextureAlive, true)
-    }
-    assert.equal(contracts.liveGrids.length, 4)
-    for (const grid of contracts.liveGrids) {
-      assert.equal(grid.geometryRetained && grid.buffersRetained, true)
-      assert.equal(grid.positionsDelivered && grid.uvsDelivered && grid.indicesDelivered && grid.colorsDelivered, true)
-      assert.equal(grid.vertexCount, grid.enhanced ? 9 : 4)
-      assert.equal(grid.indexCount, grid.enhanced ? 24 : 6)
-      assert.equal(grid.colors.length, grid.vertexCount * 4)
-      assert.ok(grid.colors.every((value, index) => value === (index % 4 === 3 ? 255 : 127)))
-      assert.deepEqual(grid.pixel, [127, 127, 127, 255], 'live mode change must update the real GPU buffer shared by redraws')
-    }
-    assert.deepEqual(contracts.roads, {
-      countBefore: 5, countAfter: 3, countAfterEmpty: 3,
-      vertices: 40, indices: 90, meshes: 5, pixel: [128, 128, 128, 255], childrenAfterDestroy: 0,
-      resourcesDestroyed: true, textureAlive: true,
-    })
-    assert.deepEqual(contracts.detachedScene, { destroyed: true, count: 0 })
-    assert.deepEqual(contracts.missingRoad, { message: 'Native Road style 0 texture is unavailable', childrenAfterFailure: 0 })
-    const variants = await page.evaluate(async () => {
-      const { inspectNativeRendererVariants } = await import('/tools/native-render-contract-probe.mjs')
-      return inspectNativeRendererVariants()
-    })
-    console.log(JSON.stringify({ variants }))
-    assert.deepEqual(variants.errors, ['uninitialized-fixed', 'uninitialized-arena', 'unsupported-renderer'].map(name => (
-      { name, message: 'Native materials require an initialized WebGL renderer' }
-    )))
-    assert.deepEqual(variants.variants, [
-      { name: 'sprite-only', pixel: [128, 128, 128, 64] },
-      { name: 'blend-only', pixel: [64, 64, 64, 64] },
-      { name: 'browser-overlay', pixel: [128, 128, 128, 128] },
-      { name: 'default-particle', pixel: [255, 255, 255, 255] },
-    ])
-    const pixelCenters = await page.evaluate(async () => {
-      const { inspectNativePixelCenterInstallations } = await import('/tools/native-render-contract-probe.mjs')
-      return inspectNativePixelCenterInstallations()
-    })
-    assert.equal(pixelCenters.length, 2)
-    for (const control of pixelCenters) {
-      assert.equal(control.wrapped, control.enabled)
-      assert.ok(control.idempotent && control.targetDestroyed && control.contextLost)
-      assert.equal(control.rows.length, 15)
-      for (const row of control.rows) {
-        const phase = control.enabled ? 1 : 0
-        const y = row.isRoot ? -1 : 1
-        const expected = { a: 2 * row.resolution / row.width,
-          d: y * 2 * row.resolution / row.height,
-          tx: -1 + phase / row.width, ty: -y + y * phase / row.height }
-        assert.equal(row.isRoot, row.kind !== 'offscreen')
-        assert.equal(row.glError, 0)
-        for (const key of ['a', 'd', 'tx', 'ty']) {
-          assert.ok(Math.abs(row.projection[key] - expected[key]) < 1e-12,
-            JSON.stringify({ enabled: control.enabled, row, expected, key }))
-        }
-      }
-    }
-    console.log(JSON.stringify({ pixelCenters }))
-    const transforms = await page.evaluate(async () => {
-      const { compareNativeBatchTransforms } = await import('/tools/native-render-contract-probe.mjs')
-      return compareNativeBatchTransforms()
-    })
-    console.log(JSON.stringify({ transforms }))
-    assert.equal(transforms.length, 6)
-    assert.ok(transforms.every(row => row.changedChannels === 0 && row.visiblePixels > 1000 && row.reusedBatchShaders))
-    const surfaceSampling = await page.evaluate(async () => {
-      const { inspectNativeSurfaceSampling } = await import('/tools/native-render-contract-probe.mjs')
-      return inspectNativeSurfaceSampling()
-    })
-    assert.deepEqual(surfaceSampling, [[160, 160, 160, 255], [160, 160, 160, 255]])
-    const staff = await page.evaluate(async () => {
-      const { compareNativeStaffFrames } = await import('/tools/native-render-staff-probe.mjs')
-      return compareNativeStaffFrames()
-    })
-    console.log(JSON.stringify({ staff }))
-    assert.equal(staff.frames.length, 6)
-    assert.ok(staff.frames.every(row => row.changedChannels === 0 && row.visiblePixels > 50))
-    // The capture shader requires a standalone aura, so each changed frame must
-    // upload its geometry once. Rendering must not upload it again.
-    assert.ok(staff.frames.every(row => row.updatePositionUpdates === 1 && row.renderPositionUpdates === 0))
-    assert.ok(staff.lifetimes.every(row => row.container && row.children && row.geometry && row.textureAlive && row.positionBufferUpdates === 3))
-    for (const options of [
-      { finishPremultiplied: false, installTextureAlphaShaders: false },
-      { finishPremultiplied: true, installTextureAlphaShaders: false },
-      { finishPremultiplied: false, installTextureAlphaShaders: true },
-      { finishPremultiplied: true, installTextureAlphaShaders: true },
-    ]) {
-      const lifetimes = await page.evaluate(async ({ finishPremultiplied, installTextureAlphaShaders }) => {
-        const { inspectNativeMaterialLifetimes } = await import('/tools/native-render-lifecycle-probe.mjs')
-        return inspectNativeMaterialLifetimes(finishPremultiplied, installTextureAlphaShaders)
-      }, options)
-      console.log(JSON.stringify({ options, lifetimes }))
-      for (const row of lifetimes.pixels) {
-        const expected = row.phase.includes('arena') ? [128, 86, 170, 255] : [128, 64, 192, 255]
-        assert.ok(row.pixel.every((channel, index) => Math.abs(channel - expected[index]) <= 1), JSON.stringify(row))
-        const batchSyncs = row.kind === 'mesh' ? 0 : Number(options.installTextureAlphaShaders) + Number(row.phase.includes('arena'))
-        const automaticSync = Number(options.installTextureAlphaShaders || row.phase.includes('arena'))
-        assert.equal(row.nativeUniformSyncs, batchSyncs + automaticSync, `${row.phase}/${row.kind} uniform synchronizations`)
-        assert.equal(row.nativeUniformUploads, 0, 'unchanged neutral color must not upload another GPU uniform')
-      }
-      for (const key of ['idempotent', 'previousShadersPreserved', 'retiredArenaShaders', 'replacedStockMesh', 'fixedShadersDestroyed', 'texturesAlive']) {
-        assert.equal(lifetimes[key], true, key)
-      }
-      assert.ok(lifetimes.batchLifetimes.every(Boolean))
-    }
-    for (const installTextureAlphaShaders of [false, true]) {
-      const retainedMaterials = await page.evaluate(async installTextureAlphaShaders => {
-        const { inspectRetainedMaterialChanges } = await import('/tools/native-render-lifecycle-probe.mjs')
-        return inspectRetainedMaterialChanges(installTextureAlphaShaders)
-      }, installTextureAlphaShaders)
-      console.log(JSON.stringify({ installTextureAlphaShaders, retainedMaterials }))
-      assert.equal(retainedMaterials.pixels.length, 8)
-      assert.equal(retainedMaterials.preservedUnusedMaterial, true)
-      for (const row of retainedMaterials.pixels) {
-        assert.deepEqual(row.pixel, row.phase === 'arena' ? [128, 86, 170, 255] : [128, 64, 192, 255])
-      }
-    }
-    const opaque = await page.evaluate(async () => {
-      const { inspectNativeOpaqueBatches } = await import('/tools/native-render-opaque-probe.mjs')
-      return inspectNativeOpaqueBatches()
-    })
-    console.log(JSON.stringify({ opaque }))
-    for (const name of ['first', 'updated', 'roundTrip']) {
-      assert.equal(opaque[name].candidateDraws, 1, `${name}: ordered normal/add NPM/PMA draws must share one opaque batch`)
-      assert.equal(opaque[name].candidateIndices, opaque[name].baselineIndices)
-      assert.ok(opaque[name].maximumDelta <= 2, JSON.stringify(opaque[name]))
-    }
-    assert.equal(opaque.target.changedChannels, 0, 'render-texture RGBA must remain byte-identical')
-    assert.equal(opaque.target.candidateDraws, opaque.target.baselineDraws)
-    const opaqueBoundaries = await page.evaluate(async () => {
-      const { inspectNativeOpaqueBoundaries } = await import('/tools/native-render-opaque-probe.mjs')
-      return inspectNativeOpaqueBoundaries()
-    })
-    console.log(JSON.stringify({ opaqueBoundaries }))
-    for (const row of opaqueBoundaries) {
-      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
-      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
-      if (['transparent', 'child-cache', 'no-group', 'outside-root', 'foreign-layer'].includes(row.role)
-        || ['changed', 'retained'].includes(row.phase) && row.role !== 'context') {
-        assert.equal(row.changedChannels, 0, JSON.stringify(row))
-        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
-      } else assert.equal(row.candidateDraws, 1, JSON.stringify(row))
-    }
-    const opaqueTransport = await page.evaluate(async () => {
-      const { inspectNativeOpaqueTransport } = await import('/tools/native-render-opaque-probe.mjs')
-      return inspectNativeOpaqueTransport()
-    })
-    console.log(JSON.stringify({ opaqueTransport }))
-    for (const row of opaqueTransport) {
-      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
-      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
-      if (row.role === 'texture-capacity') assert.equal(row.candidateDraws, Math.ceil(40 / row.maxTextures))
-      if (row.role === 'gradient' || row.role === 'diffuse') assert.equal(row.candidateDraws, 1)
-      if (row.role === 'empty') assert.equal(row.candidateDraws, 0)
-      if (row.role === 'topology' || row.role === 'mixed-topology' || row.role === 'explicit-npm-pma') {
-        assert.equal(row.changedChannels, 0, JSON.stringify(row))
-        assert.equal(row.candidateDraws, row.baselineDraws, JSON.stringify(row))
-      }
-    }
-    const opaqueRebuilds = await page.evaluate(async () => {
-      const { inspectNativeOpaqueRebuilds } = await import('/tools/native-render-opaque-probe.mjs')
-      return inspectNativeOpaqueRebuilds()
-    })
-    console.log(JSON.stringify({ opaqueRebuilds }))
-    for (const [phase, row] of Object.entries(opaqueRebuilds)) {
-      assert.equal(row.candidateDraws, 1, `${phase}: existing texture slots must remain usable at capacity`)
-      assert.equal(row.candidateIndices, row.baselineIndices, JSON.stringify(row))
-      assert.equal(row.memberCount * 6, row.candidateIndices, `${phase}: retained records must not keep retired drawables`)
-      assert.equal(row.onlyLiveMembers, true, JSON.stringify(row))
-      assert.equal(row.maximumTextures, row.expectedTextures, JSON.stringify(row))
-      assert.ok(row.maximumTextures <= row.limit, JSON.stringify(row))
-      assert.ok(row.maximumDelta <= 2, JSON.stringify(row))
-    }
-    const opaqueOwnership = await page.evaluate(async () => {
-      const { inspectNativeOpaqueInstructionOwnership } = await import('/tools/native-render-opaque-probe.mjs')
-      return inspectNativeOpaqueInstructionOwnership()
-    })
-    console.log(JSON.stringify({ opaqueOwnership }))
-    assert.equal(opaqueOwnership.candidateDraws, 3, 'foreign normal-PMA elements retain a separate ordinary batch')
-    assert.equal(opaqueOwnership.candidateIndices, opaqueOwnership.baselineIndices)
-    assert.deepEqual(opaqueOwnership.eligibility, [true, false, true])
-    assert.equal(opaqueOwnership.originalRetired, true, 'reinstallation retires the old material owner')
-    assert.equal(opaqueOwnership.rebuilds, 0, 'unchanged and unrelated renders must preserve cached instructions')
-    assert.equal(opaqueOwnership.retained.changedChannels, 0)
-    assert.equal(opaqueOwnership.afterUnrelated.changedChannels, 0)
-    assert.ok(opaqueOwnership.maximumDelta <= 2)
-    const opaqueRetirement = await page.evaluate(async () => {
-      const { inspectNativeOpaqueRetirement } = await import('/tools/native-render-opaque-probe.mjs')
-      return inspectNativeOpaqueRetirement()
-    })
-    assert.deepEqual(opaqueRetirement, {
-      activeDraws: 1, afterRootDraws: 0, afterRetirementDraws: 0,
-      textureAlive: true, batcherRetired: true, hookRemoved: true,
-      changedPixels: 0, changedChannels: 0, maximumDelta: 0,
-    })
-    console.log(JSON.stringify({ opaqueRetirement }))
     await page.setViewportSize({ width: 800, height: 640 })
     await page.evaluate(async () => {
       const { default: refresh } = await import('/@react-refresh')

@@ -9,9 +9,13 @@ alongside the shared editor, authoring shelf, frontend and backend checks.
 claim coverage of every Website module.
 
 Mutation runs use the same Node tests and GPU assertions as the complete renderer
-checks. The GPU material checks run first and validate samples as they are
-produced while a mutant is active, so a detected failure stops the remaining
-GPU work. Unmutated coverage and browser qualification still collect every sample.
+checks. Compact batch and shader-reuse checks run before the material samples,
+with atlas, authored-source and other broad asset probes after the focused
+renderer checks. This catches mutations that repeatedly rebuild shaders before
+that defect makes hundreds of later draws expensive. Material samples are also
+validated as they are produced while a mutant is active. A detected failure
+stops the remaining GPU work; all cases and assertions remain in the unmutated
+coverage and browser run.
 The existing Stryker event recorder writes each completed mutant to
 `frontend/reports/renderer-quality/mutation/events`, retaining individual results
 if a hosted job is interrupted before its final report. The source scope and
