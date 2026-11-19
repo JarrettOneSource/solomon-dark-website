@@ -3345,3 +3345,93 @@ transport 144 or save 47 change. Earlier focused and current transport receipts
 therefore remain qualified; the unchanged canonical all-mode gate and managed
 publication/deployment have separate final receipts. Prepared Report 66 field,
 capture and transport 145/save 48 changes remain a separate unpublished release.
+
+## 2026-11-18 — Partial Webbed recovery in the Rust authority
+
+The new report describes Silk slowdown persisting until a third application.
+The affected client is not identified in the report. The regular Website at
+`1e460475` passes all 33 existing Spider/Cocoon public simulation checks,
+including the one- and two-stack movement cases and full staff escape.
+
+The boundary is the target-owned Webbed modifier's connection to player movement,
+Cocoon escape and lifetime. The complete Spider/Silk authored catalog, 23 generated
+encounter programs, payload flags, projectile delivery, Shield admission, death,
+resources and presentation above remain the evidence authority. No new authored
+row, balance constant or automatic expiry timer is introduced.
+
+The earlier instruction proof remains applicable: `Mod_Webbed::Tick` at
+`0x00623BA0..0x00623C4B` tests the retained movement lane; PlayerWizard at
+`0x0054B001..0x0054B050` applies `+0x218` only to temporary collision arguments.
+The retail image was re-hashed on M2 and matches
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+This investigation adds current source and execution evidence, not a new
+clean-stock runtime observation.
+
+Current Rust `2a36a2c7` multiplies Webbed into acceleration and the retained lane
+in `BoneyardWorld::step_player_movements`. The resulting enemy target projection
+is also used by `step_spider_webs`. Inspection predicts that default first/second
+stacks remain below the length-squared `.5` recovery threshold, while a full web
+also loses attempted-movement admission for staff escape. Public-session
+regressions against the unchanged source confirm all three failures: one stack
+remains after 1,500 movement ticks, two stacks retain severity exactly 2, and a
+full Cocoon remains after 1,000 movement ticks. The stationary partial-web control
+passes, establishing that no general expiry timer should be added.
+
+| Member or branch | Current disposition | Required evidence |
+| --- | --- | --- |
+| All authored Spider phases, flags, Silk creation/contact and source death | verified-already-at-parity | Existing complete catalog and current Spider/Cocoon controls; no source data changes |
+| Partial severities 1 and 2, fractional recovery, movement threshold | exact-ported | Rust public-session regressions and both ordinary-input Mac browser cases clear without a further hit; Website controls pass |
+| Raw movement retention, gait, facing, physical slowdown and collision contacts | exact-ported | Independent factor bits, diagonal raw/physical movement checks, unchanged surrounding collision goldens, and composed browser movement |
+| Full severity 3, retained Cocoon HP, attempted-movement staff escape | exact-ported | Session regression and Mac browser retain the root while movement admits staff damage from 10 to 9 HP, then full release |
+| Stationary partial persistence and healthy restraint after source death | verified-already-at-parity | All three browser cases retain severity while idle with no living Spider; partial session controls retain severity for 2,250 ticks |
+| Shield/Deflect admission, Cocoon damage receivers and orphan cleanup | verified-already-at-parity | Current 33 Website controls, 12 Rust enemy goldens and complete source gates; no receiver changes |
+| Keyboard, pointer/controller movement and multiplayer owners | exact-ported | Shared canonical movement owner, independent-player wall regression and ordinary browser keyboard input; physical controller hardware is not newly qualified |
+| Saved partial/full modifiers, pause, target death/disconnect and scene reset | verified-already-at-parity | Native checkpoint round-trip for 1/2/3, all three browser saved Leave/fresh Continue cases, pause freezes, and retained target-removal controls |
+| Independent enemy AI, spell balance, unrelated UI and other modifier algorithms | out-of-system | They do not own Webbed displacement; their unchanged behavior is protected by the repository gates |
+
+Implementation belongs at the Rust Boneyard collision boundary: preserve the
+movement plan used for stored velocity, gait, facing and staff admission, then
+apply the native Webbed factor to gate and actor displacement. Correcting the
+recovery threshold or adding a timer would hide the ownership defect. The
+Website product path already has that separation and needs no equivalent patch
+unless current execution supplies conflicting evidence.
+
+The `+0x218` movement factor is stored as float32. Current Website
+`nativeWebbedMovementScale` retains that boundary; Rust's frozen intermediary
+Spider recording predates it and records an unrounded double scale. Preserve
+the recording and qualify only its scale comparison with the recovered storage
+boundary. Independent values are `0x3F27B961` for severity 1 and `0x3E9EE585`
+for severity 2; severity 3 clamps to zero. All other recorded state, ordering,
+random words and presentation samples remain exact comparisons.
+
+The complete Rust gate also exposes the old `world-scene-goldens` Webbed case:
+its map-3 severity-1.25 recording includes the same attenuated raw movement.
+Running the original scene inputs and snapshot projection against unmodified
+Website `1e460475` changes exactly four wizard fields across 37 matching samples:
+x position, x velocity, gait and walk cycle. All other fields in that case and
+both complete non-Webbed cases are identical. Preserve the old recording and
+qualify only those four fields using the independently captured current Website
+values. This remains an intermediary recording, supported by the instruction
+proof above; it is not a new clean-stock capture or Rust-generated expectation.
+
+
+Rust `d0e0749e` implements the correction and passes its complete M2 source gate:
+1,018 Rust tests and 87 browser-support checks, with native/WASM Clippy, formatting,
+assets and reference checks. The tracked source remains exact throughout.
+Release-mode Chrome/Metal execution passes all three severities using normal
+keyboard/menu actions after controlled saved-game setup. Partial severities
+reach approximately 0.661 and 1.661, survive exact saved Leave/fresh-document
+Continue, then clear. Full restraint retains position with nonzero raw movement;
+automatic staff reduces Cocoon HP from 10 to 9 and eventually releases it.
+All six saved documents, ten original captures and normal browser/server exits
+were reviewed. Page, console and resource-failure arrays are empty.
+
+The initial local native-host fixture omitted a required party roster; a later
+fixture removed Solomon's required painter registration. Those setup failures
+are not accepted runs. The corrected local journey installs only the validated
+core checkpoint in the browser's ordinary IndexedDB slot before boot. Native
+party disconnection still deliberately clears target-owned restraints; this fix
+does not change that lifetime contract. The separate hosted release/live path
+must establish its own acceptance. Pause-overlay captures contain intermittent
+missing button text after Continue, outside this movement change; they establish
+observed scene/modifier state, not a clean acceptance of unrelated UI text.
