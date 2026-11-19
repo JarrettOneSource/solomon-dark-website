@@ -1,3 +1,4 @@
+import { nativeStormContactLight } from '../core-kernels/native-secondary-storm.ts'
 export { NativeSecondaryScreenFeedbackPresentation,nativeSecondaryWorldShake,presentNativeSecondaryScreenOverlay } from './native-screen-feedback.ts'
 export { clampEntry,degreesToRadians,hashUnit,packGray,packNormalizedRgb,positiveModulo,repeatedFloatDecay,repeatedFloatMultiply,secondarySprite,WHITE } from './native-secondary-draws.ts'
 export { magicCircleRingDraws,NATIVE_PLAYER_MAGIC_SHIELD,nativeLeviathanCompositePlan,nativePlayerMagicShieldPlan,nativeSecondaryCompositeOwnerEntries,planeOrbMesh,prismaticWaveDraws } from './native-secondary-field-presentation.ts'
@@ -378,6 +379,8 @@ function buildNativeSecondaryPresentationPlan(
             tint: 0xccffff,
           })])
     case 'storm-strike':
+      return plan([], 'ordinary-dynamic', 50, [], [], null, [], EMPTY_SECONDARY_DRAWS,
+        nativeStormContactLight(actor, actor.ageTicks)?.position.y ?? root.y)
     case 'electric-burn-arc':
       return plan([], 'ordinary-dynamic')
     case 'prismatic-wave':

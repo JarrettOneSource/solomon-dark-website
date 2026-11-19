@@ -742,6 +742,8 @@ export class BoneyardDynamicScene {
           ? 0
           : layer.lane === 'pre-world-queue'
           ? 0.5
+          : layer.lane === 'post-world-queue'
+          ? order.foregroundZIndex + .5
           : positionedDynamics.get(layer.id)?.zIndex ?? 1,
       )
       applyInsertedPainterDepths(

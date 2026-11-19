@@ -42,7 +42,7 @@ import { NATIVE_BANISH_RING_ALPHA_LOSS, NATIVE_FADE_ALPHA_LOSS, NATIVE_TRAGIC_CO
 import type { NativeSecondaryActorKind } from '../core-kernels/native-secondary-abilities.ts'
 import { nativeSecondaryPainterManagerLane, retainNativeSecondaryTargetEffects } from '../core-kernels/native-secondary-abilities.ts'
 import { createNativeEtherDrainState, nativeEtherDrainCapturesFamily } from '../core-kernels/native-ether-drain.ts'
-import { nativeEtherDrainState } from '../protocol/codecs/secondary-actors.ts'
+import { nativeEtherDrainState, nativeStormBurst } from '../protocol/codecs/secondary-actors.ts'
 import { NATIVE_GOLEM_DEATH_FRAGMENT_COUNT, NATIVE_GOLEM_DEATH_MAX_AGE, NATIVE_GOLEM_DEATH_PAINTER_COUNT } from '../core-kernels/native-death-animations.ts'
 import { playerDeathEquipmentAppearance } from '../core-kernels/player-equipment-appearance.ts'
 import { nativeDeathWeapons, nativeGolemDeathAnimation } from '../protocol/codecs/death-animations.ts'
@@ -1944,9 +1944,16 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number, sav
   const savedActors = array(source.actors, 'game save secondary actors')
   const legacyDebris = sourceSchemaVersion < 48 ? savedActors.map((value, index) => record(value, `game save secondary actor ${index}`))
     .filter(actor => actor.kind === 'ether-drain-debris') : []
-  const actors = savedActors.filter(value => sourceSchemaVersion >= 48
-    || record(value, 'legacy secondary actor').kind !== 'ether-drain-debris').map((value, index) => {
+  const actors = savedActors.filter(value => {
+    const kind = record(value, 'saved secondary actor').kind
+    return (sourceSchemaVersion >= 48 || kind !== 'ether-drain-debris')
+      && (sourceSchemaVersion >= 53 || kind !== 'storm-strike')
+  }).map((value, index) => {
     const actor = record(value, `game save secondary actor ${index}`)
+    if (actor.stormBurst !== undefined) {
+      if (actor.kind !== 'storm-cloud') throw new Error('only a Storm cloud owns pending births')
+      return { ...actor, stormBurst: nativeStormBurst(actor.stormBurst, `game save secondary actor ${index}.stormBurst`) }
+    }
     if (sourceSchemaVersion < 48 && actor.kind === 'ether-drain') {
       const animations = legacyDebris.filter(child => child.worldKey === actor.worldKey
         && array(child.hitTargetIds, 'legacy field parent')[0] === actor.id).map(child => ({
@@ -1957,9 +1964,6 @@ function normalizeDiskSecondary(value: unknown, sourceSchemaVersion: number, sav
     }
     if (actor.kind === 'ether-drain') return { ...actor, etherDrain: actor.etherDrain === null ? null
       : nativeEtherDrainState(actor.etherDrain, `game save secondary actor ${index}.etherDrain`) }
-    if (sourceSchemaVersion < 46 && actor.kind === 'storm-strike') {
-      return { ...actor, enhanced: true }
-    }
     if (actor.kind === 'golem-death') {
       const enhanced = sourceSchemaVersion < 46 ? true : actor.enhanced
       if (typeof enhanced !== 'boolean') throw new Error('saved Golem death quality is invalid')

@@ -4052,3 +4052,57 @@ test('EBoulder guidance survives current saves and schema51 retains old flight i
     assert.deepEqual(migratedState.combatRng, state.combatRng)
   }
 })
+
+
+test('Storm pending births survive saves and wire snapshots; schema 52 retires only obsolete one-tick strikes', () => {
+  const loadedBoneyard = materializeBoneyard(createBoneyardCatalog(), 'default-random', Buffer.alloc(16, 45))!
+  let state = enterBoneyardWorld(createGameSimulation({ owner: OWNER }), loadedBoneyard)
+  if (state.world.kind !== 'boneyard' || state.world.encounter === null) throw new Error('expected stock encounter')
+  state = { ...state, world: { ...state.world, encounter: { ...state.world.encounter,
+    phase: 'gone', lifetimeTicksRemaining: 0, runEventId: 1 } } }
+  const granted = grantPlayerEntitySkillRanks(state.playerEntities, 'owner', 27, 1, state.gameRng)
+  state = { ...state, playerEntities: granted.store, gameRng: granted.rng }
+  state = bindGameSimulationPlayerSkillQuickbar(state, 'owner', 27, 0)!
+  const position = state.playerEntities.locomotions[0]!.position
+  state = stepGameSimulationTick(state, { owner: {
+    aim: position, cast: { primary: false, quickbar: 0 }, movement: { x: 0, y: 0 },
+    viewportWidth: 1600, viewportHeight: 900,
+  } })
+  const cloud = state.secondaryAbilities.actors.find(actor => actor.kind === 'storm-cloud')!
+  assert.ok(cloud)
+  const burst = { remainingTicks: 4, source: { x: position.x, y: position.y - 175 },
+    midpoint: { x: position.x + 50, y: position.y - 90 }, endpoint: position, targetId: 999 }
+  state = { ...state, secondaryAbilities: { ...state.secondaryAbilities,
+    actors: state.secondaryAbilities.actors.map(actor => actor.id === cloud.id
+      ? { ...actor, stormBurst: burst } : actor) } }
+  state = stepGameSimulationTick(state, {})
+  const document = createGameSaveDocument({ integrity: 'local-only', loadedBoneyard,
+    mods: [], modState: {}, playerId: 'owner', state })
+  const restored = restoreGameSaveDocument(document).state
+  assert.deepEqual(restored.secondaryAbilities.actors, state.secondaryAbilities.actors)
+  assert.deepEqual(stepGameSimulationTick(restored, {}).secondaryAbilities.actors,
+    stepGameSimulationTick(state, {}).secondaryAbilities.actors)
+  const snapshot = createGameSnapshot(restored, 'owner')
+  const wire = JSON.parse(JSON.stringify(snapshot))
+  assert.deepEqual(decodeGameSnapshot(wire), wire)
+  for (const invalid of [0, 5]) {
+    const malformed = JSON.parse(document)
+    malformed.continuation.simulation.secondaryAbilities.actors.find(
+      (actor: { kind: string }) => actor.kind === 'storm-cloud').stormBurst.remainingTicks = invalid
+    assert.throws(() => restoreGameSaveDocument(JSON.stringify(malformed)), /remainingTicks/)
+  }
+  const legacy = JSON.parse(document)
+  legacy.schemaVersion = 52
+  for (const actor of legacy.continuation.simulation.secondaryAbilities.actors) {
+    delete actor.stormBurst
+    if (actor.kind === 'storm-strike') {
+      actor.lifetimeTicks = 1
+      actor.lightRegistration = null
+      actor.painterRegistrations = [{ managerLane: 'actor', registrationOrdinal: 90 }]
+    }
+  }
+  const migrated = restoreGameSaveDocument(JSON.stringify(legacy)).state.secondaryAbilities
+  assert.equal(migrated.actors.some(actor => actor.kind === 'storm-strike'), false)
+  assert.equal(migrated.actors.some(actor => actor.kind === 'storm-cloud'), true)
+  assert.deepEqual(migrated.rng, state.secondaryAbilities.rng)
+})

@@ -52,7 +52,7 @@ const ONLINE_PREFERENCES = {
 } as const
 
 test('Create root domain uses the current protocol across hello, confirmation, snapshot, and Player Card', () => {
-  assert.equal(GAME_PROTOCOL_VERSION, 155)
+  assert.equal(GAME_PROTOCOL_VERSION, 156)
   const elements = ['ether', 'fire', 'air', 'water', 'earth'] as const
   for (const element of elements) {
     for (const discipline of [...elements, 'body', 'mind', 'arcane'] as const) {

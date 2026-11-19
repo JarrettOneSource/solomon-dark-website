@@ -1,5 +1,50 @@
 # 2026-09-05 — Generated survival boss encounters
 
+## Rust featured HUD and Crow targeting audit — 2026-11-19
+
+The beta report's desktop build `2a36a2c7` showed no featured health bar.
+Rust retains the selected enemy through spawn, damage, death, snapshots and
+saves, but its HUD never consumed that identity. This reopens the presentation
+boundary; the earlier pass did not trace the selected pointer into every
+maintained client. The recovered HUD contract below remains authoritative.
+
+Before implementation, the bounded membership is:
+
+| Member | Recovered contract | Required disposition |
+| --- | --- | --- |
+| Classification 1 and 2 | First spawn selects only while empty | Retain simulation rule; render selected recipe name and health |
+| Classification 3 miniboss | Health-lane damage selects; shield interception does not | Retain selection and render the same HUD |
+| Ordinary enemies | Never select | No bar |
+| Selected boss loses health or dies | Reflect health; lethal/removal clears, with no automatic replacement | Project accepted state each frame; regression coverage |
+| Save and authority snapshot | Preserve selected identity, including empty | Consume the canonical reconstructed state |
+| Names, health fractions and screen scale | Wrapper-6 name, UI 7/6 repeated strips, native offsets and clipping | Use shared stock font/strip painter |
+| Hub and suppressed HUD | Do not draw featured HUD | Verify actual HUD visibility branches |
+| Heartmonger owned and detached Crows | Object-derived offensive effects without Badguy health/collision admission | Preserve spell-target exclusion; independently verify native ownership |
+
+Fresh static evidence uses retail 0.72.5, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`,
+preferred base `00400000`, canonical `SolomonDark.gpr` through M2's existing
+Ghidra 12.0.3 read-only replica wrapper. No clean-stock runtime capture is claimed.
+
+Crow constructor `00475480` calls Object constructor `00401FF0`, installs vtable
+`00786340`, and initializes a 0x6C-byte object. It does not construct Badguy or
+register a hit body. Its seven vtable entries are destructor `0047A0E0`, empty
+`0055C300`, tick `0047EA70`, render `004A1490`, empty `0042E260`, serializer
+`004755F0`, and delete `00401FD0`. Heartmonger initializer `00488F20` allocates
+these objects into its private manager `+254`; the prior death/flight evidence
+below covers their later detached effects ownership. Neither lifecycle exposes
+Badguy's damage receiver or health. Consequently crows are not ordinary
+lightning targets in retail. Giving them HP would change the recovered combat
+contract. The reported targeting behavior is consistent with that contract,
+not proof of a lightning-specific defect.
+
+The Rust repair belongs in the existing HUD snapshot and stock painter. It must
+not select a nearby boss, infer a replacement, or invent a second shield lane.
+Acceptance requires the existing selection/serialization cases plus actual
+paint submissions for different name lengths, full/partial/empty health,
+Hub/suppression, and composed browser/native visual inspection. Publication and
+live acceptance remain pending until those checks complete.
+
 ## 2026-09-22 — Report 05: scale-fade constructor and lifetime reopening
 
 Recorded before the corrected constructor repair. The two-Mac Air/Ether run

@@ -43,10 +43,7 @@ import {
 import { updateNativeSecondaryPresentationPlan } from './native-secondary-presentation.ts'
 import { nativeGolemDeathPresentationPlan } from './native-secondary-golem-presentation.ts'
 import { NATIVE_GOLEM_DEATH_FRAGMENT_COUNT, NATIVE_GOLEM_DEATH_STAR_TICKS } from '../core-kernels/native-death-animations.ts'
-import {
-  AirPrimarySpellView,
-  type NativeAirLightningViewState,
-} from './primary-spell-air-view.ts'
+import { NativeStormLightningView } from './native-storm-lightning-view.ts'
 import type { PlayerWorldTextures } from './world-player-textures.ts'
 import { nativePuppetHitAlpha, type NativeWorldPuppetHit } from '../core-kernels/native-puppet-hit.ts'
 import { multiplyNativeTints, nativePuppetHitTint, renderNativeDiffuseMask, setNativeDiffuseColor } from './native-texture-color.ts'
@@ -79,7 +76,7 @@ function hotDropUsesDirectPrimitives(kind: NativeSecondaryActorState['kind']): b
 export interface NativeSecondaryPainterLayer {
   readonly id: string
   readonly insertions?: readonly NativeRegionPainterInsertion[]
-  readonly lane: 'background' | 'pre-world-queue' | 'world-sorted'
+  readonly lane: 'background' | 'pre-world-queue' | 'world-sorted' | 'post-world-queue'
   readonly queueFamily: 'ordinary-dynamic' | 'zanim' | null
   readonly regionLightPoint: Readonly<{ x: number; y: number }> | null
   readonly registration: NativeWorldManagerRegistration | null
@@ -167,7 +164,7 @@ class NativeSecondaryActorView {
   private readonly spriteBindings: NativeSecondarySpriteBinding[] = []
   private readonly sprites: Sprite[] = []
   private state: NativeSecondaryActorState
-  private readonly stormLightning: AirPrimarySpellView | null
+  private readonly stormLightning: NativeStormLightningView | null
   private readonly electricArc: NativeElectricBurnArcView | null
   private stormWeather: NativeStormWeatherView | null = null
   private readonly textures: PlayerWorldTextures['secondary']
@@ -219,15 +216,8 @@ class NativeSecondaryActorView {
           eventMode: 'none', sortableChildren: true })
       : null
     this.stormLightning = state.kind === 'storm-strike'
-      ? new AirPrimarySpellView(
-          stormStrikeTransient(state),
-          textures.primarySpells.air,
-          { split: false },
-        )
+      ? new NativeStormLightningView(state, root, textures.primarySpells.air)
       : null
-    if (this.stormLightning) {
-      this.container.addChild(...this.stormLightning.containers)
-    }
     this.electricArc = state.kind === 'electric-burn-arc'
       ? new NativeElectricBurnArcView(state, root, textures.primarySpells.air, enhancedEffects) : null
     this.update(state, state.ageTicks, enhancedEffects)
@@ -272,7 +262,7 @@ class NativeSecondaryActorView {
       return
     }
     if (state.kind === 'storm-strike') {
-      this.stormLightning?.update(stormStrikeTransient(state))
+      this.stormLightning?.update(state)
     }
     this.electricArc?.update(state, enhancedEffects)
     if (this.plan.stormComposite) {
@@ -446,6 +436,10 @@ class NativeSecondaryActorView {
   painterLayers(id: number, sourceOrder: number): NativeSecondaryPainterLayer[] {
     const layers = this.cachedPainterLayers
     layers.length = 0
+    if (this.stormLightning) {
+      layers.push(...this.stormLightning.painterLayers(sourceOrder))
+      return layers
+    }
     if (this.electricArc) {
       layers.push(...this.electricArc.painterLayers(sourceOrder))
       return layers
@@ -569,11 +563,15 @@ class NativeSecondaryActorView {
     this.electricArc?.setTint(tint)
   }
 
-  setArcDepth(suffix: string, depth: number): void { this.electricArc?.setDepth(suffix, depth) }
+  setMemberDepth(suffix: string, depth: number): void {
+    this.electricArc?.setDepth(suffix, depth)
+    this.stormLightning?.setDepth(suffix, depth)
+  }
 
   setRenderable(renderable: boolean): void {
     this.renderable = renderable
     this.electricArc?.setRenderable(renderable)
+    this.stormLightning?.setRenderable(renderable)
     this.container.renderable = renderable
     if (this.underlayContainer) this.underlayContainer.renderable = renderable
     if (this.backgroundContainer) this.backgroundContainer.renderable = renderable
@@ -622,12 +620,7 @@ class NativeSecondaryActorView {
       this.stormWeather.destroy()
       this.stormWeather = null
     }
-    if (this.stormLightning) {
-      for (const container of this.stormLightning.containers) {
-        container.removeFromParent()
-      }
-      this.stormLightning.destroy()
-    }
+    this.stormLightning?.destroy()
     for (const mesh of this.gradientMeshes) destroyOwnedMeshGeometry(mesh)
     for (const mesh of this.meshMeshes) destroyOwnedMeshGeometry(mesh)
     for (const mesh of this.quadMeshes) destroyOwnedMeshGeometry(mesh)
@@ -1243,9 +1236,9 @@ export class NativeSecondaryWorldView {
   setDepth(id: string, depth: number): void {
     const golemDeath = this.golemDeathViews.get(id)
     if (golemDeath) { golemDeath.view.setDepth(depth); return }
-    const arc = /^secondary:(\d+):(body(?:-band-\d+)?)$/.exec(id)
-    if (arc) {
-      this.views.get(Number(arc[1]))?.setArcDepth(arc[2]!, depth)
+    const member = /^secondary:(\d+):(body(?:-band-\d+)?|storm-(?:body|source|contact))$/.exec(id)
+    if (member) {
+      this.views.get(Number(member[1]))?.setMemberDepth(member[2]!, depth)
       return
     }
     if (id.startsWith('secondary-background:')) {
@@ -1410,43 +1403,6 @@ export class NativeSecondaryWorldView {
         })
       composite.update(parent, members, this.renderer, this.root)
     }
-  }
-}
-
-function stormStrikeTransient(
-  actor: NativeSecondaryActorState,
-): NativeAirLightningViewState {
-  if (actor.kind !== 'storm-strike') {
-    throw new TypeError('Storm lightning presentation requires a strike actor')
-  }
-  const endpoint = {
-    x: actor.endpoint.x - actor.position.x,
-    y: actor.endpoint.y - actor.position.y,
-  }
-  const midpoint = {
-    x: actor.midpoint.x - actor.position.x,
-    y: actor.midpoint.y - actor.position.y,
-  }
-  const length = Math.hypot(endpoint.x, endpoint.y)
-  return {
-    ageTicks: actor.ageTicks,
-    birthTick: actor.phase,
-    direction: length > 0
-      ? { x: endpoint.x / length, y: endpoint.y / length }
-      : { x: 1, y: 0 },
-    endpoint,
-    hurricaneCharge: 0,
-    id: actor.id,
-    kind: 'air',
-    chained: false,
-    enhancedEffects: actor.enhanced,
-    midpoint,
-    origin: { x: 0, y: 0 },
-    ownerId: actor.ownerId,
-    targetId: actor.targetId === null ? null : String(actor.targetId),
-    underpowered: false,
-    variant: 0,
-    worldKey: actor.worldKey,
   }
 }
 

@@ -334,14 +334,14 @@ test('the complete secondary light census stays split between providers and Misc
     'storm-cloud', 'freeze-wave', 'golem', 'magic-trap', 'acid-rain',
     'ether-drain', 'comet', 'ring-fire-fragment',
   ])
-  const transientProviders = new Set<NativeSecondaryActorKind>(['ring-fire-explosion', 'electric-burn-flare'])
+  const transientProviders = new Set<NativeSecondaryActorKind>(['ring-fire-explosion', 'electric-burn-flare', 'storm-strike'])
   const miscWriters = new Set<NativeSecondaryActorKind>([
     'magic-circle', 'fire-burn', 'ether-burn', 'electric-burn',
   ])
   for (const kind of KINDS) {
     const source = kind === 'acid-rain'
       ? { ...actor(kind), phase: 1 }
-      : actor(kind)
+      : kind === 'storm-strike' ? { ...actor(kind), ageTicks: 0 } : actor(kind)
     const expectedDisposition = actorProviders.has(kind)
       ? 'actor-provider'
       : transientProviders.has(kind)

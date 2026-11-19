@@ -1,3 +1,4 @@
+import type { NativeStormBurst } from './native-secondary-storm.ts'
 import type { WriteNativeScreenFlash } from './native-screen-flash.ts'
 import type { NativeSpellSpecialDeathPayload } from './native-special-death-payload.ts'
 import { actorHeadingFromVector, actorHeadingVector } from './actor-heading.ts'
@@ -209,6 +210,7 @@ export interface NativeSecondaryActorState {
   readonly scale: number
   readonly skillId: NativeSecondaryAbilityId | 14 | 22 | 53 | null
   readonly slowFactor: number
+  readonly stormBurst?: NativeStormBurst
   readonly targetId: number | null
   readonly variant: number
   readonly velocity: Vector2
@@ -2459,35 +2461,31 @@ export function stepNativeSecondaryAbilities(
                 Math.fround(actor.damage + damage.value),
                 'lightning',
               )
-              const strikeId = state.nextActorId
-              state = spawn(state, actorSeed({
-                endpoint,
-                kind: 'storm-strike',
-                enhanced: enhancedEffects,
-                lifetimeTicks: 1,
-                midpoint,
-                ownerId: actor.ownerId,
-                phase: context.tick,
-                position: origin,
-                skillId: 27,
-                targetId: target.value.id,
-                worldKey: actor.worldKey,
-              }))
-              for (const cue of ['lightning-start', 'thunder'] as const) {
-                state = emitNativeSecondaryEvent(state, {
-                  actorId: strikeId,
-                  cue,
-                  kind: 'impact',
-                  ownerId: actor.ownerId,
-                  pitch: 1,
-                  position: endpoint,
-                  skillId: 27,
-                  tick: context.tick,
-                  worldKey: actor.worldKey,
-                })
-              }
+              actor = { ...actor, stormBurst: { remainingTicks: 5, source: origin,
+                midpoint, endpoint, targetId: target.value.id } }
             }
           }
+        }
+
+        const burst = actor.stormBurst
+        if (burst) {
+          const strikeId = state.nextActorId
+          state = spawn(state, actorSeed({
+            kind: 'storm-strike', enhanced: enhancedEffects, lifetimeTicks: 6,
+            position: burst.source, midpoint: burst.midpoint, endpoint: burst.endpoint,
+            targetId: burst.targetId, ownerId: actor.ownerId, phase: context.tick,
+            skillId: 27, worldKey: actor.worldKey,
+          }))
+          if (burst.remainingTicks === 5) {
+            for (const cue of ['lightning-start', 'thunder'] as const) {
+              state = emitNativeSecondaryEvent(state, {
+                actorId: strikeId, cue, kind: 'impact', ownerId: actor.ownerId, pitch: 1,
+                position: burst.endpoint, skillId: 27, tick: context.tick, worldKey: actor.worldKey,
+              })
+            }
+          }
+          actor = { ...actor, stormBurst: burst.remainingTicks > 1
+            ? { ...burst, remainingTicks: burst.remainingTicks - 1 } : undefined }
         }
 
         actor = {
@@ -3641,7 +3639,6 @@ export function stepNativeSecondaryAbilities(
         }
         break
       case 'ice-blast':
-      case 'storm-strike':
       case 'turn-undead':
         actor = {
           ...actor,
@@ -3649,6 +3646,7 @@ export function stepNativeSecondaryAbilities(
           scale: actor.scale * 1.1,
         }
         break
+      case 'storm-strike':
       case 'magic-trap-burst':
       case 'dampen-wave':
       case 'mindblast-burst':
@@ -5617,6 +5615,7 @@ export function nativeSecondaryLightDisposition(
       return 'actor-provider'
     case 'ring-fire-explosion':
     case 'electric-burn-flare':
+    case 'storm-strike':
       return 'transient-provider'
     case 'ether-fade':
       return actor.variant === 1 ? 'transient-provider' : 'none'
@@ -5757,7 +5756,6 @@ export function nativeSecondaryPainterManagerLane(
     case 'moving-fire':
     case 'fire-patch':
     case 'storm-cloud':
-    case 'storm-strike':
     case 'electric-burn-arc':
     case 'earthquake':
     case 'golem':

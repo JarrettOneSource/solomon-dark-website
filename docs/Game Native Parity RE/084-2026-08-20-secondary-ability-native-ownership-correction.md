@@ -1,5 +1,90 @@
 # 2026-08-20 — Secondary-ability native ownership correction
 
+## Magic Storm strike ownership reopening — 2026-11-19
+
+The beta report describes a cloud flash and enemy death without visible lightning.
+Both maintained clients created one `storm-strike` actor lasting one 100-Hz tick,
+then used the player-Air presentation factory. That loses the native cloud's
+burst, the body's two-tick lifetime, both persistent FadeLightning coronas, and
+their separate painter/light owners. A 20-Hz authority publication can miss the
+entire one-tick actor. The prior pass did not follow StormCloud's strike timer
+through all child lifecycles; its earlier lightning acceptance did not close this
+boundary.
+
+### Native contract and evidence
+
+Fresh Ghidra 12.0.3 read-only replica analysis uses canonical `SolomonDark.gpr`,
+retail 0.72.5 at base `00400000`, 4,723,200 bytes, SHA-256
+`03a834566ce70fd8088f4cf9ee6693157130d8aec28c092cb814d6221231f1e3`.
+Decompiler interpretations were checked against constructors, vtables and
+constant bytes. No new clean-stock runtime capture is claimed.
+
+- `StormCloud::Tick 006021A0` chooses a target in radius 500, applies damage
+  exactly once, stores source `+160/+164`, midpoint `+168/+16C`, endpoint
+  `+170/+174`, writes flash `+14C=1`, and writes separate duration `+15C=5`.
+  Source uses cloud position plus U(100) direction and Y-175; midpoint uses
+  U(200) direction and Y-90; endpoint is the target position with Y-15.
+- Outside the active-cloud branch, each nonzero duration tick constructs a
+  new bolt and two coronas, then subtracts exactly one. Thus a hit emits at
+  ages 0,1,2,3,4, including while the parent fades. The points remain fixed
+  during that burst, including for moving Tornado clouds. A new hit restarts
+  the timer with the new target points. Start audio occurs only at duration 5.
+  Cloud flash independently loses float32(.1) per tick; it is not the bolt clock.
+- Bolt constructor `0045B2C0`, vtable `0078556C`, initializes `+2C=2`.
+  Tick `00453BD0` decrements that integer and deletes below one. Storm passes
+  width .5 (constant `007DE870`), phase -3*currentTick, and opaque white into
+  the shared two-layer ribbon builder. The second layer uses width*.75,
+  phase+15 and cyan at half alpha. Enhanced Effects selects the recovered
+  15/30-unit sampling at construction (`00534510` called twice in the bolt constructor). A retained two-tick body keeps that born geometry when the live setting changes; the next emitted bolt captures the new setting. Existing shared ribbon tables remain authoritative.
+- Each `Anim_FadeLightning` has alpha 1 and loss float32(.2), vtable
+  `007865C8`; tick `00476230` calls fade tick `00454000`, then advances its
+  angle by one degree. Fade tick stores the float subtraction and deletes at
+  <=0. The positive float32 residue after five subtractions is retained until
+  the sixth update. Source scale is .5+U(1), endpoint scale is 1+U(.5), both
+  start at a random angle. The endpoint is jittered by U(10) and a unit vector.
+- The bolt and source corona enter direct late `Region+1E0` at `00602816`
+  and `006028CD`. They do not belong to the row-sorted actor queue. The
+  endpoint corona is wrapped by `ZAnimLit 005E03D0`, registered at `00602A50`,
+  with sort bias 50, radius .75+U(.75), intensity 1, delta float32(-.05), and
+  directional shadows disabled. Tick `005FD1D0` advances its child, follows
+  its position, retires when the child deletes, and otherwise advances light.
+- The direct lane follows the foreground and player overlays, as independently
+  established by entries 090/297. Contacts retain their own world painter and
+  light registration. Parent removal at world/caster teardown retires effects
+  through the existing owning secondary collection.
+
+### Bounded membership and implementation contract
+
+| Member | Required behavior | Status before implementation |
+| --- | --- | --- |
+| Ordinary Magic Storm | Five emitted strikes per accepted hit; one damage contact | Omitted in both clients |
+| Tempest and maximum-duration Storm | Same burst at each hit throughout the existing longer active lifetime | Same omitted path |
+| Magic Tornado | Moving parent, fixed accepted burst points | Same omitted path |
+| Enhanced Effects On/Off | Same burst/fade clocks; correct 15/30 ribbon sampling | Rust currently hardcodes On |
+| Body and source corona | Width .5/.375; two-tick body; six-update float fade; late direct painters | Incorrect primary-factory reuse |
+| Endpoint corona and light | Independent row-sorted biased contact, radius/intensity/fade | Missing independent owner |
+| Expiring cloud / killed target | Finish the already accepted visual burst without new damage/query | Missing retained state |
+| Overlapping hit, reset, owner/world departure | Replace the cloud's pending points on new hit; retire through canonical lifecycle | Regression required |
+| Authority publication/interpolation and continuation | Preserve pending burst and emitted actor ages; no rendering RNG mutation | Regression required |
+| Old one-tick saved strike | Its damage already happened; discard obsolete cosmetic actor during schema-52 migration | Compatibility required |
+| Player Air, Mage Air and Electric Burn | Keep their separate recovered factories and existing regressions | Shared drawing primitives reused, ownership unchanged |
+
+The cloud owns an optional pending burst record; each tick emits a `storm-strike`
+with its own id, age, endpoint painter and light. Renderers use the existing
+ribbon/corona primitives through a storm-specific plan. Cosmetic samples retain
+the established deterministic actor-id domain; drawing never consumes gameplay
+RNG. These native-global cosmetic draws are not inserted into the maintained
+secondary gameplay stream. This is the existing replication constraint, not a
+new claim of native global RNG identity. Existing authored rank/damage/cooldown
+and rain rules are outside the falsified one-shot assumption.
+
+Schema 53 preserves pending bursts and migrates pre-53 one-tick cosmetic strikes.
+Original regression recordings remain immutable; gameplay comparisons must retain
+all original values, while new independent tests establish the corrected visual
+membership, lifetimes, source geometry, settings, painter/light ownership,
+save/restore and real 20-Hz presentation. Mac gates, composed browser/native
+journeys, release publication and installed behavior remain pending.
+
 ## 2026-09-29 — Approved shared ordering remedy; Ring children unchanged
 
 Task `87f1ead8` repaired the independently proved shared flash ordering/timing

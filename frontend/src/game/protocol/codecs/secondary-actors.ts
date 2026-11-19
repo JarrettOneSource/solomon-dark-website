@@ -1,3 +1,4 @@
+import type { NativeStormBurst } from '../../core-kernels/native-secondary-storm.ts'
 import type { NativeSecondaryActorKind, NativeSecondaryActorState, NativeSecondaryGolemState } from '../../core-kernels/native-secondary-abilities.ts'
 import { NATIVE_MINDBLAST_BURST_LIFETIME_TICKS, NATIVE_MINDBLAST_SHOCKWAVE_GROWTH, NATIVE_MINDBLAST_SHOCKWAVE_LIFETIME_TICKS, NATIVE_SECONDARY_ACTOR_KINDS, nativeSecondaryLightDisposition, nativeSecondaryPainterManagerLane } from '../../core-kernels/native-secondary-abilities.ts'
 import type { NativeSecondaryAbilityId } from '../../core-kernels/native-secondary-ability-contract.ts'
@@ -23,6 +24,7 @@ export function nativeSecondaryActor(
     'slowFactor', 'targetId', 'variant', 'velocity', 'worldKey',
     ...(source.kind === 'ether-drain' ? ['etherDrain'] : []),
     ...(source.kind === 'golem-death' ? ['golemDeath'] : []),
+    ...(source.kind === 'storm-cloud' ? ['stormBurst'] : []),
   ])
   const kind = memberString(
     source.kind,
@@ -205,6 +207,7 @@ export function nativeSecondaryActor(
     throw new GameProtocolError(`${field}.miscLightAppendOrdinal must be null`)
   }
   return {
+    ...(source.stormBurst !== undefined ? { stormBurst: nativeStormBurst(source.stormBurst, `${field}.stormBurst`) } : {}),
     ...(kind === 'golem-death' ? { golemDeath: nativeGolemDeathAnimation(source.golemDeath, `${field}.golemDeath`, boolean(source.enhanced, `${field}.enhanced`)) } : {}),
     ...(kind === 'ether-drain' ? {
       etherDrain: source.etherDrain === null ? null
@@ -243,6 +246,18 @@ export function nativeSecondaryActor(
     worldKey: limitedString(source.worldKey, `${field}.worldKey`, 256),
   }
 
+}
+
+export function nativeStormBurst(value: unknown, field: string): NativeStormBurst {
+  const source = record(value, field)
+  onlyKeys(source, field, ['remainingTicks', 'source', 'midpoint', 'endpoint', 'targetId'])
+  return {
+    remainingTicks: boundedInteger(source.remainingTicks, `${field}.remainingTicks`, 1, 4),
+    source: vector(source.source, `${field}.source`),
+    midpoint: vector(source.midpoint, `${field}.midpoint`),
+    endpoint: vector(source.endpoint, `${field}.endpoint`),
+    targetId: nonnegativeInteger(source.targetId, `${field}.targetId`),
+  }
 }
 
 export function nativeEtherDrainState(value: unknown, field: string): NativeEtherDrainState {

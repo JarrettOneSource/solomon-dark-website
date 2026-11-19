@@ -5297,7 +5297,7 @@ test('Magic Storm emits drops before its seven-draw strike geometry and owns the
   assert.notDeepEqual(bolt.position, bolt.midpoint)
   assert.ok(bolt.position.y >= -275 && bolt.position.y <= -75)
   assert.ok(bolt.midpoint.y >= -290 && bolt.midpoint.y <= 110)
-  assert.equal(bolt.lifetimeTicks, 1)
+  assert.equal(bolt.lifetimeTicks, 6)
 
   const cloud = state.actors.find(({ kind }) => kind === 'storm-cloud')!
   assert.equal(cloud.frame, Math.fround(1 - 0.10000000149011612))
@@ -6130,5 +6130,91 @@ test('Reverie waives all secondary dispatch debits including aggregate child and
     })
     assert.deepEqual(result.manaSpent, {}, `spell ${skillId}`)
     assert.equal(result.state.players.player!.castSequence, 1, `spell ${skillId}`)
+  }
+})
+
+
+test('Magic Storm completes five distinct strikes after target death and cloud expiry', () => {
+  for (const tornado of [false, true]) for (const enhancedEffects of [false, true]) {
+    const learned = tornado ? [28] : []
+    let state = stepNativeSecondaryAbilities(
+      createNativeSecondarySimulation(123), context(27, 1, 0, 100, learned),
+    ).state
+    const cloud = state.actors.find(({ kind }) => kind === 'storm-cloud')!
+    state = { ...state, actors: [{ ...cloud, ageTicks: 49, freezeTicks: 50,
+      quantity: 1, alpha: 1, scale: 1 }] }
+    const births = new Map<number, typeof cloud>()
+    let damageCount = 0
+    let startSounds = 0
+    for (let tick = 100; tick <= 110; tick += 1) {
+      const base = context(27, tick, null, 100, learned)
+      const stepped = stepNativeSecondaryAbilities(state, {
+        ...base, players: { player: { ...base.players.player!, enhancedEffects } },
+        targets: () => tick === 100 ? [{ family: 'ZOMBIE', id: 17,
+          lightRegistration: TARGET_LIGHT_REGISTRATION, position: { x: 400, y: 0 },
+          radius: 10, scale: 1, shieldHealth: 0 }] : [],
+        targetExists: () => tick === 100,
+      })
+      state = stepped.state
+      damageCount += stepped.damage.length
+      startSounds += state.events.filter(event => event.tick === tick && event.kind === 'impact'
+        && (event.cue === 'lightning-start' || event.cue === 'thunder')).length
+      const strikes = state.actors.filter(({ kind }) => kind === 'storm-strike')
+      for (const strike of strikes) if (strike.ageTicks === 0) births.set(strike.id, strike)
+      if (tick < 110) assert.ok(strikes.length > 0, `visible at publication tick ${tick}`)
+      else assert.equal(strikes.length, 0)
+    }
+    assert.equal(births.size, 5)
+    assert.equal(damageCount, 1)
+    assert.equal(startSounds, 2)
+    const first = [...births.values()][0]!
+    for (const [index, strike] of [...births.values()].entries()) {
+      assert.equal(strike.phase, 100 + index)
+      assert.equal(strike.lifetimeTicks, 6)
+      assert.deepEqual(strike.position, first.position)
+      assert.deepEqual(strike.midpoint, first.midpoint)
+      assert.deepEqual(strike.endpoint, { x: 400, y: -15 })
+    }
+  }
+})
+
+
+test('a new Storm hit replaces pending points and owner/world teardown retires the burst', () => {
+  let state = stepNativeSecondaryAbilities(createNativeSecondarySimulation(123), context(27, 1, 0)).state
+  const cloud = state.actors.find(actor => actor.kind === 'storm-cloud')!
+  state = { ...state, actors: [{ ...cloud, ageTicks: 49, quantity: 1, alpha: 1, scale: 1 }] }
+  const births = []
+  let damage = 0
+  for (let tick = 100; tick <= 105; tick += 1) {
+    if (tick === 101) state = { ...state, actors: state.actors.map(actor => actor.kind === 'storm-cloud'
+      ? { ...actor, quantity: 1 } : actor) }
+    const base = context(27, tick, null)
+    const result = stepNativeSecondaryAbilities(state, { ...base,
+      players: { player: { ...base.players.player!, enhancedEffects: tick >= 101 } },
+      targets: () => tick <= 101 ? [{ family: 'ZOMBIE', id: tick,
+        lightRegistration: TARGET_LIGHT_REGISTRATION, position: { x: tick, y: tick },
+        radius: 10, scale: 1, shieldHealth: 0 }] : [],
+    })
+    state = result.state
+    damage += result.damage.length
+    births.push(...state.actors.filter(actor => actor.kind === 'storm-strike' && actor.ageTicks === 0))
+    if (tick === 101) {
+      const restored = JSON.parse(JSON.stringify(state)) as NativeSecondarySimulationState
+      assert.deepEqual(stepNativeSecondaryAbilities(restored, context(27, tick + 1, null)),
+        stepNativeSecondaryAbilities(state, context(27, tick + 1, null)))
+      assert.equal(removeNativeSecondaryOwner(state, 'player').actors.length, 0)
+      assert.equal(resetNativeSecondaryWorld(state).actors.length, 0)
+      const departed = stepNativeSecondaryAbilities(state, { ...base,
+        players: { player: { ...base.players.player!, worldKey: 'hub' } } }).state
+      assert.equal(departed.actors.length, 0)
+    }
+  }
+  assert.equal(damage, 2)
+  assert.equal(births.length, 6)
+  assert.deepEqual(births[0]!.endpoint, { x: 100, y: 85 })
+  assert.equal(births[0]!.enhanced, false)
+  for (const birth of births.slice(1)) {
+    assert.deepEqual(birth.endpoint, { x: 101, y: 86 })
+    assert.equal(birth.enhanced, true)
   }
 })

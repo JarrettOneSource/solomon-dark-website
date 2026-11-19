@@ -1,3 +1,4 @@
+import { nativeStormContactLight } from './native-secondary-storm.ts'
 import type { BoneyardWaveEnemyToken } from './boneyard-wave-schema.ts'
 import type { BoneyardPoint as Vec2 } from './boneyard.ts'
 import {
@@ -766,6 +767,7 @@ export function nativeSecondaryProviderLightSource(
       radius: Math.fround(2 * Math.max(0, pointGain)),
     }
   }
+  if (actor.kind === 'storm-strike') return nativeStormContactLight(actor, actor.ageTicks)
   if (actor.kind === 'electric-burn-flare') {
     let intensity = Math.fround(1)
     for (let age = 0; age < Math.floor(actor.ageTicks); age++) intensity = Math.fround(intensity - Math.fround(.05))
